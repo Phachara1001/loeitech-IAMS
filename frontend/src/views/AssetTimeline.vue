@@ -1,67 +1,126 @@
 <script setup>
 import { ref, computed } from 'vue'
-import { 
-  History, 
-  Wrench, 
-  MapPin, 
-  UserCheck, 
-  PackageCheck, 
-  Plus, 
-  Calendar, 
-  ShieldAlert, 
-  X,
-  FileText
+import {
+  Search,
+  Filter,
+  Plus,
+  Edit,
+  Trash2,
+  Image as ImageIcon,
+  History,
+  ArrowLeft,
+  MapPin,
+  UserCheck,
+  PackageCheck,
+  Wrench,
+  Calendar,
+  FileText,
+  X
 } from 'lucide-vue-next'
+
+// --- View State ---
+const currentView = ref('LIST')
 
 // --- Mock User Context ---
 const currentUser = ref({
   id: 101,
   name: 'นายสมชาย ใจดี',
-  role: 'Admin' // 'Admin' | 'Staff' | 'User'
+  role: 'Admin'
 })
 
-// --- Mock Asset List ---
+// --- Master Asset List Database ---
 const assets = ref([
   {
     id: 'AST-2024-001',
+    seq: '561-001',
     name: 'เครื่องคอมพิวเตอร์ประมวลผลสูง (Workstation)',
+    code: '7420-001-0045',
     serial: 'SN-99884210',
     category: 'ครุภัณฑ์คอมพิวเตอร์',
     ownerId: 101,
     ownerName: 'นายสมชาย ใจดี',
+    department: 'เทคโนโลยีสารสนเทศ',
     currentLocation: 'ห้องปฏิบัติการคอมพิวเตอร์ 402',
-    status: 'ใช้งานปกติ',
-    receivedDate: '2023-05-10',
-    totalRepairCost: 4500
+    status: 'Active',
+    image: null
   },
   {
     id: 'AST-2024-002',
+    seq: '561-002',
     name: 'โปรเจคเตอร์ความละเอียดสูง 4K',
+    code: '7410-005-0021',
     serial: 'PJ-4K-55201',
     category: 'ครุภัณฑ์โสตทัศนูปกรณ์',
     ownerId: 202,
     ownerName: 'นางสาววิภาดา พัสดุ',
+    department: 'โสตทัศนูปกรณ์',
     currentLocation: 'ห้องประชุมชั้น 3',
-    status: 'กำลังส่งซ่อม',
-    receivedDate: '2022-11-15',
-    totalRepairCost: 12000
+    status: 'Repaired',
+    image: null
+  },
+  {
+    id: 'AST-2024-003',
+    seq: '561-003',
+    name: 'เครื่องกลึงยันศูนย์',
+    code: '3320-015-0012',
+    serial: 'LATHE-2023-01',
+    category: 'ครุภัณฑ์โรงงาน',
+    ownerId: 101,
+    ownerName: 'นายสมชาย ใจดี',
+    department: 'ช่างกลโรงงาน',
+    currentLocation: 'โรงฝึกงานช่างกล',
+    status: 'Active',
+    image: 'https://placehold.co/400x300/e2e8f0/475569?text=LATHE'
+  },
+  {
+    id: 'AST-2024-004',
+    seq: '561-004',
+    name: 'เครื่องพิมพ์ 3 มิติ (3D Printer)',
+    code: '7420-025-0003',
+    serial: '3DP-CREALITY-01',
+    category: 'ครุภัณฑ์คอมพิวเตอร์',
+    ownerId: 202,
+    ownerName: 'นางสาววิภาดา พัสดุ',
+    department: 'ช่างกลโรงงาน',
+    currentLocation: 'ห้องนวัตกรรม ชั้น 2',
+    status: 'Broken',
+    image: null
   }
 ])
 
-const visibleAssets = computed(() => {
-  if (currentUser.value.role === 'User') {
-    return assets.value.filter(a => a.ownerId === currentUser.value.id)
-  }
-  return assets.value
+// --- Search & Filter State ---
+const searchQuery = ref('')
+const statusFilter = ref('')
+
+const filteredAssets = computed(() => {
+  return assets.value.filter(asset => {
+    if (currentUser.value.role === 'User' && asset.ownerId !== currentUser.value.id) {
+      return false
+    }
+
+    const matchesSearch = asset.name.includes(searchQuery.value) ||
+      asset.seq.includes(searchQuery.value) ||
+      asset.code.includes(searchQuery.value) ||
+      asset.serial.includes(searchQuery.value)
+
+    const matchesStatus = statusFilter.value === '' || asset.status === statusFilter.value
+
+    return matchesSearch && matchesStatus
+  })
 })
 
-const selectedAssetId = ref(visibleAssets.value[0]?.id || '')
+const selectedAssetId = ref('AST-2024-001')
 
 const currentAsset = computed(() => {
   return assets.value.find(a => a.id === selectedAssetId.value) || null
 })
 
-// --- Mock Timeline Logs ---
+const viewAssetTimeline = (asset) => {
+  selectedAssetId.value = asset.id
+  currentView.value = 'TIMELINE'
+}
+
+// --- Mock Timeline Logs Database ---
 const timelineLogs = ref([
   {
     id: 1,
@@ -114,6 +173,26 @@ const repairStats = computed(() => {
   return { repairCount: repairs.length, moveCount, totalCost }
 })
 
+const getStatusBadge = (status) => {
+  switch (status) {
+    case 'Active': return 'bg-emerald-50 text-emerald-700 border-emerald-200'
+    case 'Repaired': return 'bg-amber-50 text-amber-700 border-amber-200'
+    case 'Broken': return 'bg-rose-50 text-rose-700 border-rose-200'
+    case 'Scrapped': return 'bg-slate-100 text-slate-800 border-slate-300'
+    default: return 'bg-blue-50 text-blue-700 border-blue-200'
+  }
+}
+
+const getStatusText = (status) => {
+  switch (status) {
+    case 'Active': return 'ใช้งานปกติ'
+    case 'Repaired': return 'ส่งซ่อม'
+    case 'Broken': return 'ชำรุด'
+    case 'Scrapped': return 'แทงจำหน่าย'
+    default: return status
+  }
+}
+
 const getTypeBadge = (type) => {
   switch (type) {
     case 'RECEIVE':
@@ -129,8 +208,7 @@ const getTypeBadge = (type) => {
   }
 }
 
-// Modal State
-const isModalOpen = ref(false)
+const isLogModalOpen = ref(false)
 const newLog = ref({
   type: 'MOVE',
   title: '',
@@ -162,178 +240,299 @@ const handleAddLog = () => {
     }
   }
 
-  isModalOpen.value = false
+  isLogModalOpen.value = false
   newLog.value = { type: 'MOVE', title: '', location: '', responsiblePerson: '', details: '', cost: 0 }
 }
 </script>
 
 <template>
-  <!-- พื้นหลังโทนสว่าง คลีน สะอาดตา ไม่ปวดตา -->
   <div class="relative w-full min-h-screen p-4 md:p-8 bg-slate-100 text-slate-800 space-y-6">
-    
-    <!-- Header Bar -->
+
+    <!-- Global Top Header Bar -->
     <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 bg-white p-6 rounded-2xl border border-slate-200/80 shadow-sm">
       <div class="flex items-center gap-4">
-        <div class="p-3.5 bg-emerald-50 text-emerald-600 rounded-xl border border-emerald-100">
+        <div class="p-3.5 bg-emerald-50 text-emerald-800 rounded-xl border border-emerald-100">
           <History class="w-8 h-8" />
         </div>
         <div>
-          <h1 class="text-2xl md:text-3xl font-extrabold text-slate-900">ประวัติการเคลื่อนย้ายและซ่อมบำรุง</h1>
-          <p class="text-base text-slate-500 font-medium mt-0.5">ติดตามประวัติการย้ายห้อง เปลี่ยนผู้ดูแล และประวัติการซ่อมแซมครุภัณฑ์</p>
+          <h1 class="text-2xl md:text-3xl font-extrabold text-slate-900">ระบบบริหารและติดตามครุภัณฑ์</h1>
+          <p class="text-base text-slate-500 font-medium mt-0.5">จัดการทะเบียนครุภัณฑ์ และติดตามไทม์ไลน์ประวัติการใช้งานอย่างแม่นยำ</p>
         </div>
       </div>
 
-      <!-- Demo Role Toggle -->
       <div class="flex items-center gap-2 bg-slate-50 p-2 rounded-xl border border-slate-200">
-        <span class="text-sm text-slate-500 font-bold px-2">สิทธิ์ใช้งาน:</span>
+        <span class="text-sm text-slate-500 font-bold px-2">สิทธิ์สลับหน้าทดสอบ:</span>
         <button 
           @click="currentUser.role = 'Admin'" 
-          :class="['px-3.5 py-1.5 text-sm rounded-lg font-bold transition-all cursor-pointer', currentUser.role === 'Admin' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-200']"
+          :class="['px-3.5 py-1.5 text-sm rounded-lg font-bold transition-all cursor-pointer', currentUser.role === 'Admin' ? 'bg-emerald-800 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-200']"
         >
           Admin
         </button>
         <button 
           @click="currentUser.role = 'Staff'" 
-          :class="['px-3.5 py-1.5 text-sm rounded-lg font-bold transition-all cursor-pointer', currentUser.role === 'Staff' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-200']"
+          :class="['px-3.5 py-1.5 text-sm rounded-lg font-bold transition-all cursor-pointer', currentUser.role === 'Staff' ? 'bg-emerald-800 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-200']"
         >
           Staff
         </button>
         <button 
           @click="currentUser.role = 'User'" 
-          :class="['px-3.5 py-1.5 text-sm rounded-lg font-bold transition-all cursor-pointer', currentUser.role === 'User' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-200']"
+          :class="['px-3.5 py-1.5 text-sm rounded-lg font-bold transition-all cursor-pointer', currentUser.role === 'User' ? 'bg-emerald-800 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-200']"
         >
           User
         </button>
       </div>
     </div>
 
-    <!-- Asset Selector Bar -->
-    <div class="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-sm space-y-6">
-      <div class="flex flex-col lg:flex-row lg:items-end justify-between gap-6 border-b border-slate-100 pb-6">
+    <!-- VIEW 1: ASSET LIST VIEW -->
+    <div v-if="currentView === 'LIST'" class="space-y-6">
+
+
+      <!-- Main Data Table Container -->
+      <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
         
-        <div class="flex-1">
-          <label class="block text-lg font-extrabold text-slate-900 mb-2">📌 เลือกรายการครุภัณฑ์ที่ต้องการค้นหา:</label>
-          <select 
-            v-model="selectedAssetId"
-            class="w-full bg-slate-50 border-2 border-slate-200 rounded-xl px-4 py-3.5 text-base md:text-lg text-slate-900 font-bold focus:outline-none focus:border-emerald-600 focus:bg-white cursor-pointer transition-all"
-          >
-            <option v-for="asset in visibleAssets" :key="asset.id" :value="asset.id">
-              [{{ asset.id }}] {{ asset.name }} - ({{ asset.currentLocation }})
-            </option>
-          </select>
-          <p v-if="currentUser.role === 'User'" class="text-sm text-amber-600 mt-2 flex items-center gap-1.5 font-medium">
-            <ShieldAlert class="w-4 h-4" />
-            ท่านเห็นเฉพาะครุภัณฑ์ที่อยู่ในความดูแลรับผิดชอบของท่านเท่านั้น
-          </p>
+        <!-- Search & Filter Toolbar -->
+        <div class="p-4 border-b border-slate-200 bg-slate-50/50 flex flex-col sm:flex-row justify-between gap-4">
+          <div class="relative w-full sm:w-80">
+            <Search class="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input 
+              v-model="searchQuery" 
+              type="text" 
+              placeholder="ค้นหาชื่อ, เลขลำดับ, ทะเบียน..."
+              class="pl-10 pr-4 py-2.5 w-full bg-white border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-slate-900 font-medium" 
+            />
+          </div>
+
+          <div class="flex items-center space-x-3">
+            <div class="relative">
+              <select 
+                v-model="statusFilter"
+                class="appearance-none pl-4 pr-10 py-2.5 bg-white border border-slate-300 rounded-xl text-sm text-slate-900 font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+              >
+                <option value="">ทุกสถานะ</option>
+                <option value="Active">ใช้งานปกติ</option>
+                <option value="Repaired">ส่งซ่อม</option>
+                <option value="Broken">ชำรุด</option>
+                <option value="Scrapped">แทงจำหน่าย</option>
+              </select>
+              <Filter class="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+            </div>
+          </div>
         </div>
+
+        <!-- Table View -->
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-sm whitespace-nowrap">
+            <thead class="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold">
+              <tr>
+                <th class="px-6 py-4 text-center">รูปภาพ</th>
+                <th class="px-6 py-4">เลขลำดับครุภัณฑ์</th>
+                <th class="px-6 py-4">ชื่อพัสดุ / เลขพัสดุหลัก</th>
+                <th class="px-6 py-4">เลขทะเบียน / Serial</th>
+                <th class="px-6 py-4">สถานที่ / แผนก</th>
+                <th class="px-6 py-4">ผู้ดูแล</th>
+                <th class="px-6 py-4">สถานะ</th>
+                <th class="px-6 py-4 text-center">ดูประวัติ / จัดการ</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-200 font-medium">
+              <tr v-for="asset in filteredAssets" :key="asset.id" class="hover:bg-slate-50/80 transition-colors">
+                <td class="px-6 py-4 text-center">
+                  <div class="w-12 h-12 rounded-xl border border-slate-200 flex items-center justify-center overflow-hidden bg-slate-100 mx-auto">
+                    <img v-if="asset.image" :src="asset.image" class="w-full h-full object-cover" />
+                    <ImageIcon v-else class="w-5 h-5 text-slate-400" />
+                  </div>
+                </td>
+                <td class="px-6 py-4">
+                  <span class="font-bold text-slate-800">{{ asset.seq }}</span>
+                  <div class="text-xs text-slate-400 font-mono">{{ asset.id }}</div>
+                </td>
+                <td class="px-6 py-4">
+                  <div class="font-extrabold text-slate-900 text-base">{{ asset.name }}</div>
+                  <div class="text-xs text-slate-500 font-mono mt-0.5">{{ asset.code }}</div>
+                </td>
+                <td class="px-6 py-4 text-slate-600 font-mono">{{ asset.serial }}</td>
+                <td class="px-6 py-4 text-slate-700">
+                  <div class="font-bold">{{ asset.currentLocation }}</div>
+                  <div class="text-xs text-slate-400">{{ asset.department }}</div>
+                </td>
+                <td class="px-6 py-4 text-slate-700">{{ asset.ownerName }}</td>
+                <td class="px-6 py-4">
+                  <span :class="['px-3 py-1 text-xs font-bold rounded-full border inline-block', getStatusBadge(asset.status)]">
+                    {{ getStatusText(asset.status) }}
+                  </span>
+                </td>
+                <td class="px-6 py-4 text-center">
+                  <div class="flex items-center justify-center space-x-2">
+                    <button 
+                      @click="viewAssetTimeline(asset)"
+                      class="px-3.5 py-2 bg-emerald-50 text-emerald-800 hover:bg-emerald-800 hover:text-white rounded-xl font-bold text-xs flex items-center transition-all cursor-pointer border border-emerald-200 shadow-sm"
+                      title="ดูประวัติไทม์ไลน์"
+                    >
+                      <History class="w-4 h-4 mr-1.5" />
+                      ดูไทม์ไลน์
+                    </button>
+
+                    <button v-if="currentUser.role !== 'User'" class="p-2 text-slate-400 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition-colors" title="แก้ไข">
+                      <Edit class="w-4 h-4" />
+                    </button>
+                    <button v-if="currentUser.role === 'Admin'" class="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors" title="ลบ">
+                      <Trash2 class="w-4 h-4" />
+                    </button>
+                  </div>
+                </td>
+              </tr>
+
+              <tr v-if="filteredAssets.length === 0">
+                <td colspan="8" class="px-6 py-12 text-center text-slate-400 font-medium">
+                  ไม่พบรายการครุภัณฑ์ที่ตรงกับการค้นหา
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- VIEW 2: TIMELINE VIEW -->
+    <div v-else-if="currentView === 'TIMELINE'" class="space-y-6">
+      
+      <!-- Back Button Bar -->
+      <div class="flex items-center justify-between">
+        <button 
+          @click="currentView = 'LIST'"
+          class="inline-flex items-center gap-2 px-5 py-3 bg-white hover:bg-slate-50 text-slate-800 font-extrabold rounded-2xl border border-slate-200 shadow-sm transition-all cursor-pointer"
+        >
+          <ArrowLeft class="w-5 h-5 text-emerald-800 stroke-[3]" />
+          <span>← กลับหน้าตารางรายการครุภัณฑ์</span>
+        </button>
 
         <div v-if="currentUser.role === 'Admin' || currentUser.role === 'Staff'">
           <button 
-            @click="isModalOpen = true"
-            class="w-full lg:w-auto inline-flex items-center justify-center gap-2.5 px-6 py-4 bg-emerald-600 hover:bg-emerald-700 text-white text-lg font-extrabold rounded-xl shadow-md transition-all active:scale-95 cursor-pointer"
+            @click="isLogModalOpen = true"
+            class="inline-flex items-center gap-2 px-6 py-3 bg-emerald-800 hover:bg-emerald-700 text-white font-extrabold rounded-2xl shadow-md transition-all cursor-pointer"
           >
-            <Plus class="w-7 h-7 stroke-[3]" />
+            <Plus class="w-5 h-5 stroke-[3]" />
             <span>+ บันทึกกิจกรรม / ส่งซ่อม</span>
           </button>
         </div>
       </div>
 
-      <!-- Summary Info Cards -->
-      <div v-if="currentAsset" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200/60">
-          <span class="text-slate-500 font-medium text-sm block">รหัสซีเรียลครุภัณฑ์</span>
-          <span class="font-mono font-bold text-slate-900 text-lg md:text-xl">{{ currentAsset.serial }}</span>
-        </div>
-        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200/60">
-          <span class="text-slate-500 font-medium text-sm block">สถานที่ติดตั้งปัจจุบัน</span>
-          <span class="font-bold text-slate-900 text-lg flex items-center gap-1.5 mt-0.5">
-            <MapPin class="w-5 h-5 text-rose-500 shrink-0" />
-            {{ currentAsset.currentLocation }}
-          </span>
-        </div>
-        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200/60">
-          <span class="text-slate-500 font-medium text-sm block">ผู้ดูแลรับผิดชอบ</span>
-          <span class="font-bold text-slate-900 text-lg flex items-center gap-1.5 mt-0.5">
-            <UserCheck class="w-5 h-5 text-blue-500 shrink-0" />
-            {{ currentAsset.ownerName }}
-          </span>
-        </div>
-        <div class="bg-emerald-50/60 p-4 rounded-xl border border-emerald-100">
-          <span class="text-emerald-700 font-medium text-sm block">ยอดซ่อมบำรุงสะสมรวม</span>
-          <span class="font-extrabold text-emerald-700 text-2xl">฿{{ repairStats.totalCost.toLocaleString() }} บาท</span>
-        </div>
-      </div>
-    </div>
-
-    <!-- Timeline List Section -->
-    <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm p-6 md:p-8">
-      <h3 class="text-xl font-extrabold text-slate-900 mb-8 flex items-center gap-2.5">
-        <Calendar class="w-6 h-6 text-emerald-600" />
-        ประวัติและลำดับเหตุการณ์ย้อนหลัง
-      </h3>
-
-      <div v-if="activeTimeline.length > 0" class="relative border-l-4 border-slate-200 ml-4 md:ml-8 space-y-8">
-        
-        <div v-for="item in activeTimeline" :key="item.id" class="relative pl-8 md:pl-10">
-          <!-- Timeline Icon -->
-          <div :class="['absolute -left-[22px] top-0 w-10 h-10 rounded-full border-2 bg-white flex items-center justify-center shadow-sm', getTypeBadge(item.type).class]">
-            <component :is="getTypeBadge(item.type).icon" class="w-5 h-5" />
-          </div>
-
-          <!-- Event Detail Box -->
-          <div class="bg-slate-50/80 border border-slate-200/80 rounded-2xl p-6 hover:border-slate-300 transition-all space-y-4">
-            
-            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200/60 pb-3">
-              <div class="flex items-center gap-3 flex-wrap">
-                <span :class="['px-3 py-1 rounded-lg text-sm font-bold border', getTypeBadge(item.type).class]">
-                  {{ getTypeBadge(item.type).label }}
-                </span>
-                <h4 class="font-extrabold text-slate-900 text-lg md:text-xl">{{ item.title }}</h4>
-              </div>
-              <span class="text-base font-bold text-slate-500 font-mono">
-                📅 {{ item.date }}
+      <!-- Asset Summary Banner -->
+      <div v-if="currentAsset" class="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-sm space-y-6">
+        <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-100 pb-4">
+          <div>
+            <div class="flex items-center gap-2 mb-1">
+              <span class="text-sm font-bold text-slate-400 font-mono">ID: {{ currentAsset.id }}</span>
+              <span :class="['px-2.5 py-0.5 text-xs font-extrabold rounded-full border', getStatusBadge(currentAsset.status)]">
+                {{ getStatusText(currentAsset.status) }}
               </span>
             </div>
-
-            <p class="text-slate-800 text-base md:text-lg leading-relaxed font-medium">
-              {{ item.details }}
-            </p>
-
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-3 text-base pt-2 bg-white p-4 rounded-xl border border-slate-200/60">
-              <div>📍 สถานที่: <strong class="text-slate-900">{{ item.location }}</strong></div>
-              <div>👤 ผู้ดูแล: <strong class="text-slate-900">{{ item.responsiblePerson }}</strong></div>
-              <div>💰 ค่าใช้จ่าย: 
-                <strong :class="item.cost > 0 ? 'text-rose-600 font-extrabold' : 'text-slate-800'">
-                  {{ item.cost > 0 ? '฿' + item.cost.toLocaleString() + ' บาท' : 'ไม่มี' }}
-                </strong>
-              </div>
-            </div>
-
-            <div class="text-sm text-slate-400 text-right italic font-medium">
-              บันทึกข้อมูลโดย: {{ item.operator }}
-            </div>
-
+            <h2 class="text-2xl md:text-3xl font-extrabold text-slate-900">{{ currentAsset.name }}</h2>
+          </div>
+          <div class="text-slate-500 font-medium text-sm">
+            หมวดหมู่: <strong class="text-slate-800">{{ currentAsset.category }}</strong>
           </div>
         </div>
 
+        <!-- Summary Grid Cards -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div class="bg-slate-50 p-4 rounded-xl border border-slate-200/60">
+            <span class="text-slate-500 font-medium text-sm block">รหัสซีเรียล / Serial Number</span>
+            <span class="font-mono font-bold text-slate-900 text-lg md:text-xl">{{ currentAsset.serial }}</span>
+          </div>
+          <div class="bg-slate-50 p-4 rounded-xl border border-slate-200/60">
+            <span class="text-slate-500 font-medium text-sm block">สถานที่ติดตั้งปัจจุบัน</span>
+            <span class="font-bold text-slate-900 text-lg flex items-center gap-1.5 mt-0.5">
+              <MapPin class="w-5 h-5 text-rose-500 shrink-0" />
+              {{ currentAsset.currentLocation }}
+            </span>
+          </div>
+          <div class="bg-slate-50 p-4 rounded-xl border border-slate-200/60">
+            <span class="text-slate-500 font-medium text-sm block">ผู้ดูแลรับผิดชอบ</span>
+            <span class="font-bold text-slate-900 text-lg flex items-center gap-1.5 mt-0.5">
+              <UserCheck class="w-5 h-5 text-blue-500 shrink-0" />
+              {{ currentAsset.ownerName }}
+            </span>
+          </div>
+          <div class="bg-emerald-50/60 p-4 rounded-xl border border-emerald-100">
+            <span class="text-emerald-800 font-medium text-sm block">ยอดซ่อมบำรุงสะสมรวม</span>
+            <span class="font-extrabold text-emerald-800 text-2xl">฿{{ repairStats.totalCost.toLocaleString() }} บาท</span>
+          </div>
+        </div>
       </div>
 
-      <div v-else class="py-12 text-center text-slate-400">
-        <History class="w-12 h-12 mx-auto mb-3 opacity-30" />
-        <p class="text-lg font-medium">ไม่พบข้อมูลประวัติการทำรายการของครุภัณฑ์ชิ้นนี้</p>
+      <!-- Timeline Logs List -->
+      <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm p-6 md:p-8">
+        <h3 class="text-xl font-extrabold text-slate-900 mb-8 flex items-center gap-2.5">
+          <Calendar class="w-6 h-6 text-emerald-800" />
+          ประวัติและลำดับเหตุการณ์ย้อนหลัง (Timeline)
+        </h3>
+
+        <div v-if="activeTimeline.length > 0" class="relative border-l-4 border-slate-200 ml-4 md:ml-8 space-y-8">
+          
+          <div v-for="item in activeTimeline" :key="item.id" class="relative pl-8 md:pl-10">
+            <!-- Timeline Icon -->
+            <div :class="['absolute -left-[22px] top-0 w-10 h-10 rounded-full border-2 bg-white flex items-center justify-center shadow-sm', getTypeBadge(item.type).class]">
+              <component :is="getTypeBadge(item.type).icon" class="w-5 h-5" />
+            </div>
+
+            <!-- Event Card -->
+            <div class="bg-slate-50/80 border border-slate-200/80 rounded-2xl p-6 hover:border-slate-300 transition-all space-y-4">
+              
+              <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200/60 pb-3">
+                <div class="flex items-center gap-3 flex-wrap">
+                  <span :class="['px-3 py-1 rounded-lg text-sm font-bold border', getTypeBadge(item.type).class]">
+                    {{ getTypeBadge(item.type).label }}
+                  </span>
+                  <h4 class="font-extrabold text-slate-900 text-lg md:text-xl">{{ item.title }}</h4>
+                </div>
+                <span class="text-base font-bold text-slate-500 font-mono">
+                  📅 {{ item.date }}
+                </span>
+              </div>
+
+              <p class="text-slate-800 text-base md:text-lg leading-relaxed font-medium">
+                {{ item.details }}
+              </p>
+
+              <div class="grid grid-cols-1 md:grid-cols-3 gap-3 text-base pt-2 bg-white p-4 rounded-xl border border-slate-200/60">
+                <div>📍 สถานที่: <strong class="text-slate-900">{{ item.location }}</strong></div>
+                <div>👤 ผู้ดูแล: <strong class="text-slate-900">{{ item.responsiblePerson }}</strong></div>
+                <div>💰 ค่าใช้จ่าย: 
+                  <strong :class="item.cost > 0 ? 'text-rose-600 font-extrabold' : 'text-slate-800'">
+                    {{ item.cost > 0 ? '฿' + item.cost.toLocaleString() + ' บาท' : 'ไม่มี' }}
+                  </strong>
+                </div>
+              </div>
+
+              <div class="text-sm text-slate-400 text-right italic font-medium">
+                บันทึกข้อมูลโดย: {{ item.operator }}
+              </div>
+
+            </div>
+          </div>
+
+        </div>
+
+        <div v-else class="py-12 text-center text-slate-400">
+          <History class="w-12 h-12 mx-auto mb-3 opacity-30" />
+          <p class="text-lg font-medium">ไม่พบประวัติกิจกรรมของครุภัณฑ์ชิ้นนี้</p>
+        </div>
       </div>
+
     </div>
 
-    <!-- Modal Form (ขนาดใหญ่ อ่านง่าย พิเศษสำหรับผู้สูงอายุ) -->
-    <div v-if="isModalOpen" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
+    <!-- MODAL: เพิ่มบันทึกกิจกรรมไทม์ไลน์ -->
+    <div v-if="isLogModalOpen" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
       <div class="bg-white w-full max-w-2xl rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[95vh]">
         
         <div class="px-8 py-6 border-b border-slate-100 flex items-center justify-between bg-emerald-50/80">
           <h3 class="font-extrabold text-slate-900 text-2xl flex items-center gap-3">
-            <Plus class="w-8 h-8 text-emerald-700 stroke-[3]" />
-            บันทึกกิจกรรมประวัติครุภัณฑ์ใหม่
+            <Plus class="w-8 h-8 text-emerald-800 stroke-[3]" />
+            บันทึกประวัติกิจกรรมครุภัณฑ์
           </h3>
-          <button @click="isModalOpen = false" class="text-slate-400 hover:text-slate-700 p-2 rounded-xl transition-colors">
+          <button @click="isLogModalOpen = false" class="text-slate-400 hover:text-slate-700 p-2 rounded-xl transition-colors">
             <X class="w-8 h-8" />
           </button>
         </div>
@@ -409,14 +608,14 @@ const handleAddLog = () => {
           <div class="pt-4 flex flex-col sm:flex-row justify-end gap-3 border-t border-slate-200">
             <button 
               type="button" 
-              @click="isModalOpen = false" 
+              @click="isLogModalOpen = false" 
               class="px-6 py-4 bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold rounded-xl text-lg cursor-pointer transition-colors"
             >
               ยกเลิก
             </button>
             <button 
               type="submit" 
-              class="px-8 py-4 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold rounded-xl text-lg shadow-md cursor-pointer transition-colors"
+              class="px-8 py-4 bg-emerald-800 hover:bg-emerald-700 text-white font-extrabold rounded-xl text-lg shadow-md cursor-pointer transition-colors"
             >
               ✓ บันทึกข้อมูล
             </button>

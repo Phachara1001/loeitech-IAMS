@@ -1,7 +1,443 @@
+<script setup>
+import { ref, computed } from 'vue'
+import {
+  Building2,
+  Search,
+  Plus,
+  UserCheck,
+  MapPin,
+  Calendar,
+  History,
+  CheckCircle2,
+  Clock,
+  ArrowRightLeft,
+  User
+} from 'lucide-vue-next'
+
+// ==========================================
+// 1. USER & ROLE CONTEXT
+// ==========================================
+const currentUser = ref({
+  id: 'USR-001',
+  name: 'นายสมชาย ใจดี',
+  department: 'แผนกเทคโนโลยีสารสนเทศ',
+  role: 'Staff' // 'Admin' | 'Staff' | 'User'
+})
+
+// ==========================================
+// 2. MASTER ASSETS & LOCATIONS (ฐานข้อมูลครุภัณฑ์)
+// ==========================================
+const masterAssets = ref([
+  { id: 'AST-2026-001', code: '7440-001-0001/69', name: 'เครื่องคอมพิวเตอร์ประมวลผล High-End', brandModel: 'Dell OptiPlex 7010' },
+  { id: 'AST-2026-002', code: '7440-001-0002/69', name: 'เครื่องพิมพ์เลเซอร์มัลติฟังก์ชัน', brandModel: 'HP LaserJet Pro M428fdw' },
+  { id: 'AST-2026-003', code: '7440-002-0005/69', name: 'เครื่องโปรเจกเตอร์ 4000 Lumens', brandModel: 'Epson EB-FH52' }
+])
+
+const departments = [
+  'แผนกเทคโนโลยีสารสนเทศ',
+  'ฝ่ายวิชาการ',
+  'งานการเงินและบัญชี',
+  'งานพัสดุกลาง',
+  'แผนกช่างยนต์'
+]
+
+const personnelList = [
+  { id: 'USR-001', name: 'นายสมชาย ใจดี', dept: 'แผนกเทคโนโลยีสารสนเทศ' },
+  { id: 'USR-002', name: 'นางสาววิภาดา พัสดุ', dept: 'งานพัสดุกลาง' },
+  { id: 'USR-003', name: 'ดร.วิชัย สอนดี', dept: 'ฝ่ายวิชาการ' },
+  { id: 'USR-004', name: 'นายอนันต์ ช่างเครื่อง', dept: 'แผนกช่างยนต์' }
+]
+
+// ==========================================
+// 3. ASSET DISTRIBUTION TRANSACTIONS (พ.3108 หน้า 4)
+// ==========================================
+const distributionLogs = ref([
+  {
+    id: 'DIST-001',
+    assetId: 'AST-2026-001',
+    assetCode: '7440-001-0001/69',
+    assetName: 'เครื่องคอมพิวเตอร์ประมวลผล High-End',
+    department: 'งานการเงินและบัญชี',
+    building: 'อาคารอำนวยการ (อาคาร 1)',
+    room: 'ห้อง 121 (ห้องบัญชี)',
+    responsiblePersonId: 'USR-002',
+    responsiblePersonName: 'นางสาววิภาดา พัสดุ',
+    assignDate: '2026-01-10',
+    returnDate: '2026-06-30',
+    is_current: false, // ถูกโอนย้ายออกไปแล้ว
+    note: 'จัดสรรเพื่อใช้งานระบบบัญชีใหม่'
+  },
+  {
+    id: 'DIST-002',
+    assetId: 'AST-2026-001',
+    assetCode: '7440-001-0001/69',
+    assetName: 'เครื่องคอมพิวเตอร์ประมวลผล High-End',
+    department: 'แผนกเทคโนโลยีสารสนเทศ',
+    building: 'อาคารวิทยบริการ (อาคาร 3)',
+    room: 'ห้อง 304 (Computer Lab 1)',
+    responsiblePersonId: 'USR-001',
+    responsiblePersonName: 'นายสมชาย ใจดี',
+    assignDate: '2026-07-01',
+    returnDate: null,
+    is_current: true, // ครอบครอง ณ ปัจจุบัน
+    note: 'โยกย้ายมาใช้ในการเรียนการสอนภาคปฏิบัติ'
+  },
+  {
+    id: 'DIST-003',
+    assetId: 'AST-2026-002',
+    assetCode: '7440-001-0002/69',
+    assetName: 'เครื่องพิมพ์เลเซอร์มัลติฟังก์ชัน',
+    department: 'ฝ่ายวิชาการ',
+    building: 'อาคารอำนวยการ (อาคาร 1)',
+    room: 'ห้อง 102 (ห้องงานวิชาการ)',
+    responsiblePersonId: 'USR-003',
+    responsiblePersonName: 'ดร.วิชัย สอนดี',
+    assignDate: '2026-02-15',
+    returnDate: null,
+    is_current: true,
+    note: 'จัดซื้อใหม่ประจำปีงบประมาณ 2569'
+  }
+])
+
+// ==========================================
+// 4. FILTER & RBAC LOGIC
+// ==========================================
+const searchQuery = ref('')
+const currentOnlyFilter = ref(false)
+
+const filteredDistributions = computed(() => {
+  return distributionLogs.value.filter(item => {
+    // RBAC: User เห็นเฉพาะในแผนกตนเอง หรือรายการที่ตนรับผิดชอบ
+    if (currentUser.value.role === 'User') {
+      const isMyDept = item.department === currentUser.value.department
+      const isMyPerson = item.responsiblePersonId === currentUser.value.id
+      if (!isMyDept && !isMyPerson) return false
+    }
+
+    const matchesSearch = item.assetCode.toLowerCase().includes(searchQuery.value.toLowerCase()) ||
+      item.assetName.includes(searchQuery.value) ||
+      item.department.includes(searchQuery.value) ||
+      item.responsiblePersonName.includes(searchQuery.value) ||
+      item.room.includes(searchQuery.value)
+
+    const matchesCurrent = currentOnlyFilter.value ? item.is_current === true : true
+
+    return matchesSearch && matchesCurrent
+  })
+})
+
+// ==========================================
+// 5. FORM & AUTO RELINQUISH LOGIC
+// ==========================================
+const isModalOpen = ref(false)
+const form = ref({
+  assetId: '',
+  department: '',
+  building: '',
+  room: '',
+  responsiblePersonId: '',
+  note: ''
+})
+
+const handleAssignAsset = () => {
+  if (currentUser.value.role === 'User') return
+
+  const selectedAsset = masterAssets.value.find(a => a.id === form.value.assetId)
+  const selectedPerson = personnelList.find(p => p.id === form.value.responsiblePersonId)
+
+  if (!selectedAsset || !selectedPerson) {
+    alert('กรุณากรอกข้อมูลให้ครบถ้วน')
+    return
+  }
+
+  const todayStr = new Date().toISOString().split('T')[0]
+
+  // 🔄 AUTO-RELINQUISH: ยกเลิกสิทธิ์การครอบครองเดิม (เปลี่ยน is_current เป็น false และลงวันที่ส่งคืน)
+  distributionLogs.value.forEach(log => {
+    if (log.assetId === form.value.assetId && log.is_current) {
+      log.is_current = false
+      log.returnDate = todayStr
+    }
+  })
+
+  // 🆕 บันทึกการครอบครองใหม่
+  const newDistId = `DIST-00${distributionLogs.value.length + 1}`
+  distributionLogs.value.unshift({
+    id: newDistId,
+    assetId: selectedAsset.id,
+    assetCode: selectedAsset.code,
+    assetName: selectedAsset.name,
+    department: form.value.department,
+    building: form.value.building,
+    room: form.value.room,
+    responsiblePersonId: selectedPerson.id,
+    responsiblePersonName: selectedPerson.name,
+    assignDate: todayStr,
+    returnDate: null,
+    is_current: true,
+    note: form.value.note || 'จัดสรรลงหน่วยงาน'
+  })
+
+  alert(`✅ จัดสรรครุภัณฑ์ ${selectedAsset.code} ไปยัง ${form.value.department} เรียบร้อยแล้ว!`)
+  
+  // Reset Form & Close Modal
+  isModalOpen.value = false
+  form.value = { assetId: '', department: '', building: '', room: '', responsiblePersonId: '', note: '' }
+}
+</script>
+
 <template>
-  <div class="flex flex-col items-center justify-center py-20 text-slate-500">
-    <div class="text-5xl mb-4">📤</div>
-    <h2 class="text-2xl font-bold text-slate-800">บัญชีคุมครุภัณฑ์จ่ายให้หน่วย</h2>
-    <p class="mt-2 text-base">หน้านี้กำลังอยู่ระหว่างการพัฒนา 🚧</p>
+  <div class="relative w-full min-h-screen p-4 md:p-8 bg-slate-100 text-slate-800 space-y-6">
+
+    <!-- Global Header & Role Selector -->
+    <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 bg-white p-6 rounded-2xl border border-slate-200/80 shadow-sm">
+      <div class="flex items-center gap-4">
+        <div class="p-3.5 bg-emerald-50 text-emerald-800 rounded-xl border border-emerald-100">
+          <Building2 class="w-8 h-8" />
+        </div>
+        <div>
+          <h1 class="text-2xl md:text-3xl font-extrabold text-slate-900">ทะเบียนคุมครุภัณฑ์จ่ายให้หน่วย (พ.3108 หน้า 4)</h1>
+          <p class="text-base text-slate-500 font-medium mt-0.5">ระบบควบคุมการจัดสรร โยกย้ายสถานที่ และระบุบุคลากรผู้รับผิดชอบดูแลครุภัณฑ์</p>
+        </div>
+      </div>
+
+      <!-- Switcher Role สำหรับทดสอบ -->
+      <div class="flex items-center gap-2 bg-slate-50 p-2 rounded-xl border border-slate-200">
+        <span class="text-xs md:text-sm text-slate-500 font-bold px-2">ทดสอบสิทธิ์ผู้ใช้:</span>
+        <button 
+          @click="currentUser.role = 'Admin'" 
+          :class="['px-3.5 py-1.5 text-xs md:text-sm rounded-lg font-bold transition-all cursor-pointer', currentUser.role === 'Admin' ? 'bg-emerald-800 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-200']"
+        >
+          Admin
+        </button>
+        <button 
+          @click="currentUser.role = 'Staff'" 
+          :class="['px-3.5 py-1.5 text-xs md:text-sm rounded-lg font-bold transition-all cursor-pointer', currentUser.role === 'Staff' ? 'bg-emerald-800 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-200']"
+        >
+          Staff
+        </button>
+        <button 
+          @click="currentUser.role = 'User'" 
+          :class="['px-3.5 py-1.5 text-xs md:text-sm rounded-lg font-bold transition-all cursor-pointer', currentUser.role === 'User' ? 'bg-emerald-800 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-200']"
+        >
+          User (ดูได้เฉพาะในแผนก)
+        </button>
+      </div>
+    </div>
+
+    <!-- Banner Actions -->
+    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+      <div>
+        <h2 class="text-xl font-extrabold text-slate-800">
+          {{ currentUser.role === 'User' ? `รายการครุภัณฑ์ในสังกัด (${currentUser.department})` : 'รายการประวัติการจ่ายครุภัณฑ์ทั้งหมด' }}
+        </h2>
+        <p class="text-sm text-slate-500 mt-0.5">
+          {{ currentUser.role === 'User' ? 'แสดงเฉพาะรายการครุภัณฑ์ที่ผูกกับแผนกหรือตัวท่าน' : 'บันทึกการจัดสรร โยกย้าย และลงประวัติการส่งคืนอัตโนมัติ' }}
+        </p>
+      </div>
+
+      <!-- ปุ่มเปิด Modal จัดสรรครุภัณฑ์ (เฉพาะ Admin & Staff) -->
+      <div v-if="currentUser.role === 'Admin' || currentUser.role === 'Staff'">
+        <button 
+          @click="isModalOpen = true"
+          class="px-5 py-3 bg-emerald-800 text-white hover:bg-emerald-700 rounded-2xl font-extrabold flex items-center transition-all shadow-md cursor-pointer"
+        >
+          <Plus class="w-5 h-5 mr-2 stroke-[3]" />
+          ทำรายการจัดสรร / โยกย้ายครุภัณฑ์
+        </button>
+      </div>
+    </div>
+
+    <!-- Main Table Container -->
+    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+      
+      <!-- Filter Toolbar -->
+      <div class="p-4 border-b border-slate-200 bg-slate-50/50 flex flex-col sm:flex-row justify-between gap-4">
+        <div class="relative w-full sm:w-80">
+          <Search class="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input 
+            v-model="searchQuery" 
+            type="text" 
+            placeholder="ค้นหาเลขครุภัณฑ์, ชื่อ, ห้อง, ผู้ดูแล..."
+            class="pl-10 pr-4 py-2.5 w-full bg-white border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-slate-900 font-medium" 
+          />
+        </div>
+
+        <div class="flex items-center gap-3">
+          <label class="inline-flex items-center gap-2 cursor-pointer text-sm font-bold text-slate-700 bg-white px-3 py-2 rounded-xl border border-slate-300">
+            <input type="checkbox" v-model="currentOnlyFilter" class="w-4 h-4 text-emerald-800 rounded focus:ring-emerald-500" />
+            <span>แสดงเฉพาะที่ครองครองอยู่ปัจจุบัน (is_current)</span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Table View (พ.3108 หน้า 4) -->
+      <div class="overflow-x-auto">
+        <table class="w-full text-left text-sm whitespace-nowrap">
+          <thead class="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold">
+            <tr>
+              <th class="px-6 py-4">หมายเลขครุภัณฑ์ / ชื่อรายการ</th>
+              <th class="px-6 py-4">นามหน่วยงาน / ฝ่าย</th>
+              <th class="px-6 py-4">สถานที่ติดตั้ง (อาคาร / ห้อง)</th>
+              <th class="px-6 py-4">บุคลากรผู้รับผิดชอบดูแล</th>
+              <th class="px-6 py-4 text-center">วัน เดือน ปี (รับมอบ - ส่งคืน)</th>
+              <th class="px-6 py-4 text-center">สถานะการครอบครอง</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-200 font-medium">
+            <tr v-for="item in filteredDistributions" :key="item.id" :class="['transition-colors', item.is_current ? 'hover:bg-slate-50/80' : 'bg-slate-50/40 text-slate-400']">
+              
+              <!-- หมายเลขครุภัณฑ์ -->
+              <td class="px-6 py-4">
+                <div class="font-mono font-extrabold text-slate-900 text-base" :class="{ 'opacity-60': !item.is_current }">
+                  {{ item.assetCode }}
+                </div>
+                <div class="text-xs text-slate-500 font-bold mt-0.5">{{ item.assetName }}</div>
+              </td>
+
+              <!-- ฝ่าย/หน่วยงาน -->
+              <td class="px-6 py-4 font-bold text-slate-800">
+                {{ item.department }}
+              </td>
+
+              <!-- อาคาร / ห้อง -->
+              <td class="px-6 py-4">
+                <div class="flex items-center gap-1.5 text-slate-800 font-semibold">
+                  <MapPin class="w-4 h-4 text-emerald-700 shrink-0" />
+                  <span>{{ item.room }}</span>
+                </div>
+                <div class="text-xs text-slate-400 pl-5.5">{{ item.building }}</div>
+              </td>
+
+              <!-- บุคลากรผู้รับผิดชอบ -->
+              <td class="px-6 py-4">
+                <div class="flex items-center gap-2">
+                  <div class="w-7 h-7 bg-slate-100 text-slate-700 rounded-full flex items-center justify-center font-bold text-xs border">
+                    <User class="w-3.5 h-3.5" />
+                  </div>
+                  <div>
+                    <div class="font-bold text-slate-900">{{ item.responsiblePersonName }}</div>
+                    <div class="text-xs text-slate-400">ID: {{ item.responsiblePersonId }}</div>
+                  </div>
+                </div>
+              </td>
+
+              <!-- ว.ด.ป. รับมอบ/ส่งคืน -->
+              <td class="px-6 py-4 text-center font-mono text-xs">
+                <div class="font-bold text-slate-700">รับมอบ: {{ item.assignDate }}</div>
+                <div v-if="item.returnDate" class="text-rose-600 font-bold mt-0.5">
+                  ส่งคืน: {{ item.returnDate }}
+                </div>
+                <div v-else class="text-emerald-700 font-bold mt-0.5">- ถือครองอยู่ -</div>
+              </td>
+
+              <!-- สถานะ is_current -->
+              <td class="px-6 py-4 text-center">
+                <span 
+                  v-if="item.is_current" 
+                  class="px-3 py-1 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-full text-xs font-extrabold inline-flex items-center gap-1"
+                >
+                  <CheckCircle2 class="w-3.5 h-3.5" /> ครอบครองปัจจุบัน
+                </span>
+                <span 
+                  v-else 
+                  class="px-3 py-1 bg-slate-100 text-slate-500 border border-slate-200 rounded-full text-xs font-bold inline-flex items-center gap-1"
+                >
+                  <ArrowRightLeft class="w-3.5 h-3.5" /> โยกย้ายแล้ว (ประวัติ)
+                </span>
+              </td>
+
+            </tr>
+
+            <tr v-if="filteredDistributions.length === 0">
+              <td colspan="6" class="px-6 py-12 text-center text-slate-400 font-medium">
+                ไม่พบประวัติการคุมครุภัณฑ์จ่ายให้หน่วยงาน
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+    </div>
+
+    <!-- =========================================
+         MODAL: ฟอร์มจัดสรร / โยกย้ายครุภัณฑ์
+         ========================================= -->
+    <div v-if="isModalOpen" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
+      <div class="bg-white w-full max-w-xl rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col">
+        
+        <div class="px-8 py-6 border-b border-slate-100 flex items-center justify-between bg-emerald-50">
+          <h3 class="font-extrabold text-slate-900 text-2xl flex items-center gap-2">
+            <Building2 class="w-7 h-7 text-emerald-800" />
+            จัดสรร / โยกย้ายครุภัณฑ์
+          </h3>
+          <button @click="isModalOpen = false" class="text-slate-400 hover:text-slate-700 font-bold text-lg p-2">✕</button>
+        </div>
+
+        <form @submit.prevent="handleAssignAsset" class="p-8 space-y-4 text-sm">
+          
+          <!-- เลือกครุภัณฑ์ -->
+          <div>
+            <label class="block font-extrabold text-slate-800 mb-1">เลือกครุภัณฑ์ที่ต้องการจัดสรร:</label>
+            <select v-model="form.assetId" required class="w-full p-3 border-2 border-slate-300 rounded-xl font-bold bg-slate-50 focus:border-emerald-600 focus:outline-none">
+              <option value="" disabled>-- เลือกครุภัณฑ์ --</option>
+              <option v-for="asset in masterAssets" :key="asset.id" :value="asset.id">
+                [{{ asset.code }}] {{ asset.name }}
+              </option>
+            </select>
+          </div>
+
+          <!-- เลือกหน่วยงาน / ฝ่าย -->
+          <div>
+            <label class="block font-extrabold text-slate-800 mb-1">นามหน่วยงาน / ฝ่าย ที่รับมอบ:</label>
+            <select v-model="form.department" required class="w-full p-3 border border-slate-300 rounded-xl font-bold bg-white focus:outline-none">
+              <option value="" disabled>-- เลือกฝ่าย/แผนก --</option>
+              <option v-for="dept in departments" :key="dept" :value="dept">{{ dept }}</option>
+            </select>
+          </div>
+
+          <!-- อาคาร & ห้องเรียน -->
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block font-extrabold text-slate-800 mb-1">ชื่ออาคาร:</label>
+              <input v-model="form.building" type="text" required placeholder="เช่น อาคาร 3" class="w-full p-3 border border-slate-300 rounded-xl font-medium" />
+            </div>
+            <div>
+              <label class="block font-extrabold text-slate-800 mb-1">ห้องเรียน / ห้องทำงาน:</label>
+              <input v-model="form.room" type="text" required placeholder="เช่น ห้อง 304" class="w-full p-3 border border-slate-300 rounded-xl font-medium" />
+            </div>
+          </div>
+
+          <!-- บุคลากรผู้รับผิดชอบ -->
+          <div>
+            <label class="block font-extrabold text-slate-800 mb-1">บุคลากรผู้ลงนามรับผิดชอบดูแล:</label>
+            <select v-model="form.responsiblePersonId" required class="w-full p-3 border border-slate-300 rounded-xl font-bold bg-white focus:outline-none">
+              <option value="" disabled>-- เลือกผู้รับผิดชอบ --</option>
+              <option v-for="p in personnelList" :key="p.id" :value="p.id">
+                {{ p.name }} ({{ p.dept }})
+              </option>
+            </select>
+          </div>
+
+          <!-- หมายเหตุ -->
+          <div>
+            <label class="block font-extrabold text-slate-800 mb-1">หมายเหตุการจัดสรร / โยกย้าย:</label>
+            <textarea v-model="form.note" rows="2" placeholder="เช่น โยกย้ายตามคำขอประจำภาคเรียน..." class="w-full p-3 border border-slate-300 rounded-xl font-medium"></textarea>
+          </div>
+
+          <div class="pt-4 flex justify-end gap-3 border-t border-slate-100">
+            <button type="button" @click="isModalOpen = false" class="px-6 py-2.5 bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold rounded-xl">
+              ยกเลิก
+            </button>
+            <button type="submit" class="px-6 py-2.5 bg-emerald-800 hover:bg-emerald-700 text-white font-extrabold rounded-xl shadow-md">
+              ✓ ยืนยันการจัดสรร
+            </button>
+          </div>
+
+        </form>
+
+      </div>
+    </div>
+
   </div>
 </template>

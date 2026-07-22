@@ -14,12 +14,12 @@ import {
   FileCode2
 } from 'lucide-vue-next'
 
-// --- Canvas VFX: GIANT TRANSPARENT NEON STROKE ADMIN ---
+// --- Canvas VFX: Transparent Glowing ADMIN + Matrix Rain ---
 const backgroundCanvas = ref(null)
 const containerRef = ref(null)
 let animationId = null
 
-const initHeavyCyberBackground = () => {
+const initCyberLightBackground = () => {
   const canvas = backgroundCanvas.value
   const container = containerRef.value
   if (!canvas || !container) return
@@ -35,99 +35,82 @@ const initHeavyCyberBackground = () => {
   ro.observe(container)
 
   // Matrix Rain Setup
-  const chars = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ'
-  const fontSize = 14
+  const chars = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ@#$%&*'
+  const fontSize = 15
   const columns = Math.floor(canvas.width / fontSize)
-  const drops = Array(columns).fill(1)
-
-  let gridOffsetY = 0
-  let pulseGlow = 0
+  const drops = Array.from({ length: columns }, () => ({
+    y: Math.random() * -100,
+    speed: Math.random() * 1.5 + 1.2,
+    length: Math.floor(Math.random() * 12) + 8
+  }))
 
   const draw = () => {
-    // ล้าง Canvas
-    ctx.fillStyle = 'rgba(248, 250, 252, 0.3)' 
+    // 1. เคลียร์ Canvas พื้นหลังสว่างสดใส
+    ctx.fillStyle = 'rgba(248, 250, 252, 0.28)' 
     ctx.fillRect(0, 0, canvas.width, canvas.height)
 
-    pulseGlow += 0.04
-    // จังหวะกะพริบเรืองแสง (Pulsing Glow)
-    const glowAmount = Math.sin(pulseGlow) * 15 + 25
-
     // -------------------------------------------------------------
-    // 🌟 A. ตัวหนังสือ "ADMIN" โปร่งใส + กรอบนีออนสีเขียวเรืองแสง ยักษ์เต็มจอ
-    // -------------------------------------------------------------
-    ctx.save()
-    ctx.translate(canvas.width / 2, canvas.height / 2)
-
-    ctx.textAlign = 'center'
-    ctx.textBaseline = 'middle'
-    
-    // คำนวณขนาดตัวหนังสือให้ใหญ่เกือบเต็มจอ (สูงสุด 400px)
-    const adminFontSize = Math.min(canvas.width * 0.32, 420)
-    ctx.font = `900 ${adminFontSize}px 'Montserrat', 'Arial Black', sans-serif`
-
-    // --- เลเยอร์ที่ 1: Outer Neon Glow (เงาเรืองแสงรอบนอกสีเขียวนีออน) ---
-    ctx.shadowColor = '#10b981'
-    ctx.shadowBlur = glowAmount + 20
-    ctx.strokeStyle = '#10b981'
-    ctx.lineWidth = 8
-    ctx.strokeText('ADMIN', 0, 0)
-
-    // --- เลเยอร์ที่ 2: Secondary Glow (แสงสะท้อนขอบใน) ---
-    ctx.shadowColor = '#34d399'
-    ctx.shadowBlur = glowAmount / 2
-    ctx.strokeStyle = '#34d399'
-    ctx.lineWidth = 4
-    ctx.strokeText('ADMIN', 0, 0)
-
-    // --- เลเยอร์ที่ 3: Sharp Inner Outline (เส้นขอบคมกริบตรงกลาง + ตัวหนังสือข้างในโปร่งใส) ---
-    ctx.shadowBlur = 0 // ปิด shadow เพื่อให้ขอบคม
-    ctx.strokeStyle = '#059669'
-    ctx.lineWidth = 2
-    ctx.strokeText('ADMIN', 0, 0)
-
-    ctx.restore()
-
-    // -------------------------------------------------------------
-    // 🌐 B. 3D Cyber Mesh Grid (ฉากหลังเบาๆ)
-    // -------------------------------------------------------------
-    ctx.save()
-    ctx.strokeStyle = 'rgba(16, 185, 129, 0.08)'
-    ctx.lineWidth = 1
-
-    const gap = 50
-    for (let x = 0; x < canvas.width; x += gap) {
-      ctx.beginPath()
-      ctx.moveTo(x, 0)
-      ctx.lineTo(x, canvas.height)
-      ctx.stroke()
-    }
-
-    gridOffsetY = (gridOffsetY + 0.6) % gap
-    for (let y = gridOffsetY; y < canvas.height; y += gap) {
-      ctx.beginPath()
-      ctx.moveTo(0, y)
-      ctx.lineTo(canvas.width, y)
-      ctx.stroke()
-    }
-    ctx.restore()
-
-    // -------------------------------------------------------------
-    // 🌧️ C. Matrix Digital Rain (โปร่งแสงเบาๆ)
+    // 🌧️ A. Matrix Rain (ฝนดิจิทัล)
     // -------------------------------------------------------------
     ctx.font = `bold ${fontSize}px monospace`
     for (let i = 0; i < drops.length; i++) {
-      const text = chars[Math.floor(Math.random() * chars.length)]
+      const drop = drops[i]
       const x = i * fontSize
-      const y = drops[i] * fontSize
 
-      ctx.fillStyle = 'rgba(16, 185, 129, 0.18)'
-      ctx.fillText(text, x, y)
-
-      if (y > canvas.height && Math.random() > 0.98) {
-        drops[i] = 0
+      for (let j = 0; j < drop.length; j++) {
+        const charY = (drop.y - j) * fontSize
+        if (charY > 0 && charY < canvas.height) {
+          const char = chars[Math.floor(Math.random() * chars.length)]
+          if (j === 0) {
+            ctx.fillStyle = '#10b981'
+          } else {
+            ctx.fillStyle = `rgba(16, 185, 129, ${0.15 - (j / drop.length) * 0.12})`
+          }
+          ctx.fillText(char, x, charY)
+        }
       }
-      drops[i]++
+
+      drop.y += drop.speed
+      if (drop.y * fontSize > canvas.height + drop.length * fontSize && Math.random() > 0.975) {
+        drop.y = 0
+      }
     }
+
+    // -------------------------------------------------------------
+    // 🌟 B. Fullscreen Transparent Glowing "ADMIN"
+    // -------------------------------------------------------------
+    ctx.save()
+    ctx.translate(canvas.width / 2, canvas.height / 2)
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+
+    // คำนวณขนาดตัวหนังสือใหญ่ยักษ์ ขยายเกือบเต็มความกว้างจอ
+    const adminFontSize = Math.min(canvas.width * 0.32, 500)
+    ctx.font = `900 ${adminFontSize}px 'Impact', 'Arial Black', sans-serif`
+
+    const text = 'ADMIN'
+
+    // 1. แสง Neon Glow ด้านหลังตัวหนังสือ
+    ctx.shadowColor = '#10b981'
+    ctx.shadowBlur = 35
+    ctx.strokeStyle = 'rgba(16, 185, 129, 0.8)'
+    ctx.lineWidth = 10
+    ctx.strokeText(text, 0, 0)
+
+    // 2. เส้นขอบหลักสีเขียวนีออนคมชัด (ตัวอักษรข้างในโปร่งใส Transparent)
+    ctx.shadowBlur = 10
+    ctx.shadowColor = '#34d399'
+    ctx.strokeStyle = '#059669'
+    ctx.lineWidth = 4
+    ctx.strokeText(text, 0, 0)
+
+    // 3. เส้น Inner-Stroke เส้นสว่างสีเขียวมิ้นต์ขาว เพื่อความพรีเมียม
+    ctx.shadowBlur = 0
+    ctx.strokeStyle = '#a7f3d0'
+    ctx.lineWidth = 1.5
+    ctx.strokeText(text, 0, 0)
+
+    ctx.restore()
 
     animationId = requestAnimationFrame(draw)
   }
@@ -136,7 +119,7 @@ const initHeavyCyberBackground = () => {
 }
 
 onMounted(() => {
-  initHeavyCyberBackground()
+  initCyberLightBackground()
 })
 
 onUnmounted(() => {
@@ -251,13 +234,13 @@ const closeModal = () => {
 <template>
   <div ref="containerRef" class="relative w-full min-h-screen p-4 md:p-6 bg-slate-50 space-y-6 overflow-hidden">
     
-    <!-- 1. Heavy VFX Canvas Background (ตัวหนังสือ ADMIN นีออนยักษ์ตรงนี้) -->
+    <!-- 1. Heavy VFX Canvas Background -->
     <canvas ref="backgroundCanvas" class="absolute inset-0 pointer-events-none z-0 opacity-100"></canvas>
 
     <!-- 2. Neon Ambient Glows -->
-    <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[900px] h-[500px] bg-emerald-300/20 rounded-full blur-[160px] pointer-events-none z-0"></div>
+    <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[900px] h-[500px] bg-emerald-200/25 rounded-full blur-[150px] pointer-events-none z-0"></div>
 
-    <!-- 3. UI Components (เอากรอบสีขาว bg-white ทึบกลับมาเหมือนเดิม) -->
+    <!-- 3. UI Components -->
     <div class="relative z-10 space-y-6">
 
       <!-- Access Denied State -->
@@ -280,8 +263,8 @@ const closeModal = () => {
       <!-- Main Activity Log UI -->
       <template v-else>
         
-        <!-- Header Bar (กรอบขาวทึบ) -->
-        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+        <!-- Header Bar -->
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-white/90 backdrop-blur p-4 rounded-xl border border-slate-200/80 shadow-sm">
           <div class="flex items-center gap-3">
             <div class="p-2.5 bg-emerald-50 text-emerald-600 rounded-lg border border-emerald-100">
               <History class="w-6 h-6" />
@@ -304,8 +287,8 @@ const closeModal = () => {
           </div>
         </div>
 
-        <!-- Search Bar & Filters (กรอบขาวทึบ) -->
-        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col md:flex-row gap-3 items-center justify-between">
+        <!-- Search Bar & Filters -->
+        <div class="bg-white/90 backdrop-blur p-4 rounded-xl border border-slate-200/80 shadow-sm flex flex-col md:flex-row gap-3 items-center justify-between">
           
           <!-- Search Box -->
           <div class="relative w-full md:w-80">
@@ -348,8 +331,8 @@ const closeModal = () => {
           </div>
         </div>
 
-        <!-- Table Container (ตารางสีขาวทึบ bg-white) -->
-        <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+        <!-- Table Container -->
+        <div class="bg-white/90 backdrop-blur rounded-xl border border-slate-200/80 shadow-sm overflow-hidden">
           <div class="overflow-x-auto w-full">
             <table class="w-full text-left border-collapse">
               <thead>
@@ -367,7 +350,7 @@ const closeModal = () => {
                 <tr 
                   v-for="log in filteredLogs" 
                   :key="log.id"
-                  class="hover:bg-slate-50 transition-colors"
+                  class="hover:bg-slate-50/80 transition-colors"
                 >
                   <!-- Timestamp -->
                   <td class="py-4 px-6 text-slate-700 whitespace-nowrap">

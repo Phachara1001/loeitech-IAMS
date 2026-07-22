@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed } from 'vue'
 import { 
   History, 
   Search, 
@@ -14,112 +14,26 @@ import {
   FileCode2
 } from 'lucide-vue-next'
 
-// --- Canvas VFX: Transparent Glowing ADMIN + Matrix Rain ---
-const backgroundCanvas = ref(null)
-const containerRef = ref(null)
-let animationId = null
-
-const initCyberLightBackground = () => {
-  const canvas = backgroundCanvas.value
-  const container = containerRef.value
-  if (!canvas || !container) return
-  const ctx = canvas.getContext('2d')
-
-  const resize = () => {
-    canvas.width = container.clientWidth
-    canvas.height = container.clientHeight
-  }
-  resize()
-
-  const ro = new ResizeObserver(() => resize())
-  ro.observe(container)
-
-  // Matrix Rain Setup
-  const chars = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ@#$%&*'
-  const fontSize = 15
-  const columns = Math.floor(canvas.width / fontSize)
-  const drops = Array.from({ length: columns }, () => ({
-    y: Math.random() * -100,
-    speed: Math.random() * 1.5 + 1.2,
-    length: Math.floor(Math.random() * 12) + 8
-  }))
-
-  const draw = () => {
-    ctx.fillStyle = 'rgba(248, 250, 252, 0.28)' 
-    ctx.fillRect(0, 0, canvas.width, canvas.height)
-
-    // A. Matrix Rain
-    ctx.font = `bold ${fontSize}px monospace`
-    for (let i = 0; i < drops.length; i++) {
-      const drop = drops[i]
-      const x = i * fontSize
-
-      for (let j = 0; j < drop.length; j++) {
-        const charY = (drop.y - j) * fontSize
-        if (charY > 0 && charY < canvas.height) {
-          const char = chars[Math.floor(Math.random() * chars.length)]
-          if (j === 0) {
-            ctx.fillStyle = '#10b981'
-          } else {
-            ctx.fillStyle = `rgba(16, 185, 129, ${0.15 - (j / drop.length) * 0.12})`
-          }
-          ctx.fillText(char, x, charY)
-        }
-      }
-
-      drop.y += drop.speed
-      if (drop.y * fontSize > canvas.height + drop.length * fontSize && Math.random() > 0.975) {
-        drop.y = 0
-      }
-    }
-
-    // B. Fullscreen Transparent Glowing "ADMIN"
-    ctx.save()
-    ctx.translate(canvas.width / 2, canvas.height / 2)
-    ctx.textAlign = 'center'
-    ctx.textBaseline = 'middle'
-
-    const adminFontSize = Math.min(canvas.width * 0.32, 500)
-    ctx.font = `900 ${adminFontSize}px 'Impact', 'Arial Black', sans-serif`
-
-    const text = 'ADMIN'
-
-    ctx.shadowColor = '#10b981'
-    ctx.shadowBlur = 35
-    ctx.strokeStyle = 'rgba(16, 185, 129, 0.8)'
-    ctx.lineWidth = 10
-    ctx.strokeText(text, 0, 0)
-
-    ctx.shadowBlur = 10
-    ctx.shadowColor = '#34d399'
-    ctx.strokeStyle = '#059669'
-    ctx.lineWidth = 4
-    ctx.strokeText(text, 0, 0)
-
-    ctx.shadowBlur = 0
-    ctx.strokeStyle = '#a7f3d0'
-    ctx.lineWidth = 1.5
-    ctx.strokeText(text, 0, 0)
-
-    ctx.restore()
-
-    animationId = requestAnimationFrame(draw)
-  }
-
-  draw()
-}
-
-onMounted(() => {
-  initCyberLightBackground()
-})
-
-onUnmounted(() => {
-  if (animationId) cancelAnimationFrame(animationId)
-})
-
 // --- Mock User & Role ---
 const currentUser = ref({ name: 'สมชาย ใจดี (Admin)', role: 'Admin' })
 const isAdmin = computed(() => currentUser.value.role === 'Admin')
+
+// --- Helper: Format DATETIME เป็นภาษาไทย ---
+const formatThaiDateTime = (dateString) => {
+  if (!dateString) return ''
+  const date = new Date(dateString)
+  if (isNaN(date.getTime())) return dateString
+
+  return date.toLocaleDateString('th-TH', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false
+  })
+}
 
 // --- Filters & States ---
 const searchQuery = ref('')
@@ -223,15 +137,9 @@ const closeModal = () => {
 </script>
 
 <template>
-  <div ref="containerRef" class="relative w-full min-h-screen p-4 md:p-8 bg-slate-100 text-slate-800 space-y-6 overflow-hidden">
+  <div class="relative w-full min-h-screen p-4 md:p-8 bg-white text-slate-800 space-y-6">
     
-    <!-- 1. Heavy VFX Canvas Background -->
-    <canvas ref="backgroundCanvas" class="absolute inset-0 pointer-events-none z-0 opacity-100"></canvas>
-
-    <!-- 2. Neon Ambient Glows -->
-    <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[900px] h-[500px] bg-emerald-200/25 rounded-full blur-[150px] pointer-events-none z-0"></div>
-
-    <!-- 3. UI Components -->
+    <!-- UI Components -->
     <div class="relative z-10 space-y-6">
 
       <!-- Access Denied State -->
@@ -254,32 +162,34 @@ const closeModal = () => {
       <!-- Main Activity Log UI -->
       <template v-else>
         
-        <!-- Header Bar (ปรับขนาดให้ตรงกับ RequisitionManagement) -->
-        <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 bg-white/90 backdrop-blur p-6 rounded-2xl border border-slate-200/80 shadow-sm">
-          <div class="flex items-center gap-4">
-            <div class="p-3.5 bg-emerald-50 text-emerald-800 rounded-xl border border-emerald-100">
-              <History class="w-8 h-8" />
+        <!-- Header Banner -->
+        <div class="relative overflow-hidden rounded-2xl bg-[#072415] text-white shadow-md">
+          <div class="relative z-10 p-6 sm:p-8 flex flex-col md:flex-row items-center justify-between gap-6">
+            <div class="flex items-center gap-4">
+              <div class="p-3.5 bg-emerald-400/20 border border-emerald-400/30 rounded-2xl text-emerald-300">
+                <History class="w-8 h-8" />
+              </div>
+              <div>
+                <h1 class="text-2xl sm:text-3xl font-bold text-white">ประวัติการใช้งานระบบ (Activity Logs)</h1>
+                <p class="text-emerald-100/80 text-sm sm:text-base mt-1">ตรวจสอบและติดตามการทำรายการข้อมูลย้อนหลังทั้งหมดในระบบ</p>
+              </div>
             </div>
-            <div>
-              <h1 class="text-2xl md:text-3xl font-extrabold text-slate-900">ประวัติการใช้งานระบบ (Activity Logs)</h1>
-              <p class="text-base text-slate-500 font-medium mt-0.5">ตรวจสอบและติดตามการทำรายการข้อมูลย้อนหลังทั้งหมดในระบบ</p>
-            </div>
-          </div>
 
-          <!-- Dev Role Switcher Button -->
-          <div class="flex items-center gap-2 bg-slate-50 p-2 rounded-xl border border-slate-200">
-            <span class="text-xs md:text-sm text-slate-500 font-bold px-2">สิทธิ์ปัจจุบัน: <strong class="text-slate-800">{{ currentUser.role }}</strong></span>
-            <button 
-              @click="currentUser.role = 'Staff'" 
-              class="px-3.5 py-1.5 text-xs md:text-sm bg-white hover:bg-rose-50 hover:text-rose-600 text-slate-600 rounded-lg font-bold border border-slate-200 transition-colors cursor-pointer"
-            >
-              สลับเป็น Staff
-            </button>
+            <!-- Dev Role Switcher Button -->
+            <div class="flex items-center gap-3 bg-black/20 border border-white/10 p-2.5 rounded-xl shrink-0">
+              <span class="text-xs sm:text-sm text-emerald-100/80 font-medium">สิทธิ์ปัจจุบัน: <strong class="text-white">{{ currentUser.role }}</strong></span>
+              <button 
+                @click="currentUser.role = 'Staff'" 
+                class="px-3 py-1.5 text-xs bg-red-500/20 hover:bg-red-500/30 text-red-200 border border-red-400/30 rounded-lg font-semibold transition cursor-pointer"
+              >
+                สลับเป็น Staff
+              </button>
+            </div>
           </div>
         </div>
 
-        <!-- Search Bar & Filters (ปรับขนาดกล่องค้นหาและตัวเลือกแบบเดียวกับ Requisition) -->
-        <div class="bg-white/90 backdrop-blur p-4 rounded-2xl border border-slate-200/80 shadow-sm flex flex-col md:flex-row gap-4 items-center justify-between">
+        <!-- Search Bar & Filters -->
+        <div class="bg-slate-50 p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row gap-4 items-center justify-between">
           
           <!-- Search Box -->
           <div class="relative w-full md:w-80">
@@ -322,8 +232,8 @@ const closeModal = () => {
           </div>
         </div>
 
-        <!-- Table Container (เพิ่มขอบเขตและขยายส่วนต่าง ๆ ให้เต็มตา) -->
-        <div class="bg-white/90 backdrop-blur rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
+        <!-- Table Container -->
+        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
           <div class="overflow-x-auto w-full">
             <table class="w-full text-left text-sm whitespace-nowrap">
               <thead>
@@ -343,11 +253,11 @@ const closeModal = () => {
                   :key="log.id"
                   class="hover:bg-slate-50/80 transition-colors"
                 >
-                  <!-- Timestamp -->
-                  <td class="py-4 px-6 text-slate-600 font-mono">
+                  <!-- Timestamp Format ภาษาไทย -->
+                  <td class="py-4 px-6 text-slate-600 font-sans">
                     <div class="flex items-center gap-2">
                       <Clock class="w-4 h-4 text-slate-400" />
-                      <span>{{ log.created_at }}</span>
+                      <span>{{ formatThaiDateTime(log.created_at) }}</span>
                     </div>
                   </td>
 
@@ -422,7 +332,7 @@ const closeModal = () => {
 
     </div>
 
-    <!-- Modal Inspection (ปรับขนาดแบบเดียวกันกับ Requisition Modal) -->
+    <!-- Modal Inspection -->
     <div 
       v-if="isModalOpen" 
       class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm"
@@ -458,7 +368,7 @@ const closeModal = () => {
             </div>
             <div>
               <span class="text-slate-400 font-bold block mb-0.5">เวลา:</span>
-              <span class="font-extrabold text-slate-900 font-mono text-sm">{{ selectedLogData?.created_at }}</span>
+              <span class="font-extrabold text-slate-900 text-sm">{{ formatThaiDateTime(selectedLogData?.created_at) }}</span>
             </div>
           </div>
 

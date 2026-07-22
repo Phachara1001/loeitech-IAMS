@@ -13,7 +13,9 @@ import {
   ShieldCheck,
   RefreshCw,
   PlusCircle,
-  FolderPlus
+  FolderPlus,
+  Package,
+  Sparkles
 } from 'lucide-vue-next'
 
 // --- User Context & Role Check ---
@@ -24,6 +26,19 @@ const currentUser = ref({
 })
 
 const isAuthorized = computed(() => ['Admin', 'Staff'].includes(currentUser.value.role))
+
+// --- Helper: Format DATE เป็นภาษาไทย ---
+const formatThaiDate = (dateString) => {
+  if (!dateString) return ''
+  const date = new Date(dateString)
+  if (isNaN(date.getTime())) return dateString
+
+  return date.toLocaleDateString('th-TH', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric'
+  })
+}
 
 // --- Mock Master Items Database (ตาราง items) ---
 const items = ref([
@@ -185,7 +200,7 @@ const handleSaveStockReceive = () => {
 </script>
 
 <template>
-  <div class="min-h-screen bg-slate-100/80 text-slate-800 p-4 sm:p-6 md:p-10 font-sans">
+  <div class="min-h-screen bg-slate-100/80 text-slate-800 p-4 sm:p-6 md:p-8 font-sans space-y-6">
     
     <!-- Guard Notice -->
     <div v-if="!isAuthorized" class="max-w-2xl mx-auto mt-12 bg-white rounded-3xl p-8 shadow-xl text-center border-2 border-rose-200">
@@ -194,28 +209,37 @@ const handleSaveStockReceive = () => {
     </div>
 
     <!-- Main Container -->
-    <div v-else class="max-w-7xl mx-auto space-y-8">
+    <div v-else class="w-full space-y-6">
       
-      <!-- Top Header -->
-      <div class="bg-white rounded-3xl p-6 md:p-8 shadow-sm border border-slate-200/80 flex flex-col md:flex-row md:items-center justify-between gap-6">
-        <div class="flex items-center gap-5">
-          <div class="w-16 h-16 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white flex items-center justify-center shadow-lg shadow-emerald-500/20 shrink-0">
-            <PackagePlus class="w-9 h-9" />
-          </div>
-          <div>
-            <div class="flex items-center gap-2">
-              <span class="bg-emerald-100 text-emerald-800 text-sm font-extrabold px-3 py-1 rounded-full border border-emerald-200">
-                แบบ พ.3102-8 หน้า 1
-              </span>
-              <span class="text-slate-400 text-sm font-medium">| ระบบสต๊อกหลัก</span>
-            </div>
-            <h1 class="text-2xl sm:text-3xl font-extrabold text-slate-900 mt-1">บันทึกการรับพัสดุเข้าคลัง</h1>
-          </div>
+      <!-- Header Banner ขยายเต็มความกว้าง (เหมือน AssetTimeline) -->
+      <div class="relative overflow-hidden rounded-2xl bg-[#072415] text-white shadow-xl print:hidden">
+        <!-- Background Mesh Gradient -->
+        <div class="absolute inset-0 pointer-events-none overflow-hidden">
+          <div class="absolute -top-20 -right-20 w-[500px] h-[500px] rounded-full bg-[#1B5E3C] opacity-75 blur-[90px]"></div>
+          <div class="absolute top-1/2 -left-20 w-[400px] h-[400px] rounded-full bg-[#288252] opacity-40 blur-[80px]"></div>
+          <div class="absolute -bottom-20 right-1/3 w-[350px] h-[350px] rounded-full bg-[#04140B] opacity-90 blur-[70px]"></div>
         </div>
 
-        <div class="flex items-center gap-3 bg-slate-50 p-2.5 rounded-2xl border border-slate-200 self-start md:self-auto">
-          <ShieldCheck class="w-5 h-5 text-emerald-600 ml-2" />
-          <span class="text-base font-bold text-slate-700">{{ currentUser.name }}</span>
+        <div class="relative z-10 p-6 sm:p-8 flex flex-col md:flex-row items-center justify-between gap-6">
+          <div class="flex items-center gap-5">
+            <div class="p-3.5 bg-emerald-400/20 border border-emerald-400/30 rounded-2xl text-emerald-300 backdrop-blur-md shrink-0">
+              <PackagePlus class="w-8 h-8" />
+            </div>
+            <div>
+              <div class="flex items-center gap-2">
+                <span class="bg-emerald-500/20 text-emerald-300 text-xs sm:text-sm font-extrabold px-3 py-0.5 rounded-full border border-emerald-400/30 backdrop-blur-md">
+                  แบบ พ.3102-8 หน้า 1
+                </span>
+                <span class="text-emerald-100/60 text-xs sm:text-sm font-medium">| ระบบสต๊อกหลัก</span>
+              </div>
+              <h1 class="text-2xl sm:text-3xl font-extrabold text-white mt-1">บันทึกการรับพัสดุเข้าคลัง</h1>
+            </div>
+          </div>
+
+          <div class="flex items-center gap-2 bg-black/20 border border-white/10 p-2.5 rounded-xl backdrop-blur-md self-start md:self-auto shrink-0">
+            <ShieldCheck class="w-5 h-5 text-emerald-400 ml-1" />
+            <span class="text-sm font-bold text-white pr-2">{{ currentUser.name }}</span>
+          </div>
         </div>
       </div>
 
@@ -296,9 +320,12 @@ const handleSaveStockReceive = () => {
                 ]"
               >
                 <input type="radio" v-model="itemSourceType" value="EXISTING" class="w-6 h-6 text-emerald-600 accent-emerald-600" />
-                <div>
-                  <span class="block text-lg font-extrabold text-slate-900">📦 วัสดุที่มีในคลังอยู่แล้ว</span>
-                  <span class="text-sm font-medium text-slate-500">เลือกพัสดุเดิมเพื่อเพิ่มจำนวนสต๊อก</span>
+                <div class="space-y-0.5">
+                  <span class="text-lg font-extrabold text-slate-900 flex items-center gap-2">
+                    <Package class="w-5 h-5 text-emerald-600 shrink-0" />
+                    วัสดุที่มีในคลังอยู่แล้ว
+                  </span>
+                  <span class="text-sm font-medium text-slate-500 block">เลือกพัสดุเดิมเพื่อเพิ่มจำนวนสต๊อก</span>
                 </div>
               </label>
 
@@ -311,9 +338,12 @@ const handleSaveStockReceive = () => {
                 ]"
               >
                 <input type="radio" v-model="itemSourceType" value="NEW" class="w-6 h-6 text-emerald-600 accent-emerald-600" />
-                <div>
-                  <span class="block text-lg font-extrabold text-slate-900">✨ พัสดุ/วัสดุใหม่ (ยังไม่มีในระบบ)</span>
-                  <span class="text-sm font-medium text-slate-500">กรอกชื่อเพื่อลงทะเบียนเข้าคลังใหม่</span>
+                <div class="space-y-0.5">
+                  <span class="text-lg font-extrabold text-slate-900 flex items-center gap-2">
+                    <Sparkles class="w-5 h-5 text-emerald-600 shrink-0" />
+                    พัสดุ/วัสดุใหม่ (ยังไม่มีในระบบ)
+                  </span>
+                  <span class="text-sm font-medium text-slate-500 block">กรอกชื่อเพื่อลงทะเบียนเข้าคลังใหม่</span>
                 </div>
               </label>
             </div>
@@ -464,8 +494,8 @@ const handleSaveStockReceive = () => {
                 <p class="text-xl font-extrabold text-emerald-400 mt-1 leading-snug">
                   {{ displayItemName }}
                 </p>
-                <span v-if="itemSourceType === 'NEW'" class="inline-block mt-2 px-2.5 py-0.5 bg-emerald-500/20 text-emerald-300 rounded-md text-xs font-bold border border-emerald-500/30">
-                  ✨ พัสดุรายการใหม่
+                <span v-if="itemSourceType === 'NEW'" class="inline-flex items-center gap-1 mt-2 px-2.5 py-0.5 bg-emerald-500/20 text-emerald-300 rounded-md text-xs font-bold border border-emerald-500/30">
+                  <Sparkles class="w-3.5 h-3.5 text-emerald-300" /> พัสดุรายการใหม่
                 </span>
               </div>
 
@@ -510,8 +540,11 @@ const handleSaveStockReceive = () => {
                   <span class="line-clamp-1">{{ tx.itemName }}</span>
                   <span class="text-emerald-700 font-mono font-extrabold ml-2 shrink-0">+{{ tx.qty }}</span>
                 </div>
-                <div class="text-xs text-slate-500 mt-1 flex justify-between">
-                  <span>📅 {{ tx.receivedDate }}</span>
+                <div class="text-xs text-slate-500 mt-1 flex justify-between items-center">
+                  <span class="flex items-center gap-1">
+                    <Calendar class="w-3 h-3 text-slate-400" />
+                    {{ formatThaiDate(tx.receivedDate) }}
+                  </span>
                   <span>฿{{ tx.totalPrice.toLocaleString() }}</span>
                 </div>
               </div>

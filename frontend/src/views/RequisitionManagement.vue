@@ -13,18 +13,35 @@ import {
   Package,
   UserCheck,
   AlertCircle,
-  TrendingDown
+  TrendingDown,
+  History,
+  Calendar
 } from 'lucide-vue-next'
 
 // ==========================================
 // 1. USER & ROLE CONTEXT
 // ==========================================
-// สามารถลองคลิกสลับ Role ด้านบนสุดของหน้าจอเพื่อทดสอบระบบได้ครับ
 const currentUser = ref({
   id: 'USR-001',
   name: 'นายสมชาย ใจดี',
   role: 'User' // 'Admin' | 'Staff' | 'User'
 })
+
+// --- Helper: Format DATETIME เป็นภาษาไทย ---
+const formatThaiDateTime = (dateString) => {
+  if (!dateString) return ''
+  const date = new Date(dateString)
+  if (isNaN(date.getTime())) return dateString
+
+  return date.toLocaleDateString('th-TH', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  })
+}
 
 // ==========================================
 // 2. MOCK DATABASE (Simulated PostgreSQL Stock)
@@ -110,7 +127,7 @@ const filteredRequisitions = computed(() => {
 })
 
 // ==========================================
-// 4. APPROVAL & REJECT ACTIONS (PostgreSQL Sync)
+// 4. APPROVAL & REJECT ACTIONS
 // ==========================================
 const isDetailModalOpen = ref(false)
 const selectedReq = ref(null)
@@ -120,12 +137,11 @@ const openDetailModal = (req) => {
   isDetailModalOpen.value = true
 }
 
-// อนุมัติการเบิก -> หัก สต็อก PostgreSQL
+// อนุมัติการเบิก -> หัก สต็อก
 const handleApprove = (req) => {
   if (currentUser.value.role === 'User') return
 
   if (confirm(`ยืนยันการอนุมัติใบขอเบิกเลขที่ ${req.id} ?\nระบบจะทำการหักยอดพัสดุในคลังอัตโนมัติ`)) {
-    // 1. ตรวจสอบว่าสต็อกเพียงพอหรือไม่
     let isStockSufficient = true
     let errorMsg = ''
 
@@ -138,11 +154,10 @@ const handleApprove = (req) => {
     })
 
     if (!isStockSufficient) {
-      alert(`❌ ไม่สามารถอนุมัติได้ เนื่องจากสต็อกไม่เพียงพอ:${errorMsg}`)
+      alert(`ไม่สามารถอนุมัติได้ เนื่องจากสต็อกไม่เพียงพอ:${errorMsg}`)
       return
     }
 
-    // 2. หักจำนวนพัสดุในสต็อก (Simulate UPDATE inventory SET qty = qty - req_qty)
     req.items.forEach(item => {
       const stockItem = inventoryStock.value.find(s => s.id === item.skuId)
       if (stockItem) {
@@ -150,12 +165,12 @@ const handleApprove = (req) => {
       }
     })
 
-    // 3. อัปเดตสถานะใบเบิก
     req.status = 'APPROVED'
     req.approvedBy = `${currentUser.value.name} (${currentUser.value.role})`
-    req.approvedDate = new Date().toISOString().replace('T', ' ').substring(0, 16)
+    const now = new Date()
+    req.approvedDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
 
-    alert(`✅ อนุมัติคำขอเบิก ${req.id} เรียบร้อยแล้ว! ระบบตัดยอดสต็อกและลงประวัติการจ่ายเรียบร้อย`)
+    alert(`อนุมัติคำขอเบิก ${req.id} เรียบร้อยแล้ว! ระบบตัดยอดสต็อกและลงประวัติการจ่ายเรียบร้อย`)
     isDetailModalOpen.value = false
   }
 }
@@ -168,10 +183,11 @@ const handleReject = (req) => {
   if (reason !== null && reason.trim() !== '') {
     req.status = 'REJECTED'
     req.approvedBy = `${currentUser.value.name} (${currentUser.value.role})`
-    req.approvedDate = new Date().toISOString().replace('T', ' ').substring(0, 16)
+    const now = new Date()
+    req.approvedDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
     req.rejectReason = reason
 
-    alert(`❌ ปฏิเสธคำขอเบิก ${req.id} เรียบร้อยแล้ว`)
+    alert(`ปฏิเสธคำขอเบิก ${req.id} เรียบร้อยแล้ว`)
     isDetailModalOpen.value = false
   }
 }
@@ -203,7 +219,6 @@ const handleCreateRequisition = () => {
     return
   }
 
-  // Map SKU items
   const formattedItems = newReq.value.items.map(i => {
     const stockItem = inventoryStock.value.find(s => s.id === i.skuId)
     return {
@@ -214,13 +229,16 @@ const handleCreateRequisition = () => {
     }
   })
 
+  const now = new Date()
+  const formattedNow = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
+
   const newId = `REQ-2026-00${requisitions.value.length + 1}`
   requisitions.value.unshift({
     id: newId,
     requesterId: currentUser.value.id,
     requesterName: currentUser.value.name,
     department: 'เทคโนโลยีสารสนเทศ',
-    requestDate: new Date().toISOString().replace('T', ' ').substring(0, 16),
+    requestDate: formattedNow,
     reason: newReq.value.reason,
     status: 'PENDING',
     items: formattedItems,
@@ -229,7 +247,7 @@ const handleCreateRequisition = () => {
     rejectReason: null
   })
 
-  alert(`🎉 ส่งใบขอเบิกเลขที่ ${newId} เรียบร้อยแล้ว! รอเจ้าหน้าที่พัสดุตรวจสอบ`)
+  alert(`ส่งใบขอเบิกเลขที่ ${newId} เรียบร้อยแล้ว! รอเจ้าหน้าที่พัสดุตรวจสอบ`)
   isNewModalOpen.value = false
   newReq.value = { reason: '', items: [{ skuId: '', qty: 1 }] }
 }
@@ -249,39 +267,48 @@ const getStatusBadge = (status) => {
 <template>
   <div class="relative w-full min-h-screen p-4 md:p-8 bg-slate-100 text-slate-800 space-y-6">
 
-    <!-- Global Top Header & Role Switcher Bar -->
-    <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 bg-white p-6 rounded-2xl border border-slate-200/80 shadow-sm">
-      <div class="flex items-center gap-4">
-        <div class="p-3.5 bg-emerald-50 text-emerald-800 rounded-xl border border-emerald-100">
-          <FileText class="w-8 h-8" />
-        </div>
-        <div>
-          <h1 class="text-2xl md:text-3xl font-extrabold text-slate-900">ระบบบริหารคำขอเบิกพัสดุ (Requisition Management)</h1>
-          <p class="text-base text-slate-500 font-medium mt-0.5">จัดการใบขอเบิกพัสดุสิ้นเปลือง อนุมัติ และตัดสต็อกอัตโนมัติ</p>
-        </div>
+    <!-- Global Top Header Bar (เหมือน AssetTimeline) -->
+    <div class="relative overflow-hidden rounded-2xl bg-[#072415] text-white shadow-xl">
+      <!-- Background Mesh Gradient -->
+      <div class="absolute inset-0 pointer-events-none overflow-hidden">
+        <div class="absolute -top-20 -right-20 w-[500px] h-[500px] rounded-full bg-[#1B5E3C] opacity-75 blur-[90px]"></div>
+        <div class="absolute top-1/2 -left-20 w-[400px] h-[400px] rounded-full bg-[#288252] opacity-40 blur-[80px]"></div>
+        <div class="absolute -bottom-20 right-1/3 w-[350px] h-[350px] rounded-full bg-[#04140B] opacity-90 blur-[70px]"></div>
       </div>
 
-      <!-- Demo Role Selector Switcher -->
-      <div class="flex items-center gap-2 bg-slate-50 p-2 rounded-xl border border-slate-200">
-        <span class="text-xs md:text-sm text-slate-500 font-bold px-2">ทดสอบสิทธิ์ผู้ใช้:</span>
-        <button 
-          @click="currentUser.role = 'Admin'" 
-          :class="['px-3.5 py-1.5 text-xs md:text-sm rounded-lg font-bold transition-all cursor-pointer', currentUser.role === 'Admin' ? 'bg-emerald-800 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-200']"
-        >
-          Admin
-        </button>
-        <button 
-          @click="currentUser.role = 'Staff'" 
-          :class="['px-3.5 py-1.5 text-xs md:text-sm rounded-lg font-bold transition-all cursor-pointer', currentUser.role === 'Staff' ? 'bg-emerald-800 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-200']"
-        >
-          Staff
-        </button>
-        <button 
-          @click="currentUser.role = 'User'" 
-          :class="['px-3.5 py-1.5 text-xs md:text-sm rounded-lg font-bold transition-all cursor-pointer', currentUser.role === 'User' ? 'bg-emerald-800 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-200']"
-        >
-          User (ผู้ขอเบิก)
-        </button>
+      <div class="relative z-10 p-6 sm:p-8 flex flex-col lg:flex-row items-center justify-between gap-6">
+        <div class="flex items-center gap-4">
+          <div class="p-3.5 bg-emerald-400/20 border border-emerald-400/30 rounded-2xl text-emerald-300 backdrop-blur-md">
+            <FileText class="w-8 h-8" />
+          </div>
+          <div>
+            <h1 class="text-2xl sm:text-3xl font-bold text-white">ระบบบริหารคำขอเบิกพัสดุ (Requisition Management)</h1>
+            <p class="text-emerald-100/80 text-sm sm:text-base mt-1">จัดการใบขอเบิกพัสดุสิ้นเปลือง อนุมัติ และตัดสต็อกอัตโนมัติ</p>
+          </div>
+        </div>
+
+        <!-- Dev Role Switcher Button -->
+        <div class="flex items-center gap-2 bg-black/20 border border-white/10 p-2 rounded-xl backdrop-blur-md shrink-0">
+          <span class="text-xs sm:text-sm text-emerald-100/80 font-medium px-2">สิทธิ์สลับหน้าทดสอบ:</span>
+          <button 
+            @click="currentUser.role = 'Admin'" 
+            :class="['px-3 py-1.5 text-xs rounded-lg font-semibold transition backdrop-blur-md cursor-pointer', currentUser.role === 'Admin' ? 'bg-emerald-500 text-white shadow-sm' : 'text-emerald-100/70 hover:bg-white/10']"
+          >
+            Admin
+          </button>
+          <button 
+            @click="currentUser.role = 'Staff'" 
+            :class="['px-3 py-1.5 text-xs rounded-lg font-semibold transition backdrop-blur-md cursor-pointer', currentUser.role === 'Staff' ? 'bg-emerald-500 text-white shadow-sm' : 'text-emerald-100/70 hover:bg-white/10']"
+          >
+            Staff
+          </button>
+          <button 
+            @click="currentUser.role = 'User'" 
+            :class="['px-3 py-1.5 text-xs rounded-lg font-semibold transition backdrop-blur-md cursor-pointer', currentUser.role === 'User' ? 'bg-emerald-500 text-white shadow-sm' : 'text-emerald-100/70 hover:bg-white/10']"
+          >
+            User (ผู้ขอเบิก)
+          </button>
+        </div>
       </div>
     </div>
 
@@ -359,8 +386,11 @@ const getStatusBadge = (status) => {
                 <div class="font-extrabold text-slate-900 text-base">{{ req.requesterName }}</div>
                 <div class="text-xs text-slate-500">{{ req.department }}</div>
               </td>
-              <td class="px-6 py-4 text-slate-600 font-mono">
-                📅 {{ req.requestDate }}
+              <td class="px-6 py-4 text-slate-600 font-medium">
+                <div class="flex items-center gap-1.5">
+                  <Calendar class="w-4 h-4 text-slate-400" />
+                  <span>{{ formatThaiDateTime(req.requestDate) }}</span>
+                </div>
               </td>
               <td class="px-6 py-4 text-center">
                 <span class="px-3 py-1 bg-slate-100 text-slate-700 rounded-lg font-bold text-xs">
@@ -444,7 +474,10 @@ const getStatusBadge = (status) => {
             </div>
             <div>
               <span class="text-xs text-slate-400 font-bold block">วันที่ขอเบิก</span>
-              <strong class="text-slate-900 font-mono">{{ selectedReq.requestDate }}</strong>
+              <div class="flex items-center gap-1.5 text-slate-900 font-medium mt-0.5">
+                <Calendar class="w-4 h-4 text-slate-400" />
+                <span>{{ formatThaiDateTime(selectedReq.requestDate) }}</span>
+              </div>
             </div>
           </div>
 
@@ -493,8 +526,9 @@ const getStatusBadge = (status) => {
               <UserCheck class="w-5 h-5" />
               <span>ผู้ดำเนินการ: {{ selectedReq.approvedBy }}</span>
             </div>
-            <div class="text-xs text-slate-500 font-mono">
-              เมื่อวันที่: {{ selectedReq.approvedDate }}
+            <div class="text-xs text-slate-500 flex items-center gap-1">
+              <Calendar class="w-3.5 h-3.5 text-slate-400" />
+              <span>เมื่อวันที่: {{ formatThaiDateTime(selectedReq.approvedDate) }}</span>
             </div>
             <div v-if="selectedReq.rejectReason" class="text-sm text-rose-700 font-bold pt-1">
               เหตุผลที่ปฏิเสธ: {{ selectedReq.rejectReason }}
@@ -514,9 +548,10 @@ const getStatusBadge = (status) => {
             </button>
             <button 
               @click="handleApprove(selectedReq)"
-              class="px-6 py-2.5 bg-emerald-800 hover:bg-emerald-700 text-white font-extrabold rounded-xl transition-all shadow-md cursor-pointer"
+              class="px-6 py-2.5 bg-emerald-800 hover:bg-emerald-700 text-white font-extrabold rounded-xl transition-all shadow-md cursor-pointer flex items-center gap-1.5"
             >
-              ✓ อนุมัติ & ตัดสต็อก
+              <CheckCircle2 class="w-4 h-4" />
+              <span>อนุมัติ & ตัดสต็อก</span>
             </button>
           </template>
           <button 

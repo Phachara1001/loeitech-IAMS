@@ -11,7 +11,9 @@ import {
   CheckCircle2,
   Clock,
   ArrowRightLeft,
-  User
+  User,
+  X,
+  Check
 } from 'lucide-vue-next'
 
 // ==========================================
@@ -23,6 +25,19 @@ const currentUser = ref({
   department: 'แผนกเทคโนโลยีสารสนเทศ',
   role: 'Staff' // 'Admin' | 'Staff' | 'User'
 })
+
+// --- Helper: Format DATE เป็นภาษาไทย ---
+const formatThaiDate = (dateString) => {
+  if (!dateString) return ''
+  const date = new Date(dateString)
+  if (isNaN(date.getTime())) return dateString
+
+  return date.toLocaleDateString('th-TH', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric'
+  })
+}
 
 // ==========================================
 // 2. MASTER ASSETS & LOCATIONS (ฐานข้อมูลครุภัณฑ์)
@@ -178,7 +193,7 @@ const handleAssignAsset = () => {
     note: form.value.note || 'จัดสรรลงหน่วยงาน'
   })
 
-  alert(`✅ จัดสรรครุภัณฑ์ ${selectedAsset.code} ไปยัง ${form.value.department} เรียบร้อยแล้ว!`)
+  alert(`จัดสรรครุภัณฑ์ ${selectedAsset.code} ไปยัง ${form.value.department} เรียบร้อยแล้ว!`)
   
   // Reset Form & Close Modal
   isModalOpen.value = false
@@ -189,39 +204,48 @@ const handleAssignAsset = () => {
 <template>
   <div class="relative w-full min-h-screen p-4 md:p-8 bg-slate-100 text-slate-800 space-y-6">
 
-    <!-- Global Header & Role Selector -->
-    <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 bg-white p-6 rounded-2xl border border-slate-200/80 shadow-sm">
-      <div class="flex items-center gap-4">
-        <div class="p-3.5 bg-emerald-50 text-emerald-800 rounded-xl border border-emerald-100">
-          <Building2 class="w-8 h-8" />
-        </div>
-        <div>
-          <h1 class="text-2xl md:text-3xl font-extrabold text-slate-900">ทะเบียนคุมครุภัณฑ์จ่ายให้หน่วย (พ.3108 หน้า 4)</h1>
-          <p class="text-base text-slate-500 font-medium mt-0.5">ระบบควบคุมการจัดสรร โยกย้ายสถานที่ และระบุบุคลากรผู้รับผิดชอบดูแลครุภัณฑ์</p>
-        </div>
+    <!-- Header Banner ขยายเต็มความกว้าง (เหมือน AssetTimeline) -->
+    <div class="relative overflow-hidden rounded-2xl bg-[#072415] text-white shadow-xl print:hidden">
+      <!-- Background Mesh Gradient -->
+      <div class="absolute inset-0 pointer-events-none overflow-hidden">
+        <div class="absolute -top-20 -right-20 w-[500px] h-[500px] rounded-full bg-[#1B5E3C] opacity-75 blur-[90px]"></div>
+        <div class="absolute top-1/2 -left-20 w-[400px] h-[400px] rounded-full bg-[#288252] opacity-40 blur-[80px]"></div>
+        <div class="absolute -bottom-20 right-1/3 w-[350px] h-[350px] rounded-full bg-[#04140B] opacity-90 blur-[70px]"></div>
       </div>
 
-      <!-- Switcher Role สำหรับทดสอบ -->
-      <div class="flex items-center gap-2 bg-slate-50 p-2 rounded-xl border border-slate-200">
-        <span class="text-xs md:text-sm text-slate-500 font-bold px-2">ทดสอบสิทธิ์ผู้ใช้:</span>
-        <button 
-          @click="currentUser.role = 'Admin'" 
-          :class="['px-3.5 py-1.5 text-xs md:text-sm rounded-lg font-bold transition-all cursor-pointer', currentUser.role === 'Admin' ? 'bg-emerald-800 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-200']"
-        >
-          Admin
-        </button>
-        <button 
-          @click="currentUser.role = 'Staff'" 
-          :class="['px-3.5 py-1.5 text-xs md:text-sm rounded-lg font-bold transition-all cursor-pointer', currentUser.role === 'Staff' ? 'bg-emerald-800 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-200']"
-        >
-          Staff
-        </button>
-        <button 
-          @click="currentUser.role = 'User'" 
-          :class="['px-3.5 py-1.5 text-xs md:text-sm rounded-lg font-bold transition-all cursor-pointer', currentUser.role === 'User' ? 'bg-emerald-800 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-200']"
-        >
-          User (ดูได้เฉพาะในแผนก)
-        </button>
+      <div class="relative z-10 p-6 sm:p-8 flex flex-col lg:flex-row items-center justify-between gap-6">
+        <div class="flex items-center gap-4">
+          <div class="p-3.5 bg-emerald-400/20 border border-emerald-400/30 rounded-2xl text-emerald-300 backdrop-blur-md shrink-0">
+            <Building2 class="w-8 h-8" />
+          </div>
+          <div>
+            <h1 class="text-2xl sm:text-3xl font-bold text-white">ทะเบียนคุมครุภัณฑ์จ่ายให้หน่วย (พ.3108 หน้า 4)</h1>
+            <p class="text-emerald-100/80 text-sm sm:text-base mt-1">ระบบควบคุมการจัดสรร โยกย้ายสถานที่ และระบุบุคลากรผู้รับผิดชอบดูแลครุภัณฑ์</p>
+          </div>
+        </div>
+
+        <!-- Switcher Role สำหรับทดสอบ -->
+        <div class="flex items-center gap-2 bg-black/20 border border-white/10 p-2 rounded-xl backdrop-blur-md shrink-0">
+          <span class="text-xs sm:text-sm text-emerald-100/80 font-medium px-2">ทดสอบสิทธิ์ผู้ใช้:</span>
+          <button 
+            @click="currentUser.role = 'Admin'" 
+            :class="['px-3 py-1.5 text-xs sm:text-sm rounded-lg font-semibold transition backdrop-blur-md cursor-pointer', currentUser.role === 'Admin' ? 'bg-emerald-500 text-white shadow-sm' : 'text-emerald-100/70 hover:bg-white/10']"
+          >
+            Admin
+          </button>
+          <button 
+            @click="currentUser.role = 'Staff'" 
+            :class="['px-3 py-1.5 text-xs sm:text-sm rounded-lg font-semibold transition backdrop-blur-md cursor-pointer', currentUser.role === 'Staff' ? 'bg-emerald-500 text-white shadow-sm' : 'text-emerald-100/70 hover:bg-white/10']"
+          >
+            Staff
+          </button>
+          <button 
+            @click="currentUser.role = 'User'" 
+            :class="['px-3 py-1.5 text-xs sm:text-sm rounded-lg font-semibold transition backdrop-blur-md cursor-pointer', currentUser.role === 'User' ? 'bg-emerald-500 text-white shadow-sm' : 'text-emerald-100/70 hover:bg-white/10']"
+          >
+            User (ดูเฉพาะในแผนก)
+          </button>
+        </div>
       </div>
     </div>
 
@@ -266,7 +290,7 @@ const handleAssignAsset = () => {
         <div class="flex items-center gap-3">
           <label class="inline-flex items-center gap-2 cursor-pointer text-sm font-bold text-slate-700 bg-white px-3 py-2 rounded-xl border border-slate-300">
             <input type="checkbox" v-model="currentOnlyFilter" class="w-4 h-4 text-emerald-800 rounded focus:ring-emerald-500" />
-            <span>แสดงเฉพาะที่ครองครองอยู่ปัจจุบัน (is_current)</span>
+            <span>แสดงเฉพาะที่ครอบครองอยู่ปัจจุบัน (is_current)</span>
           </label>
         </div>
       </div>
@@ -323,10 +347,10 @@ const handleAssignAsset = () => {
               </td>
 
               <!-- ว.ด.ป. รับมอบ/ส่งคืน -->
-              <td class="px-6 py-4 text-center font-mono text-xs">
-                <div class="font-bold text-slate-700">รับมอบ: {{ item.assignDate }}</div>
+              <td class="px-6 py-4 text-center text-xs">
+                <div class="font-bold text-slate-700">รับมอบ: {{ formatThaiDate(item.assignDate) }}</div>
                 <div v-if="item.returnDate" class="text-rose-600 font-bold mt-0.5">
-                  ส่งคืน: {{ item.returnDate }}
+                  ส่งคืน: {{ formatThaiDate(item.returnDate) }}
                 </div>
                 <div v-else class="text-emerald-700 font-bold mt-0.5">- ถือครองอยู่ -</div>
               </td>
@@ -371,7 +395,9 @@ const handleAssignAsset = () => {
             <Building2 class="w-7 h-7 text-emerald-800" />
             จัดสรร / โยกย้ายครุภัณฑ์
           </h3>
-          <button @click="isModalOpen = false" class="text-slate-400 hover:text-slate-700 font-bold text-lg p-2">✕</button>
+          <button @click="isModalOpen = false" class="text-slate-400 hover:text-slate-700 font-bold p-2 cursor-pointer">
+            <X class="w-6 h-6" />
+          </button>
         </div>
 
         <form @submit.prevent="handleAssignAsset" class="p-8 space-y-4 text-sm">
@@ -426,11 +452,11 @@ const handleAssignAsset = () => {
           </div>
 
           <div class="pt-4 flex justify-end gap-3 border-t border-slate-100">
-            <button type="button" @click="isModalOpen = false" class="px-6 py-2.5 bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold rounded-xl">
+            <button type="button" @click="isModalOpen = false" class="px-6 py-2.5 bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold rounded-xl cursor-pointer">
               ยกเลิก
             </button>
-            <button type="submit" class="px-6 py-2.5 bg-emerald-800 hover:bg-emerald-700 text-white font-extrabold rounded-xl shadow-md">
-              ✓ ยืนยันการจัดสรร
+            <button type="submit" class="px-6 py-2.5 bg-emerald-800 hover:bg-emerald-700 text-white font-extrabold rounded-xl shadow-md cursor-pointer flex items-center gap-1.5">
+              <Check class="w-4 h-4 stroke-[3]" /> ยืนยันการจัดสรร
             </button>
           </div>
 

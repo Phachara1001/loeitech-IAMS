@@ -8,7 +8,8 @@ import {
   ShieldAlert,
   ArrowUpDown,
   TrendingDown,
-  TrendingUp
+  TrendingUp,
+  Minus
 } from 'lucide-vue-next'
 
 // ==========================================
@@ -19,6 +20,19 @@ const currentUser = ref({
   name: 'นางสาววิภาดา พัสดุ',
   role: 'Staff' // 'Admin' | 'Staff'
 })
+
+// --- Helper: Format DATE เป็นภาษาไทย ---
+const formatThaiDate = (dateString) => {
+  if (!dateString) return ''
+  const date = new Date(dateString)
+  if (isNaN(date.getTime())) return dateString
+
+  return date.toLocaleDateString('th-TH', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric'
+  })
+}
 
 // ==========================================
 // 2. MASTER INVENTORY DATA
@@ -131,33 +145,42 @@ const totalYearlyOut = computed(() => {
 <template>
   <div class="relative w-full min-h-screen p-4 md:p-8 bg-slate-100 text-slate-800 space-y-6">
 
-    <!-- Global Header & Role Selector Bar -->
-    <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 bg-white p-6 rounded-2xl border border-slate-200/80 shadow-sm print:hidden">
-      <div class="flex items-center gap-4">
-        <div class="p-3.5 bg-emerald-50 text-emerald-800 rounded-xl border border-emerald-100">
-          <History class="w-8 h-8" />
-        </div>
-        <div>
-          <h1 class="text-2xl md:text-3xl font-extrabold text-slate-900">ประวัติการเคลื่อนไหวพัสดุ (พ.3102-8)</h1>
-          <p class="text-base text-slate-500 font-medium mt-0.5">บัญชีคุมพัสดุสิ้นเปลือง แสดงประวัติรับ-จ่าย และสรุปความต้องการเบิกใช้รายเดือน</p>
-        </div>
+    <!-- Global Top Header Bar (เหมือน AssetTimeline) -->
+    <div class="relative overflow-hidden rounded-2xl bg-[#072415] text-white shadow-xl print:hidden">
+      <!-- Background Mesh Gradient -->
+      <div class="absolute inset-0 pointer-events-none overflow-hidden">
+        <div class="absolute -top-20 -right-20 w-[500px] h-[500px] rounded-full bg-[#1B5E3C] opacity-75 blur-[90px]"></div>
+        <div class="absolute top-1/2 -left-20 w-[400px] h-[400px] rounded-full bg-[#288252] opacity-40 blur-[80px]"></div>
+        <div class="absolute -bottom-20 right-1/3 w-[350px] h-[350px] rounded-full bg-[#04140B] opacity-90 blur-[70px]"></div>
       </div>
 
-      <!-- Role Switcher (Admin / Staff Only) -->
-      <div class="flex items-center gap-2 bg-slate-50 p-2 rounded-xl border border-slate-200">
-        <span class="text-xs md:text-sm text-slate-500 font-bold px-2">สิทธิ์ผู้ใช้:</span>
-        <button 
-          @click="currentUser.role = 'Admin'" 
-          :class="['px-3.5 py-1.5 text-xs md:text-sm rounded-lg font-bold transition-all cursor-pointer', currentUser.role === 'Admin' ? 'bg-emerald-800 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-200']"
-        >
-          Admin
-        </button>
-        <button 
-          @click="currentUser.role = 'Staff'" 
-          :class="['px-3.5 py-1.5 text-xs md:text-sm rounded-lg font-bold transition-all cursor-pointer', currentUser.role === 'Staff' ? 'bg-emerald-800 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-200']"
-        >
-          Staff
-        </button>
+      <div class="relative z-10 p-6 sm:p-8 flex flex-col lg:flex-row items-center justify-between gap-6">
+        <div class="flex items-center gap-4">
+          <div class="p-3.5 bg-emerald-400/20 border border-emerald-400/30 rounded-2xl text-emerald-300 backdrop-blur-md">
+            <History class="w-8 h-8" />
+          </div>
+          <div>
+            <h1 class="text-2xl sm:text-3xl font-bold text-white">ประวัติการเคลื่อนไหวพัสดุ (พ.3102-8)</h1>
+            <p class="text-emerald-100/80 text-sm sm:text-base mt-1">บัญชีคุมพัสดุสิ้นเปลือง แสดงประวัติรับ-จ่าย และสรุปความต้องการเบิกใช้รายเดือน</p>
+          </div>
+        </div>
+
+        <!-- Role Switcher (Admin / Staff Only) -->
+        <div class="flex items-center gap-2 bg-black/20 border border-white/10 p-2 rounded-xl backdrop-blur-md shrink-0">
+          <span class="text-xs sm:text-sm text-emerald-100/80 font-medium px-2">สิทธิ์ผู้ใช้:</span>
+          <button 
+            @click="currentUser.role = 'Admin'" 
+            :class="['px-3.5 py-1.5 text-xs sm:text-sm rounded-lg font-semibold transition backdrop-blur-md cursor-pointer', currentUser.role === 'Admin' ? 'bg-emerald-500 text-white shadow-sm' : 'text-emerald-100/70 hover:bg-white/10']"
+          >
+            Admin
+          </button>
+          <button 
+            @click="currentUser.role = 'Staff'" 
+            :class="['px-3.5 py-1.5 text-xs sm:text-sm rounded-lg font-semibold transition backdrop-blur-md cursor-pointer', currentUser.role === 'Staff' ? 'bg-emerald-500 text-white shadow-sm' : 'text-emerald-100/70 hover:bg-white/10']"
+          >
+            Staff
+          </button>
+        </div>
       </div>
     </div>
 
@@ -211,7 +234,7 @@ const totalYearlyOut = computed(() => {
         <div class="flex items-center justify-between">
           <h3 class="text-lg font-extrabold text-slate-900 flex items-center gap-2">
             <Calendar class="w-5 h-5 text-emerald-800" />
-            ตารางสรุปยอดความต้องการเบิกใช้รายเดือน (ม.ค. - ธ.ค. {{ selectedYear }})
+            ตารางสรุปยอดความต้องการเบิกใช้รายเดือน (ม.ค. - ธ.ค. {{ Number(selectedYear) + 543 }})
           </h3>
           <span class="text-xs font-bold text-slate-400">หน่วย: {{ selectedItem.unit }}</span>
         </div>
@@ -229,8 +252,11 @@ const totalYearlyOut = computed(() => {
             <tbody class="font-bold text-slate-800">
               <tr>
                 <td v-for="m in monthsTH" :key="m.num" class="border border-slate-200 p-3">
-                  <span :class="monthlyUsageSummary[m.num] > 0 ? 'text-slate-900 font-extrabold' : 'text-slate-300'">
-                    {{ monthlyUsageSummary[m.num] || '-' }}
+                  <span v-if="monthlyUsageSummary[m.num] > 0" class="text-slate-900 font-extrabold">
+                    {{ monthlyUsageSummary[m.num] }}
+                  </span>
+                  <span v-else class="text-slate-300 inline-flex items-center justify-center">
+                    <Minus class="w-3 h-3 text-slate-300" />
                   </span>
                 </td>
                 <td class="border border-slate-200 p-3 bg-emerald-50 font-extrabold text-emerald-900 text-base">
@@ -281,8 +307,11 @@ const totalYearlyOut = computed(() => {
               <tr v-for="t in calculatedTransactions" :key="t.id" class="hover:bg-slate-50/80 transition-colors">
                 
                 <!-- วัน เดือน ปี -->
-                <td class="px-6 py-4 text-center font-mono font-bold text-slate-700 border-r border-slate-200/60">
-                  {{ t.date }}
+                <td class="px-6 py-4 text-center font-bold text-slate-700 border-r border-slate-200/60">
+                  <div class="flex items-center justify-center gap-1.5">
+                    <Calendar class="w-3.5 h-3.5 text-slate-400" />
+                    <span>{{ formatThaiDate(t.date) }}</span>
+                  </div>
                 </td>
 
                 <!-- เลขที่เอกสารอ้างอิง -->
@@ -301,7 +330,9 @@ const totalYearlyOut = computed(() => {
                     <TrendingUp class="w-4 h-4 text-emerald-600" />
                     +{{ t.inQty }}
                   </span>
-                  <span v-else class="text-slate-300">-</span>
+                  <span v-else class="text-slate-300 inline-flex items-center justify-center">
+                    <Minus class="w-3.5 h-3.5 text-slate-300" />
+                  </span>
                 </td>
 
                 <!-- จ่ายออก -->
@@ -310,7 +341,9 @@ const totalYearlyOut = computed(() => {
                     <TrendingDown class="w-4 h-4 text-rose-500" />
                     -{{ t.outQty }}
                   </span>
-                  <span v-else class="text-slate-300">-</span>
+                  <span v-else class="text-slate-300 inline-flex items-center justify-center">
+                    <Minus class="w-3.5 h-3.5 text-slate-300" />
+                  </span>
                 </td>
 
                 <!-- ยอดคงเหลือสะสม (Balance Qty) -->

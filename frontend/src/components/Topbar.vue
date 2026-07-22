@@ -1,13 +1,48 @@
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { Bell, Search, User, ChevronDown, UserCircle, LogOut, X, AlertTriangle } from 'lucide-vue-next'
 
 const router = useRouter()
+const route = useRoute()
 
 const isMenuOpen = ref(false)
 const isLogoutModalOpen = ref(false)
 const menuRef = ref(null)
+
+// ข้อมูลผู้ใช้งานที่อัปเดตตามโปรไฟล์
+const user = ref({
+  name: 'Admin User',
+  avatar: null
+})
+
+// เช็คว่าปัจจุบันอยู่หน้าโปรไฟล์หรือไม่
+const isProfilePage = computed(() => route.path === '/profile')
+
+function loadUserData() {
+  try {
+    const stored = JSON.parse(localStorage.getItem('tcaims_user') || 'null')
+    if (stored) {
+      if (stored.name) user.value.name = stored.name
+      // ซิงค์ avatar (รองรับทั้งกรณีมีรูปภาพ หรือ null)
+      user.value.avatar = stored.avatar || null
+    }
+  } catch (e) {
+    // ignore
+  }
+}
+
+function handleProfileUpdate(e) {
+  if (e.detail) {
+    if (e.detail.name) user.value.name = e.detail.name
+    if (e.detail.avatar !== undefined) user.value.avatar = e.detail.avatar
+  }
+}
+
+// อัปเดตข้อมูลผู้ใช้ทุกครั้งที่มีการเปลี่ยน Route หน้าเว็บ
+watch(() => route.path, () => {
+  loadUserData()
+})
 
 function toggleMenu() {
   isMenuOpen.value = !isMenuOpen.value
@@ -46,10 +81,13 @@ function handleClickOutside(event) {
 }
 
 onMounted(() => {
+  loadUserData()
+  window.addEventListener('profile-updated', handleProfileUpdate)
   document.addEventListener('click', handleClickOutside)
 })
 
 onUnmounted(() => {
+  window.removeEventListener('profile-updated', handleProfileUpdate)
   document.removeEventListener('click', handleClickOutside)
 })
 </script>
@@ -89,11 +127,13 @@ onUnmounted(() => {
           @click="toggleMenu"
           class="flex items-center space-x-2 p-1.5 rounded-lg hover:bg-slate-50 transition-colors"
         >
-          <div class="w-8 h-8 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold">
-            <User class="w-4 h-4" />
+          <!-- รูปโปรไฟล์มุมขวาบน (เชื่อม dynamic กับ user.avatar) -->
+          <div class="w-8 h-8 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold overflow-hidden border border-emerald-200 shrink-0">
+            <img v-if="user.avatar" :src="user.avatar" alt="รูปโปรไฟล์" class="w-full h-full object-cover" />
+            <User v-else class="w-4 h-4" />
           </div>
           <div class="text-left hidden sm:block">
-            <div class="text-sm font-medium text-slate-700 leading-none">Admin User</div>
+            <div class="text-sm font-medium text-slate-700 leading-none">{{ user.name }}</div>
             <div class="text-xs text-slate-500 mt-1">ผู้ดูแลระบบ</div>
           </div>
           <ChevronDown
@@ -116,7 +156,7 @@ onUnmounted(() => {
             class="absolute right-0 mt-2 w-56 bg-white rounded-xl border border-slate-200 shadow-lg py-1.5 z-20"
           >
             <div class="px-3.5 py-2.5 border-b border-slate-100">
-              <div class="text-sm font-medium text-slate-800">Admin User</div>
+              <div class="text-sm font-medium text-slate-800 truncate">{{ user.name }}</div>
               <div class="text-xs text-slate-500 mt-0.5">ผู้ดูแลระบบ</div>
             </div>
 
@@ -129,10 +169,12 @@ onUnmounted(() => {
               <span>ข้อมูลส่วนตัว</span>
             </button>
 
+            <!-- แสดงปุ่มออกจากระบบเฉพาะเมื่อ "ไม่ใช่" หน้าข้อมูลส่วนตัว (v-if="!isProfilePage") -->
             <button
+              v-if="!isProfilePage"
               type="button"
               @click="openLogoutConfirm"
-              class="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm text-red-600 hover:bg-red-50 transition-colors"
+              class="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm text-red-600 hover:bg-red-50 transition-colors border-t border-slate-100 mt-1"
             >
               <LogOut class="w-4 h-4" />
               <span>ออกจากระบบ</span>

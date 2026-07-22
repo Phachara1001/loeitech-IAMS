@@ -67,7 +67,8 @@ const isActive = (path) => {
       TCAIMS
     </div>
 
-    <div class="py-4 flex-1 overflow-y-auto space-y-6">
+    <!-- เพิ่มคลาสสำหรับซ่อน Scrollbar แท็บเลื่อนข้างซ้าย -->
+    <div class="py-4 flex-1 overflow-y-auto space-y-6 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
       <div v-for="(group, idx) in menuGroups" :key="idx" class="px-2">
         <div class="px-4 mb-2 text-xs font-semibold text-emerald-300/80 uppercase tracking-wider">
           {{ group.title }}

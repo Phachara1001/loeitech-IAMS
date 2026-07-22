@@ -15,11 +15,31 @@ import {
   Wrench,
   Calendar,
   FileText,
-  X
+  X,
+  Banknote,
+  ArrowRightLeft,
+  Sparkles,
+  Check
 } from 'lucide-vue-next'
 
 // --- View State ---
 const currentView = ref('LIST')
+
+// --- Helper: Format DATETIME เป็นภาษาไทย ---
+const formatThaiDateTime = (dateString) => {
+  if (!dateString) return ''
+  const date = new Date(dateString)
+  if (isNaN(date.getTime())) return dateString
+
+  return date.toLocaleDateString('th-TH', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  })
+}
 
 // --- Mock User Context ---
 const currentUser = ref({
@@ -220,12 +240,16 @@ const newLog = ref({
 
 const handleAddLog = () => {
   if (!newLog.value.title) return
+  
+  const now = new Date()
+  const formattedNow = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
+
   timelineLogs.value.push({
     id: Date.now(),
     assetId: selectedAssetId.value,
     type: newLog.value.type,
     title: newLog.value.title,
-    date: new Date().toISOString().replace('T', ' ').substring(0, 16),
+    date: formattedNow,
     operator: currentUser.value.name,
     details: newLog.value.details,
     location: newLog.value.location || currentAsset.value?.currentLocation,
@@ -249,43 +273,52 @@ const handleAddLog = () => {
   <div class="relative w-full min-h-screen p-4 md:p-8 bg-slate-100 text-slate-800 space-y-6">
 
     <!-- Global Top Header Bar -->
-    <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 bg-white p-6 rounded-2xl border border-slate-200/80 shadow-sm">
-      <div class="flex items-center gap-4">
-        <div class="p-3.5 bg-emerald-50 text-emerald-800 rounded-xl border border-emerald-100">
-          <History class="w-8 h-8" />
-        </div>
-        <div>
-          <h1 class="text-2xl md:text-3xl font-extrabold text-slate-900">ระบบบริหารและติดตามครุภัณฑ์</h1>
-          <p class="text-base text-slate-500 font-medium mt-0.5">จัดการทะเบียนครุภัณฑ์ และติดตามไทม์ไลน์ประวัติการใช้งานอย่างแม่นยำ</p>
-        </div>
+    <div class="relative overflow-hidden rounded-2xl bg-[#072415] text-white shadow-xl">
+      <!-- Background Mesh Gradient -->
+      <div class="absolute inset-0 pointer-events-none overflow-hidden">
+        <div class="absolute -top-20 -right-20 w-[500px] h-[500px] rounded-full bg-[#1B5E3C] opacity-75 blur-[90px]"></div>
+        <div class="absolute top-1/2 -left-20 w-[400px] h-[400px] rounded-full bg-[#288252] opacity-40 blur-[80px]"></div>
+        <div class="absolute -bottom-20 right-1/3 w-[350px] h-[350px] rounded-full bg-[#04140B] opacity-90 blur-[70px]"></div>
       </div>
 
-      <div class="flex items-center gap-2 bg-slate-50 p-2 rounded-xl border border-slate-200">
-        <span class="text-sm text-slate-500 font-bold px-2">สิทธิ์สลับหน้าทดสอบ:</span>
-        <button 
-          @click="currentUser.role = 'Admin'" 
-          :class="['px-3.5 py-1.5 text-sm rounded-lg font-bold transition-all cursor-pointer', currentUser.role === 'Admin' ? 'bg-emerald-800 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-200']"
-        >
-          Admin
-        </button>
-        <button 
-          @click="currentUser.role = 'Staff'" 
-          :class="['px-3.5 py-1.5 text-sm rounded-lg font-bold transition-all cursor-pointer', currentUser.role === 'Staff' ? 'bg-emerald-800 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-200']"
-        >
-          Staff
-        </button>
-        <button 
-          @click="currentUser.role = 'User'" 
-          :class="['px-3.5 py-1.5 text-sm rounded-lg font-bold transition-all cursor-pointer', currentUser.role === 'User' ? 'bg-emerald-800 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-200']"
-        >
-          User
-        </button>
+      <div class="relative z-10 p-6 sm:p-8 flex flex-col lg:flex-row items-center justify-between gap-6">
+        <div class="flex items-center gap-4">
+          <div class="p-3.5 bg-emerald-400/20 border border-emerald-400/30 rounded-2xl text-emerald-300 backdrop-blur-md">
+            <History class="w-8 h-8" />
+          </div>
+          <div>
+            <h1 class="text-2xl sm:text-3xl font-bold text-white">ระบบบริหารและติดตามครุภัณฑ์</h1>
+            <p class="text-emerald-100/80 text-sm sm:text-base mt-1">จัดการทะเบียนครุภัณฑ์ และติดตามไทม์ไลน์ประวัติการใช้งานอย่างแม่นยำ</p>
+          </div>
+        </div>
+
+        <!-- Dev Role Switcher Button -->
+        <div class="flex items-center gap-2 bg-black/20 border border-white/10 p-2 rounded-xl backdrop-blur-md shrink-0">
+          <span class="text-xs sm:text-sm text-emerald-100/80 font-medium px-2">สิทธิ์สลับหน้าทดสอบ:</span>
+          <button 
+            @click="currentUser.role = 'Admin'" 
+            :class="['px-3 py-1.5 text-xs rounded-lg font-semibold transition backdrop-blur-md cursor-pointer', currentUser.role === 'Admin' ? 'bg-emerald-500 text-white shadow-sm' : 'text-emerald-100/70 hover:bg-white/10']"
+          >
+            Admin
+          </button>
+          <button 
+            @click="currentUser.role = 'Staff'" 
+            :class="['px-3 py-1.5 text-xs rounded-lg font-semibold transition backdrop-blur-md cursor-pointer', currentUser.role === 'Staff' ? 'bg-emerald-500 text-white shadow-sm' : 'text-emerald-100/70 hover:bg-white/10']"
+          >
+            Staff
+          </button>
+          <button 
+            @click="currentUser.role = 'User'" 
+            :class="['px-3 py-1.5 text-xs rounded-lg font-semibold transition backdrop-blur-md cursor-pointer', currentUser.role === 'User' ? 'bg-emerald-500 text-white shadow-sm' : 'text-emerald-100/70 hover:bg-white/10']"
+          >
+            User
+          </button>
+        </div>
       </div>
     </div>
 
     <!-- VIEW 1: ASSET LIST VIEW -->
     <div v-if="currentView === 'LIST'" class="space-y-6">
-
 
       <!-- Main Data Table Container -->
       <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
@@ -404,7 +437,7 @@ const handleAddLog = () => {
           class="inline-flex items-center gap-2 px-5 py-3 bg-white hover:bg-slate-50 text-slate-800 font-extrabold rounded-2xl border border-slate-200 shadow-sm transition-all cursor-pointer"
         >
           <ArrowLeft class="w-5 h-5 text-emerald-800 stroke-[3]" />
-          <span>← กลับหน้าตารางรายการครุภัณฑ์</span>
+          <span>กลับหน้าตารางรายการครุภัณฑ์</span>
         </button>
 
         <div v-if="currentUser.role === 'Admin' || currentUser.role === 'Staff'">
@@ -413,7 +446,7 @@ const handleAddLog = () => {
             class="inline-flex items-center gap-2 px-6 py-3 bg-emerald-800 hover:bg-emerald-700 text-white font-extrabold rounded-2xl shadow-md transition-all cursor-pointer"
           >
             <Plus class="w-5 h-5 stroke-[3]" />
-            <span>+ บันทึกกิจกรรม / ส่งซ่อม</span>
+            <span>บันทึกกิจกรรม / ส่งซ่อม</span>
           </button>
         </div>
       </div>
@@ -487,8 +520,10 @@ const handleAddLog = () => {
                   </span>
                   <h4 class="font-extrabold text-slate-900 text-lg md:text-xl">{{ item.title }}</h4>
                 </div>
-                <span class="text-base font-bold text-slate-500 font-mono">
-                  📅 {{ item.date }}
+                <!-- Thai Formatted DATETIME -->
+                <span class="text-base font-bold text-slate-500 flex items-center gap-1.5">
+                  <Calendar class="w-4 h-4 text-slate-400" />
+                  {{ formatThaiDateTime(item.date) }}
                 </span>
               </div>
 
@@ -497,12 +532,21 @@ const handleAddLog = () => {
               </p>
 
               <div class="grid grid-cols-1 md:grid-cols-3 gap-3 text-base pt-2 bg-white p-4 rounded-xl border border-slate-200/60">
-                <div>📍 สถานที่: <strong class="text-slate-900">{{ item.location }}</strong></div>
-                <div>👤 ผู้ดูแล: <strong class="text-slate-900">{{ item.responsiblePerson }}</strong></div>
-                <div>💰 ค่าใช้จ่าย: 
-                  <strong :class="item.cost > 0 ? 'text-rose-600 font-extrabold' : 'text-slate-800'">
-                    {{ item.cost > 0 ? '฿' + item.cost.toLocaleString() + ' บาท' : 'ไม่มี' }}
-                  </strong>
+                <div class="flex items-center gap-1.5">
+                  <MapPin class="w-4 h-4 text-slate-400 shrink-0" />
+                  <span>สถานที่: <strong class="text-slate-900">{{ item.location }}</strong></span>
+                </div>
+                <div class="flex items-center gap-1.5">
+                  <UserCheck class="w-4 h-4 text-slate-400 shrink-0" />
+                  <span>ผู้ดูแล: <strong class="text-slate-900">{{ item.responsiblePerson }}</strong></span>
+                </div>
+                <div class="flex items-center gap-1.5">
+                  <Banknote class="w-4 h-4 text-slate-400 shrink-0" />
+                  <span>ค่าใช้จ่าย: 
+                    <strong :class="item.cost > 0 ? 'text-rose-600 font-extrabold' : 'text-slate-800'">
+                      {{ item.cost > 0 ? '฿' + item.cost.toLocaleString() + ' บาท' : 'ไม่มี' }}
+                    </strong>
+                  </span>
                 </div>
               </div>
 
@@ -532,7 +576,7 @@ const handleAddLog = () => {
             <Plus class="w-8 h-8 text-emerald-800 stroke-[3]" />
             บันทึกประวัติกิจกรรมครุภัณฑ์
           </h3>
-          <button @click="isLogModalOpen = false" class="text-slate-400 hover:text-slate-700 p-2 rounded-xl transition-colors">
+          <button @click="isLogModalOpen = false" class="text-slate-400 hover:text-slate-700 p-2 rounded-xl transition-colors cursor-pointer">
             <X class="w-8 h-8" />
           </button>
         </div>
@@ -545,9 +589,9 @@ const handleAddLog = () => {
               v-model="newLog.type" 
               class="w-full border-2 border-slate-300 rounded-xl p-4 text-slate-900 font-bold focus:border-emerald-600 bg-white cursor-pointer"
             >
-              <option value="MOVE">📦 ย้ายสถานที่ / เปลี่ยนผู้ดูแล</option>
-              <option value="REPAIR">🔧 ส่งซ่อมแซม (กรณีเครื่องชำรุด)</option>
-              <option value="MAINTENANCE">🧹 ทำความสะอาด / บำรุงรักษาประจำปี</option>
+              <option value="MOVE">ย้ายสถานที่ / เปลี่ยนผู้ดูแล</option>
+              <option value="REPAIR">ส่งซ่อมแซม (กรณีเครื่องชำรุด)</option>
+              <option value="MAINTENANCE">ทำความสะอาด / บำรุงรักษาประจำปี</option>
             </select>
           </div>
 
@@ -615,9 +659,10 @@ const handleAddLog = () => {
             </button>
             <button 
               type="submit" 
-              class="px-8 py-4 bg-emerald-800 hover:bg-emerald-700 text-white font-extrabold rounded-xl text-lg shadow-md cursor-pointer transition-colors"
+              class="px-8 py-4 bg-emerald-800 hover:bg-emerald-700 text-white font-extrabold rounded-xl text-lg shadow-md cursor-pointer transition-colors inline-flex items-center justify-center gap-2"
             >
-              ✓ บันทึกข้อมูล
+              <Check class="w-5 h-5 stroke-[3]" />
+              <span>บันทึกข้อมูล</span>
             </button>
           </div>
 

@@ -84,4 +84,23 @@ const router = createRouter({
   routes
 })
 
+// ตรวจสอบสถานะการล็อกอิน (mock ด้วย localStorage ไปก่อนจนกว่าจะต่อ API จริง)
+function isAuthenticated() {
+  return !!localStorage.getItem('tcaims_auth_token')
+}
+
+router.beforeEach((to, from, next) => {
+  const loggedIn = isAuthenticated()
+
+  if (to.name !== 'Login' && !loggedIn) {
+    // ยังไม่ล็อกอิน แต่พยายามเข้าหน้าอื่น -> เด้งไปหน้า login
+    next({ name: 'Login', query: { redirect: to.fullPath } })
+  } else if (to.name === 'Login' && loggedIn) {
+    // ล็อกอินอยู่แล้ว แต่พยายามเข้าหน้า login -> เด้งเข้า Dashboard
+    next({ name: 'Dashboard' })
+  } else {
+    next()
+  }
+})
+
 export default router

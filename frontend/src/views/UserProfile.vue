@@ -263,7 +263,7 @@ function handlePrintPdf() {
 
 <template>
   <div class="min-h-screen bg-[#F4F7F5] font-sarabun p-4 sm:p-6 lg:p-8">
-    <div class="max-w-7xl mx-auto space-y-6">
+    <div class="w-full space-y-6">
 
       <!-- ================= 1. HEADER PROFILE ================= -->
       <div class="relative overflow-hidden rounded-2xl bg-[#072415] text-white shadow-xl">

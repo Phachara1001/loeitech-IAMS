@@ -74,6 +74,26 @@ const routes = [
         path: 'report-export',
         name: 'ReportExport',
         component: () => import('../views/ReportExport.vue')
+      },
+      {
+        path: 'asset-disposal',
+        name: 'AssetDisposal',
+        component: () => import('../views/AssetDisposal.vue')
+      },
+      {
+        path: 'inventory-check',
+        name: 'InventoryCheck',
+        component: () => import('../views/InventoryCheck.vue')
+      },
+      {
+        path: 'maintenance-repair',
+        name: 'MaintenanceRepair',
+        component: () => import('../views/MaintenanceRepair.vue')
+      },
+      {
+        path: 'borrow-return',
+        name: 'BorrowReturn',
+        component: () => import('../views/BorrowReturn.vue')
       }
     ]
   }

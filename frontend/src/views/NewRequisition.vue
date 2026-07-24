@@ -186,7 +186,7 @@ function startNewRequest() {
 
 <template>
   <div class="min-h-screen bg-[#f8fafc] font-sarabun p-4 sm:p-6 lg:p-8">
-    <div class="max-w-7xl mx-auto space-y-6">
+    <div class="w-full space-y-6">
 
       <!-- ================= HEADER ================= -->
       <div class="relative overflow-hidden rounded-2xl bg-gradient-to-br from-[#052e21] via-[#0b3d2c] to-[#0f5138] px-6 py-7 sm:px-8 sm:py-8 shadow-lg shadow-emerald-950/20">

@@ -1,5 +1,7 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
+import axios from 'axios'
 import {
   Search,
   Filter,
@@ -10,31 +12,44 @@ import {
   Trash2,
   Image as ImageIcon,
   UploadCloud,
-  X
+  X,
+  AlertTriangle
 } from 'lucide-vue-next'
 import BaseModal from '../components/BaseModal.vue'
+import { useToast } from '../composables/useToast'
 
-// Mock Data
-const assets = ref([
-  { id: 1, seq: '561-001', name: 'รถยนต์โดยสารตู้ 15 ที่นั่ง', code: '2310-004-0002', serial: 'กข-9146', status: 'Active', department: 'ช่างยนต์', image: null },
-  { id: 2, seq: '561-002', name: 'เครื่องกลึงยันศูนย์', code: '3320-015-0012', serial: 'LATHE-2023-01', status: 'Repaired', department: 'ช่างกลโรงงาน', image: 'https://placehold.co/400x300/e2e8f0/475569?text=LATHE' },
-  { id: 3, seq: '561-003', name: 'คอมพิวเตอร์ประมวลผลสูง', code: '7420-001-0045', serial: 'DELL-P-9901', status: 'Active', department: 'เทคโนโลยีสารสนเทศ', image: null },
-  { id: 4, seq: '561-004', name: 'เครื่องปรับอากาศ 24,000 BTU', code: '4120-010-0089', serial: 'AC-SAMS-002', status: 'Active', department: 'ห้องสมุด', image: null },
-  { id: 5, seq: '561-005', name: 'โปรเจคเตอร์แบบโต้ตอบ', code: '7410-005-0021', serial: 'EPSON-INT-04', status: 'Broken', department: 'ช่างไฟฟ้า', image: null },
-  { id: 6, seq: '561-006', name: 'เครื่องพิมพ์ 3 มิติ', code: '7420-025-0003', serial: '3DP-CREALITY-01', status: 'Active', department: 'ช่างกลโรงงาน', image: null },
-  { id: 7, seq: '561-007', name: 'โต๊ะปฏิบัติการอิเล็กทรอนิกส์', code: '7110-010-0044', serial: 'TB-ELEC-11', status: 'Active', department: 'ช่างอิเล็กทรอนิกส์', image: null },
-  { id: 8, seq: '561-008', name: 'เครื่องเชื่อมไฟฟ้า (TIG)', code: '3439-005-0018', serial: 'WELD-TIG-005', status: 'Repaired', department: 'ช่างเชื่อมโลหะ', image: null },
-])
+const router = useRouter()
+const toast = useToast()
+
+const assets = ref([])
+const isLoading = ref(true)
+
+const fetchAssets = async () => {
+  isLoading.value = true
+  try {
+    const response = await axios.get('http://localhost:3000/api/assets')
+    assets.value = response.data.data || []
+  } catch (error) {
+    console.error('Error fetching assets:', error)
+    alert('ไม่สามารถดึงข้อมูลครุภัณฑ์ได้')
+  } finally {
+    isLoading.value = false
+  }
+}
+
+onMounted(() => {
+  fetchAssets()
+})
 
 const searchQuery = ref('')
 const statusFilter = ref('')
 
 const filteredAssets = computed(() => {
   return assets.value.filter(asset => {
-    const matchesSearch = asset.name.includes(searchQuery.value) ||
-      asset.seq.includes(searchQuery.value) ||
-      asset.code.includes(searchQuery.value) ||
-      asset.serial.includes(searchQuery.value)
+    const matchesSearch = (asset.name || '').includes(searchQuery.value) ||
+      (asset.seq || '').includes(searchQuery.value) ||
+      (asset.referenceCode || '').includes(searchQuery.value) ||
+      (asset.serialNumber || '').includes(searchQuery.value)
 
     const matchesStatus = statusFilter.value === '' || asset.status === statusFilter.value
 
@@ -62,6 +77,16 @@ const getStatusText = (status) => {
   }
 }
 
+const formatThaiDate = (dateString) => {
+  if (!dateString) return '-';
+  const date = new Date(dateString);
+  return date.toLocaleDateString('th-TH', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  });
+}
+
 // Modals State
 const showImageModal = ref(false)
 const showStatusModal = ref(false)
@@ -69,7 +94,10 @@ const showEditModal = ref(false)
 const showDeleteModal = ref(false)
 const selectedAsset = ref(null)
 const tempStatus = ref('')
-const tempAsset = ref({})
+const tempAsset = ref({
+  seq: '', name: '', category: '', referenceCode: '', serialNumber: '', department: '',
+  brand: '', acquiredDate: '', acquisitionMethod: '', budgetType: '', unitPrice: 0, specifications: '', remark: ''
+})
 
 const openImageModal = (asset) => {
   selectedAsset.value = asset
@@ -82,25 +110,101 @@ const openStatusModal = (asset) => {
   showStatusModal.value = true
 }
 
-const saveStatus = () => {
+const saveStatus = async () => {
   if (selectedAsset.value) {
-    selectedAsset.value.status = tempStatus.value
+    try {
+      // Prepare full update data to pass backend validation
+      const { id, createdAt, updatedAt, ...updateData } = selectedAsset.value
+      updateData.status = tempStatus.value
+
+      await axios.put(`http://localhost:3000/api/assets/${selectedAsset.value.id}`, updateData)
+      selectedAsset.value.status = tempStatus.value
+      showStatusModal.value = false
+      toast.success('เปลี่ยนสถานะครุภัณฑ์สำเร็จ')
+    } catch (error) {
+      console.error('Error updating status:', error)
+      toast.error('เกิดข้อผิดพลาดในการเปลี่ยนสถานะ')
+    }
   }
-  showStatusModal.value = false
+}
+
+// Image Upload State
+const fileInput = ref(null)
+const isUploadingImage = ref(false)
+
+const triggerFileUpload = () => {
+  if (fileInput.value) {
+    fileInput.value.click()
+  }
+}
+
+const handleImageUpload = async (event) => {
+  const file = event.target.files[0]
+  if (!file || !selectedAsset.value) return
+
+  isUploadingImage.value = true
+  try {
+    const uploadData = new FormData()
+    uploadData.append('image', file)
+
+    // Upload to MinIO
+    const uploadResponse = await axios.post('http://localhost:3000/api/assets/upload', uploadData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    })
+    
+    const imageUrl = uploadResponse.data.data.imageUrl
+
+    // Prepare full update data to pass backend validation
+    const { id, createdAt, updatedAt, ...updateData } = selectedAsset.value
+    updateData.image = imageUrl
+
+    // Update the asset in database
+    await axios.put(`http://localhost:3000/api/assets/${selectedAsset.value.id}`, updateData)
+    
+    // Update local state
+    selectedAsset.value.image = imageUrl
+    
+    // Refresh main list to show new image thumbnail
+    await fetchAssets()
+    toast.success('เปลี่ยนรูปภาพสำเร็จ')
+  } catch (error) {
+    console.error('Error uploading image:', error)
+    toast.error('เกิดข้อผิดพลาดในการอัปโหลดรูปภาพ')
+  } finally {
+    isUploadingImage.value = false
+    // Reset file input
+    if (fileInput.value) {
+      fileInput.value.value = ''
+    }
+  }
 }
 
 const openEditModal = (asset) => {
   selectedAsset.value = asset
-  tempAsset.value = { ...asset }
+
+  // Format date for input type="date"
+  let formattedDate = ''
+  if (asset.acquiredDate) {
+    formattedDate = new Date(asset.acquiredDate).toISOString().split('T')[0]
+  }
+
+  tempAsset.value = { ...asset, acquiredDate: formattedDate }
   showEditModal.value = true
 }
 
-const saveEdit = () => {
-  const index = assets.value.findIndex(a => a.id === selectedAsset.value.id)
-  if (index !== -1) {
-    assets.value[index] = { ...tempAsset.value }
+const saveEdit = async () => {
+  try {
+    const { id, createdAt, updatedAt, ...updateData } = tempAsset.value
+    await axios.put(`http://localhost:3000/api/assets/${selectedAsset.value.id}`, updateData)
+
+    // Refresh list
+    await fetchAssets()
+    showEditModal.value = false
+    toast.success('แก้ไขข้อมูลครุภัณฑ์สำเร็จ')
+  } catch (error) {
+    console.error('Error updating asset:', error)
+    toast.error('เกิดข้อผิดพลาดในการแก้ไขข้อมูล')
   }
-  showEditModal.value = false
 }
 
 const openDeleteModal = (asset) => {
@@ -108,21 +212,32 @@ const openDeleteModal = (asset) => {
   showDeleteModal.value = true
 }
 
-const confirmDelete = () => {
-  assets.value = assets.value.filter(a => a.id !== selectedAsset.value.id)
-  showDeleteModal.value = false
+const confirmDelete = async () => {
+  try {
+    await axios.delete(`http://localhost:3000/api/assets/${selectedAsset.value.id}`)
+    assets.value = assets.value.filter(a => a.id !== selectedAsset.value.id)
+    showDeleteModal.value = false
+    toast.success('ลบข้อมูลครุภัณฑ์สำเร็จ')
+  } catch (error) {
+    console.error('Error deleting asset:', error)
+    toast.error('เกิดข้อผิดพลาดในการลบข้อมูล')
+  }
 }
 </script>
 
 <template>
   <div class="space-y-6 relative">
-    <div class="relative overflow-hidden rounded-2xl bg-gradient-to-br from-[#052e21] via-[#0b3d2c] to-[#0f5138] px-6 py-7 sm:px-8 sm:py-8 shadow-lg shadow-emerald-950/20">
-      <div class="pointer-events-none absolute -top-16 -right-10 w-56 h-56 rounded-full bg-emerald-400/20 blur-3xl"></div>
-      <div class="pointer-events-none absolute -bottom-20 left-1/3 w-72 h-72 rounded-full bg-emerald-300/10 blur-3xl"></div>
+    <div
+      class="relative overflow-hidden rounded-2xl bg-gradient-to-br from-[#052e21] via-[#0b3d2c] to-[#0f5138] px-6 py-7 sm:px-8 sm:py-8 shadow-lg shadow-emerald-950/20">
+      <div class="pointer-events-none absolute -top-16 -right-10 w-56 h-56 rounded-full bg-emerald-400/20 blur-3xl">
+      </div>
+      <div class="pointer-events-none absolute -bottom-20 left-1/3 w-72 h-72 rounded-full bg-emerald-300/10 blur-3xl">
+      </div>
 
       <div class="relative flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div class="flex items-center gap-4">
-          <div class="w-12 h-12 rounded-xl bg-white/10 backdrop-blur-sm flex items-center justify-center ring-1 ring-white/15 shrink-0">
+          <div
+            class="w-12 h-12 rounded-xl bg-white/10 backdrop-blur-sm flex items-center justify-center ring-1 ring-white/15 shrink-0">
             <ImageIcon class="w-6 h-6 text-emerald-200" />
           </div>
           <div>
@@ -130,12 +245,12 @@ const confirmDelete = () => {
             <p class="text-sm text-emerald-100/80 mt-0.5">จัดการทะเบียนครุภัณฑ์รายชิ้น รูปภาพ และปรับปรุงสถานะ</p>
           </div>
         </div>
-        <div class="flex space-x-3 shrink-0">
+        <div class="flex flex-col sm:flex-row gap-3">
           <button
             class="px-4 py-2.5 bg-white/10 backdrop-blur-sm ring-1 ring-white/20 rounded-xl text-white hover:bg-white/20 font-semibold flex items-center transition-all shadow-sm">
             <Download class="w-4 h-4 mr-2 text-emerald-200" /> ส่งออก Excel
           </button>
-          <button
+          <button @click="router.push('/new-asset')"
             class="px-4 py-2.5 bg-white text-[#065f46] rounded-xl hover:bg-emerald-50 font-bold flex items-center shadow-md hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 transition-all">
             <Plus class="w-4 h-4 mr-2" /> เพิ่มครุภัณฑ์
           </button>
@@ -172,18 +287,27 @@ const confirmDelete = () => {
         <table class="w-full text-left text-sm whitespace-nowrap">
           <thead class="sticky top-0 z-10">
             <tr class="bg-gradient-to-r from-[#065f46] to-[#047857] text-left">
-              <th class="px-6 py-3.5 text-center font-semibold text-[11px] uppercase tracking-wide text-emerald-50">รูปภาพ</th>
-              <th class="px-6 py-3.5 font-semibold text-[11px] uppercase tracking-wide text-emerald-50">เลขลำดับครุภัณฑ์</th>
-              <th class="px-6 py-3.5 font-semibold text-[11px] uppercase tracking-wide text-emerald-50">ชื่อพัสดุ / เลขพัสดุหลัก</th>
-              <th class="px-6 py-3.5 font-semibold text-[11px] uppercase tracking-wide text-emerald-50">เลขทะเบียน/Serial</th>
-              <th class="px-6 py-3.5 font-semibold text-[11px] uppercase tracking-wide text-emerald-50">แผนก/หน่วยงาน</th>
+              <th class="px-6 py-3.5 text-center font-semibold text-[11px] uppercase tracking-wide text-emerald-50">
+                รูปภาพ</th>
+              <th class="px-6 py-3.5 font-semibold text-[11px] uppercase tracking-wide text-emerald-50">เลขลำดับครุภัณฑ์
+              </th>
+              <th class="px-6 py-3.5 font-semibold text-[11px] uppercase tracking-wide text-emerald-50">ชื่อพัสดุ /
+                เลขพัสดุหลัก</th>
+              <th class="px-6 py-3.5 font-semibold text-[11px] uppercase tracking-wide text-emerald-50">
+                เลขทะเบียน/Serial</th>
+              <th class="px-6 py-3.5 font-semibold text-[11px] uppercase tracking-wide text-emerald-50">ข้อมูลจัดซื้อ
+              </th>
+              <th class="px-6 py-3.5 font-semibold text-[11px] uppercase tracking-wide text-emerald-50">แผนก/หน่วยงาน
+              </th>
               <th class="px-6 py-3.5 font-semibold text-[11px] uppercase tracking-wide text-emerald-50">สถานะ</th>
-              <th class="px-6 py-3.5 text-center font-semibold text-[11px] uppercase tracking-wide text-emerald-50">จัดการ</th>
+              <th class="px-6 py-3.5 text-center font-semibold text-[11px] uppercase tracking-wide text-emerald-50">
+                จัดการ</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-slate-200">
             <tr v-for="asset in filteredAssets" :key="asset.id" class="group hover:bg-emerald-50/60 transition-colors">
-              <td class="px-6 py-4 text-center border-l-4 border-transparent group-hover:border-[#065f46] transition-colors">
+              <td
+                class="px-6 py-4 text-center border-l-4 border-transparent group-hover:border-[#065f46] transition-colors">
                 <button @click="openImageModal(asset)"
                   class="w-12 h-12 rounded-lg border border-slate-200 flex items-center justify-center overflow-hidden bg-slate-100 hover:ring-2 hover:ring-[#065f46]/50 hover:shadow-md transition-all mx-auto group/img"
                   :title="asset.image ? 'ดูรูปภาพ' : 'เพิ่มรูปภาพ'">
@@ -196,9 +320,15 @@ const confirmDelete = () => {
               </td>
               <td class="px-6 py-4">
                 <div class="font-medium text-slate-900">{{ asset.name }}</div>
-                <div class="text-xs text-slate-500 mt-0.5">{{ asset.code }}</div>
+                <div class="text-xs text-slate-500 mt-0.5" v-if="asset.brand">ยี่ห้อ: {{ asset.brand }}</div>
+                <div class="text-xs text-slate-500 mt-0.5">{{ asset.referenceCode }}</div>
               </td>
-              <td class="px-6 py-4 text-slate-500">{{ asset.serial }}</td>
+              <td class="px-6 py-4 text-slate-500">{{ asset.serialNumber }}</td>
+              <td class="px-6 py-4">
+                <div class="font-medium text-slate-800">฿{{ asset.unitPrice?.toLocaleString() || '-' }}</div>
+                <div class="text-[11px] text-slate-500 mt-0.5">{{ formatThaiDate(asset.acquiredDate) }} ({{
+                  asset.budgetType }})</div>
+              </td>
               <td class="px-6 py-4 text-slate-600">{{ asset.department }}</td>
               <td class="px-6 py-4">
                 <button @click="openStatusModal(asset)"
@@ -220,7 +350,8 @@ const confirmDelete = () => {
                     title="ลบ">
                     <Trash2 class="w-4 h-4" />
                   </button>
-                  <button class="p-2 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 hover:shadow-sm hover:scale-110 active:scale-95 transition-all"
+                  <button
+                    class="p-2 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 hover:shadow-sm hover:scale-110 active:scale-95 transition-all"
                     title="เมนูเพิ่มเติม">
                     <MoreVertical class="w-4 h-4" />
                   </button>
@@ -228,8 +359,12 @@ const confirmDelete = () => {
               </td>
             </tr>
             <tr v-if="filteredAssets.length === 0">
-              <td colspan="7" class="px-6 py-12 text-center text-slate-500">
-                ไม่พบข้อมูลที่ค้นหา
+              <td colspan="8" class="px-6 py-12 text-center text-slate-500">
+                <div v-if="isLoading" class="flex flex-col items-center justify-center space-y-3">
+                  <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-[#065f46]"></div>
+                  <span>กำลังดึงข้อมูลครุภัณฑ์...</span>
+                </div>
+                <span v-else>ไม่พบข้อมูลที่ค้นหา หรือยังไม่มีข้อมูลในระบบ</span>
               </td>
             </tr>
           </tbody>
@@ -245,9 +380,12 @@ const confirmDelete = () => {
         <div class="flex items-center space-x-1">
           <button class="px-3 py-1.5 border border-slate-200 rounded-lg text-slate-400 bg-slate-50 cursor-not-allowed"
             disabled>ก่อนหน้า</button>
-          <button class="px-3 py-1.5 rounded-lg font-bold text-white bg-gradient-to-r from-[#065f46] to-[#047857] shadow-sm">1</button>
-          <button class="px-3 py-1.5 border border-slate-200 hover:border-emerald-200 hover:bg-emerald-50 rounded-lg text-slate-700 transition-colors">2</button>
-          <button class="px-3 py-1.5 border border-slate-200 hover:border-emerald-200 hover:bg-emerald-50 rounded-lg text-slate-700 transition-colors">ถัดไป</button>
+          <button
+            class="px-3 py-1.5 rounded-lg font-bold text-white bg-gradient-to-r from-[#065f46] to-[#047857] shadow-sm">1</button>
+          <button
+            class="px-3 py-1.5 border border-slate-200 hover:border-emerald-200 hover:bg-emerald-50 rounded-lg text-slate-700 transition-colors">2</button>
+          <button
+            class="px-3 py-1.5 border border-slate-200 hover:border-emerald-200 hover:bg-emerald-50 rounded-lg text-slate-700 transition-colors">ถัดไป</button>
         </div>
       </div>
     </div>
@@ -260,25 +398,33 @@ const confirmDelete = () => {
       </div>
 
       <div v-if="selectedAsset?.image"
-        class="rounded-lg overflow-hidden border border-slate-200 bg-slate-100 flex items-center justify-center">
+        class="rounded-lg overflow-hidden border border-slate-200 bg-slate-100 flex items-center justify-center relative group">
         <img :src="selectedAsset.image" class="max-w-full max-h-64 object-contain" />
+        <div v-if="isUploadingImage" class="absolute inset-0 bg-white/50 backdrop-blur-sm flex items-center justify-center">
+          <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-[#065f46]"></div>
+        </div>
       </div>
 
-      <div v-else
-        class="border-2 border-dashed border-slate-300 rounded-lg p-10 flex flex-col items-center justify-center bg-slate-50 hover:bg-emerald-50 hover:border-emerald-400 transition-colors cursor-pointer group">
+      <div v-else @click="triggerFileUpload"
+        class="border-2 border-dashed border-slate-300 rounded-lg p-10 flex flex-col items-center justify-center bg-slate-50 hover:bg-emerald-50 hover:border-emerald-400 transition-colors cursor-pointer group relative">
+        <div v-if="isUploadingImage" class="absolute inset-0 bg-white/50 backdrop-blur-sm flex items-center justify-center z-10 rounded-lg">
+          <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-[#065f46]"></div>
+        </div>
         <UploadCloud class="w-10 h-10 text-slate-400 group-hover:text-[#065f46] mb-3" />
         <p class="text-sm font-medium text-slate-700">คลิกเพื่ออัปโหลดไฟล์รูปภาพ</p>
         <p class="text-xs text-slate-500 mt-1">บันทึกผ่าน MinIO Storage (JPG, PNG)</p>
       </div>
+      
+      <input type="file" ref="fileInput" class="hidden" accept="image/*" @change="handleImageUpload" />
 
       <template #footer>
         <button @click="showImageModal = false"
           class="px-4 py-2 border border-slate-300 rounded-lg text-slate-700 hover:bg-slate-100 font-medium text-sm">
           ปิด
         </button>
-        <button v-if="selectedAsset?.image"
-          class="px-4 py-2 bg-gradient-to-r from-[#065f46] to-[#047857] text-white rounded-lg font-semibold text-sm flex items-center shadow-md hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 transition-all">
-          <UploadCloud class="w-4 h-4 mr-2" /> เปลี่ยนรูปภาพ
+        <button v-if="selectedAsset?.image" @click="triggerFileUpload" :disabled="isUploadingImage"
+          class="px-4 py-2 bg-gradient-to-r from-[#065f46] to-[#047857] text-white rounded-lg font-semibold text-sm flex items-center shadow-md hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+          <UploadCloud class="w-4 h-4 mr-2" /> {{ isUploadingImage ? 'กำลังอัปโหลด...' : 'เปลี่ยนรูปภาพ' }}
         </button>
       </template>
     </BaseModal>
@@ -316,34 +462,108 @@ const confirmDelete = () => {
     </BaseModal>
 
     <!-- Edit Modal -->
-    <BaseModal v-model="showEditModal" title="แก้ไขข้อมูลครุภัณฑ์" maxWidth="max-w-xl">
-      <div class="space-y-4">
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+    <BaseModal v-model="showEditModal" title="แก้ไขข้อมูลครุภัณฑ์" maxWidth="max-w-3xl">
+      <div class="space-y-4 max-h-[70vh] overflow-y-auto px-2 no-scrollbar">
+        <!-- ข้อมูลทั่วไป -->
+        <h3 class="font-bold text-slate-800 text-sm border-b pb-1">1. ข้อมูลทั่วไป</h3>
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           <div>
             <label class="block text-sm font-medium text-slate-700 mb-1">เลขลำดับครุภัณฑ์</label>
             <input v-model="tempAsset.seq" type="text"
               class="w-full border border-slate-300 rounded-lg py-2 px-3 text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#065f46]/20 focus:border-[#065f46]">
           </div>
+          <div class="lg:col-span-2">
+            <label class="block text-sm font-medium text-slate-700 mb-1">ชื่อพัสดุ</label>
+            <input v-model="tempAsset.name" type="text"
+              class="w-full border border-slate-300 rounded-lg py-2 px-3 text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#065f46]/20 focus:border-[#065f46]">
+          </div>
           <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1">เลขทะเบียน/Serial</label>
-            <input v-model="tempAsset.serial" type="text"
+            <label class="block text-sm font-medium text-slate-700 mb-1">หมวดหมู่/ประเภท</label>
+            <select v-model="tempAsset.category"
+              class="w-full border border-slate-300 rounded-lg py-2 px-3 text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#065f46]/20 focus:border-[#065f46]">
+              <option value="ครุภัณฑ์สำนักงาน">ครุภัณฑ์สำนักงาน</option>
+              <option value="ครุภัณฑ์การศึกษา">ครุภัณฑ์การศึกษา</option>
+              <option value="ครุภัณฑ์ยานพาหนะและขนส่ง">ครุภัณฑ์ยานพาหนะและขนส่ง</option>
+              <option value="ครุภัณฑ์คอมพิวเตอร์">ครุภัณฑ์คอมพิวเตอร์</option>
+              <option value="ครุภัณฑ์งานบ้านงานครัว">ครุภัณฑ์งานบ้านงานครัว</option>
+              <option value="ครุภัณฑ์ก่อสร้าง">ครุภัณฑ์ก่อสร้าง</option>
+            </select>
+          </div>
+          <div class="lg:col-span-2">
+            <label class="block text-sm font-medium text-slate-700 mb-1">แผนก/หน่วยงานครอบครอง</label>
+            <input v-model="tempAsset.department" type="text"
               class="w-full border border-slate-300 rounded-lg py-2 px-3 text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#065f46]/20 focus:border-[#065f46]">
           </div>
         </div>
-        <div>
-          <label class="block text-sm font-medium text-slate-700 mb-1">ชื่อพัสดุ</label>
-          <input v-model="tempAsset.name" type="text"
-            class="w-full border border-slate-300 rounded-lg py-2 px-3 text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#065f46]/20 focus:border-[#065f46]">
+
+        <!-- ข้อมูลจำเพาะ -->
+        <h3 class="font-bold text-slate-800 text-sm border-b pb-1 mt-4">2. ข้อมูลจำเพาะ</h3>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">ยี่ห้อ/รุ่น</label>
+            <input v-model="tempAsset.brand" type="text"
+              class="w-full border border-slate-300 rounded-lg py-2 px-3 text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#065f46]/20 focus:border-[#065f46]">
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">เลขทะเบียน/Serial</label>
+            <input v-model="tempAsset.serialNumber" type="text"
+              class="w-full border border-slate-300 rounded-lg py-2 px-3 text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#065f46]/20 focus:border-[#065f46]">
+          </div>
+          <div class="sm:col-span-2">
+            <label class="block text-sm font-medium text-slate-700 mb-1">คุณสมบัติ/สเปค</label>
+            <textarea v-model="tempAsset.specifications" rows="2"
+              class="w-full border border-slate-300 rounded-lg py-2 px-3 text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#065f46]/20 focus:border-[#065f46]"></textarea>
+          </div>
         </div>
-        <div>
-          <label class="block text-sm font-medium text-slate-700 mb-1">หมายเลขพัสดุหลัก</label>
-          <input v-model="tempAsset.code" type="text"
-            class="w-full border border-slate-300 rounded-lg py-2 px-3 text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#065f46]/20 focus:border-[#065f46]">
+
+        <!-- ข้อมูลจัดซื้อและแหล่งเงิน -->
+        <h3 class="font-bold text-slate-800 text-sm border-b pb-1 mt-4">3. ข้อมูลจัดซื้อและแหล่งเงิน</h3>
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">วันที่ได้มา</label>
+            <input v-model="tempAsset.acquiredDate" type="date"
+              class="w-full border border-slate-300 rounded-lg py-2 px-3 text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#065f46]/20 focus:border-[#065f46]">
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">วิธีการได้มา</label>
+            <select v-model="tempAsset.acquisitionMethod"
+              class="w-full border border-slate-300 rounded-lg py-2 px-3 text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#065f46]/20 focus:border-[#065f46]">
+              <option value="ตกลงราคา">ตกลงราคา</option>
+              <option value="สอบราคา">สอบราคา</option>
+              <option value="ประกวดราคา">ประกวดราคา</option>
+              <option value="ประกวดราคา e-bidding">ประกวดราคา e-bidding</option>
+              <option value="วิธีเฉพาะเจาะจง">วิธีเฉพาะเจาะจง</option>
+              <option value="รับบริจาค / รับมอบ">รับบริจาค / รับมอบ</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">แหล่งเงิน</label>
+            <select v-model="tempAsset.budgetType"
+              class="w-full border border-slate-300 rounded-lg py-2 px-3 text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#065f46]/20 focus:border-[#065f46]">
+              <option value="เงินงบประมาณ">เงินงบประมาณ</option>
+              <option value="เงินนอกงบประมาณ">เงินนอกงบประมาณ</option>
+              <option value="เงินรายได้สถานศึกษา">เงินรายได้สถานศึกษา</option>
+              <option value="เงินบริจาค">เงินบริจาค</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">ราคาต่อหน่วย (บาท)</label>
+            <input v-model="tempAsset.unitPrice" type="number"
+              class="w-full border border-slate-300 rounded-lg py-2 px-3 text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#065f46]/20 focus:border-[#065f46]">
+          </div>
+          <div class="sm:col-span-2 lg:col-span-2">
+            <label class="block text-sm font-medium text-slate-700 mb-1">หมายเลขพัสดุหลัก / รหัสอ้างอิง</label>
+            <input v-model="tempAsset.referenceCode" type="text"
+              class="w-full border border-slate-300 rounded-lg py-2 px-3 text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#065f46]/20 focus:border-[#065f46]">
+          </div>
         </div>
+
+        <!-- เพิ่มเติม -->
+        <h3 class="font-bold text-slate-800 text-sm border-b pb-1 mt-4">4. เพิ่มเติม</h3>
         <div>
-          <label class="block text-sm font-medium text-slate-700 mb-1">แผนก/หน่วยงาน</label>
-          <input v-model="tempAsset.department" type="text"
-            class="w-full border border-slate-300 rounded-lg py-2 px-3 text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#065f46]/20 focus:border-[#065f46]">
+          <label class="block text-sm font-medium text-slate-700 mb-1">หมายเหตุ</label>
+          <textarea v-model="tempAsset.remark" rows="2"
+            class="w-full border border-slate-300 rounded-lg py-2 px-3 text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#065f46]/20 focus:border-[#065f46]"></textarea>
         </div>
       </div>
 
@@ -389,10 +609,14 @@ const confirmDelete = () => {
 <style>
 /* ใช้กับกล่องตารางที่เลื่อนภายในตัวเอง (เช่นตอนข้อมูลเยอะ) ให้เลื่อนได้ปกติแต่ไม่โชว์แถบเลื่อน */
 .no-scrollbar {
-  scrollbar-width: none; /* Firefox */
-  -ms-overflow-style: none; /* IE / Edge เก่า */
+  scrollbar-width: none;
+  /* Firefox */
+  -ms-overflow-style: none;
+  /* IE / Edge เก่า */
 }
+
 .no-scrollbar::-webkit-scrollbar {
-  display: none; /* Chrome, Safari, Edge (Chromium) */
+  display: none;
+  /* Chrome, Safari, Edge (Chromium) */
 }
 </style>

@@ -18,14 +18,14 @@ const categories = ['กระดาษ', 'หมึกพิมพ์', 'เค
 
 // ข้อมูล mock (ยังไม่เชื่อม backend/database จริง)
 const items = ref([
-  { id: 'CS-0001', name: 'กระดาษ A4 80 แกรม', category: 'กระดาษ', unit: 'รีม', quantity: 42, minThreshold: 20 },
-  { id: 'CS-0002', name: 'กระดาษ A3 80 แกรม', category: 'กระดาษ', unit: 'รีม', quantity: 8, minThreshold: 10 },
-  { id: 'CS-0003', name: 'หมึกพิมพ์ Canon 728 (ดำ)', category: 'หมึกพิมพ์', unit: 'ตลับ', quantity: 15, minThreshold: 5 },
-  { id: 'CS-0004', name: 'หมึกพิมพ์ HP 682 (สี)', category: 'หมึกพิมพ์', unit: 'ตลับ', quantity: 0, minThreshold: 3 },
-  { id: 'CS-0005', name: 'ปากกาลูกลื่นสีน้ำเงิน', category: 'เครื่องเขียน', unit: 'กล่อง', quantity: 30, minThreshold: 10 },
-  { id: 'CS-0006', name: 'ลวดเสียบกระดาษเบอร์ 1', category: 'เครื่องเขียน', unit: 'กล่อง', quantity: 6, minThreshold: 8 },
-  { id: 'CS-0007', name: 'แฟ้มเอกสาร 2 ห่วง', category: 'เครื่องเขียน', unit: 'เล่ม', quantity: 24, minThreshold: 10 },
-  { id: 'CS-0008', name: 'น้ำยาล้างกระจก', category: 'อุปกรณ์ทำความสะอาด', unit: 'ขวด', quantity: 12, minThreshold: 5 }
+  { id: 'CS-0001', name: 'กระดาษ A4 80 แกรม', category: 'กระดาษ', unit: 'รีม', quantity: 42, minThreshold: 20, price: 115 },
+  { id: 'CS-0002', name: 'กระดาษ A3 80 แกรม', category: 'กระดาษ', unit: 'รีม', quantity: 8, minThreshold: 10, price: 230 },
+  { id: 'CS-0003', name: 'หมึกพิมพ์ Canon 728 (ดำ)', category: 'หมึกพิมพ์', unit: 'ตลับ', quantity: 15, minThreshold: 5, price: 1850 },
+  { id: 'CS-0004', name: 'หมึกพิมพ์ HP 682 (สี)', category: 'หมึกพิมพ์', unit: 'ตลับ', quantity: 0, minThreshold: 3, price: 550 },
+  { id: 'CS-0005', name: 'ปากกาลูกลื่นสีน้ำเงิน', category: 'เครื่องเขียน', unit: 'กล่อง', quantity: 30, minThreshold: 10, price: 120 },
+  { id: 'CS-0006', name: 'ลวดเสียบกระดาษเบอร์ 1', category: 'เครื่องเขียน', unit: 'กล่อง', quantity: 6, minThreshold: 8, price: 45 },
+  { id: 'CS-0007', name: 'แฟ้มเอกสาร 2 ห่วง', category: 'เครื่องเขียน', unit: 'เล่ม', quantity: 24, minThreshold: 10, price: 35 },
+  { id: 'CS-0008', name: 'น้ำยาล้างกระจก', category: 'อุปกรณ์ทำความสะอาด', unit: 'ขวด', quantity: 12, minThreshold: 5, price: 85 }
 ])
 
 // ค้นหา + กรอง
@@ -64,12 +64,12 @@ const isFormOpen = ref(false)
 const isEditMode = ref(false)
 const isSaving = ref(false)
 const formError = ref('')
-const form = ref({ id: '', name: '', category: categories[0], unit: '', quantity: 0, minThreshold: 0 })
+const form = ref({ id: '', name: '', category: categories[0], unit: '', quantity: 0, minThreshold: 0, price: 0 })
 
 function openAddForm() {
   isEditMode.value = false
   formError.value = ''
-  form.value = { id: '', name: '', category: categories[0], unit: '', quantity: 0, minThreshold: 0 }
+  form.value = { id: '', name: '', category: categories[0], unit: '', quantity: 0, minThreshold: 0, price: 0 }
   isFormOpen.value = true
 }
 
@@ -222,6 +222,7 @@ function deleteItem() {
               <th class="px-4 py-3.5 font-semibold text-[11px] uppercase tracking-wide text-emerald-50">รหัส</th>
               <th class="px-4 py-3.5 font-semibold text-[11px] uppercase tracking-wide text-emerald-50">ชื่อพัสดุ</th>
               <th class="px-4 py-3.5 font-semibold text-[11px] uppercase tracking-wide text-emerald-50">ประเภท</th>
+              <th class="px-4 py-3.5 font-semibold text-[11px] uppercase tracking-wide text-emerald-50 text-right">ราคาต่อหน่วย</th>
               <th class="px-4 py-3.5 font-semibold text-[11px] uppercase tracking-wide text-emerald-50 text-right">คงเหลือ</th>
               <th class="px-4 py-3.5 font-semibold text-[11px] uppercase tracking-wide text-emerald-50">หน่วยนับ</th>
               <th class="px-4 py-3.5 font-semibold text-[11px] uppercase tracking-wide text-emerald-50">สถานะ</th>
@@ -233,6 +234,7 @@ function deleteItem() {
               <td class="px-4 py-3 text-slate-500 font-mono text-xs border-l-4 border-transparent group-hover:border-[#065f46] transition-colors">{{ item.id }}</td>
               <td class="px-4 py-3 text-slate-800 font-medium">{{ item.name }}</td>
               <td class="px-4 py-3 text-slate-500">{{ item.category }}</td>
+              <td class="px-4 py-3 text-right text-slate-500 font-medium">฿{{ item.price?.toLocaleString() || '-' }}</td>
               <td class="px-4 py-3 text-right text-slate-800 font-semibold">{{ item.quantity.toLocaleString() }}</td>
               <td class="px-4 py-3 text-slate-500">{{ item.unit }}</td>
               <td class="px-4 py-3">
@@ -354,7 +356,17 @@ function deleteItem() {
               </div>
             </div>
 
-            <div class="grid grid-cols-2 gap-4">
+            <div class="grid grid-cols-3 gap-4">
+              <div>
+                <label class="block text-sm font-medium text-slate-700 mb-1.5">ราคาต่อหน่วย</label>
+                <input
+                  v-model.number="form.price"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  class="w-full px-3.5 py-2.5 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#065f46]/20 focus:border-[#065f46] transition"
+                />
+              </div>
               <div>
                 <label class="block text-sm font-medium text-slate-700 mb-1.5">จำนวนคงเหลือ</label>
                 <input

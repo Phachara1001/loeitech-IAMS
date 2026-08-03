@@ -67,10 +67,7 @@ const formError = ref('')
 const form = ref({ id: '', name: '', category: categories[0], unit: '', quantity: 0, minThreshold: 0 })
 
 function openAddForm() {
-  isEditMode.value = false
-  formError.value = ''
-  form.value = { id: '', name: '', category: categories[0], unit: '', quantity: 0, minThreshold: 0 }
-  isFormOpen.value = true
+  router.push({ name: 'InventoryReceive' })
 }
 
 function openEditForm(item) {

@@ -23,20 +23,20 @@ import {
 const categories = ['ทั้งหมด', 'เครื่องเขียน', 'วัสดุสำนักงาน', 'วัสดุคอมพิวเตอร์', 'ความสะอาด', 'ไฟฟ้า']
 
 const supplies = ref([
-  { id: 'SUP-001', name: 'กระดาษ A4 80 แกรม', category: 'วัสดุสำนักงาน', unit: 'รีม', stock: 42, icon: '📄' },
-  { id: 'SUP-002', name: 'ปากกาลูกลื่นสีน้ำเงิน', category: 'เครื่องเขียน', unit: 'ด้าม', stock: 120, icon: '🖊️' },
-  { id: 'SUP-003', name: 'แฟ้มสันกว้าง 3 นิ้ว', category: 'วัสดุสำนักงาน', unit: 'เล่ม', stock: 8, icon: '🗂️' },
-  { id: 'SUP-004', name: 'ผงหมึกเครื่องถ่ายเอกสาร', category: 'วัสดุคอมพิวเตอร์', unit: 'กล่อง', stock: 0, icon: '🖨️' },
-  { id: 'SUP-005', name: 'คลิปหนีบกระดาษเบอร์ 1', category: 'เครื่องเขียน', unit: 'กล่อง', stock: 65, icon: '📎' },
-  { id: 'SUP-006', name: 'ลวดเย็บกระดาษเบอร์ 10', category: 'เครื่องเขียน', unit: 'กล่อง', stock: 30, icon: '📌' },
-  { id: 'SUP-007', name: 'แบตเตอรี่ AA อัลคาไลน์', category: 'ไฟฟ้า', unit: 'คู่', stock: 4, icon: '🔋' },
-  { id: 'SUP-008', name: 'น้ำยาทำความสะอาดกระจก', category: 'ความสะอาด', unit: 'ขวด', stock: 18, icon: '🧴' },
-  { id: 'SUP-009', name: 'ถุงขยะดำขนาด 30x40 นิ้ว', category: 'ความสะอาด', unit: 'แพ็ค', stock: 25, icon: '🗑️' },
-  { id: 'SUP-010', name: 'หมึกพิมพ์ Inkjet สีดำ', category: 'วัสดุคอมพิวเตอร์', unit: 'ตลับ', stock: 6, icon: '💧' },
-  { id: 'SUP-011', name: 'แผ่น CD-R เปล่า', category: 'วัสดุคอมพิวเตอร์', unit: 'แผ่น', stock: 50, icon: '💿' },
-  { id: 'SUP-012', name: 'สมุดบันทึกปกแข็ง A5', category: 'เครื่องเขียน', unit: 'เล่ม', stock: 22, icon: '📓' },
-  { id: 'SUP-013', name: 'เทปใส 1 นิ้ว', category: 'เครื่องเขียน', unit: 'ม้วน', stock: 40, icon: '📏' },
-  { id: 'SUP-014', name: 'ปลั๊กพ่วง 4 ช่อง 3 เมตร', category: 'ไฟฟ้า', unit: 'อัน', stock: 3, icon: '🔌' }
+  { id: 'SUP-001', name: 'กระดาษ A4 80 แกรม', category: 'วัสดุสำนักงาน', unit: 'รีม', stock: 42 },
+  { id: 'SUP-002', name: 'ปากกาลูกลื่นสีน้ำเงิน', category: 'เครื่องเขียน', unit: 'ด้าม', stock: 120 },
+  { id: 'SUP-003', name: 'แฟ้มสันกว้าง 3 นิ้ว', category: 'วัสดุสำนักงาน', unit: 'เล่ม', stock: 8 },
+  { id: 'SUP-004', name: 'ผงหมึกเครื่องถ่ายเอกสาร', category: 'วัสดุคอมพิวเตอร์', unit: 'กล่อง', stock: 0 },
+  { id: 'SUP-005', name: 'คลิปหนีบกระดาษเบอร์ 1', category: 'เครื่องเขียน', unit: 'กล่อง', stock: 65 },
+  { id: 'SUP-006', name: 'ลวดเย็บกระดาษเบอร์ 10', category: 'เครื่องเขียน', unit: 'กล่อง', stock: 30 },
+  { id: 'SUP-007', name: 'แบตเตอรี่ AA อัลคาไลน์', category: 'ไฟฟ้า', unit: 'คู่', stock: 4 },
+  { id: 'SUP-008', name: 'น้ำยาทำความสะอาดกระจก', category: 'ความสะอาด', unit: 'ขวด', stock: 18 },
+  { id: 'SUP-009', name: 'ถุงขยะดำขนาด 30x40 นิ้ว', category: 'ความสะอาด', unit: 'แพ็ค', stock: 25 },
+  { id: 'SUP-010', name: 'หมึกพิมพ์ Inkjet สีดำ', category: 'วัสดุคอมพิวเตอร์', unit: 'ตลับ', stock: 6 },
+  { id: 'SUP-011', name: 'แผ่น CD-R เปล่า', category: 'วัสดุคอมพิวเตอร์', unit: 'แผ่น', stock: 50 },
+  { id: 'SUP-012', name: 'สมุดบันทึกปกแข็ง A5', category: 'เครื่องเขียน', unit: 'เล่ม', stock: 22 },
+  { id: 'SUP-013', name: 'เทปใส 1 นิ้ว', category: 'เครื่องเขียน', unit: 'ม้วน', stock: 40 },
+  { id: 'SUP-014', name: 'ปลั๊กพ่วง 4 ช่อง 3 เมตร', category: 'ไฟฟ้า', unit: 'อัน', stock: 3 }
 ])
 
 // ==========================================
@@ -252,8 +252,8 @@ function startNewRequest() {
               :class="item.stock <= 0 ? 'opacity-60' : ''"
             >
               <div class="flex items-start justify-between gap-2">
-                <div class="w-11 h-11 rounded-xl bg-emerald-50 flex items-center justify-center text-xl shrink-0">
-                  {{ item.icon }}
+                <div class="w-11 h-11 rounded-xl bg-emerald-50 text-[#065f46] flex items-center justify-center shrink-0">
+                  <Boxes class="w-5 h-5" />
                 </div>
                 <span
                   class="text-[11px] font-bold px-2 py-1 rounded-full whitespace-nowrap"
@@ -336,7 +336,7 @@ function startNewRequest() {
 
               <div class="w-full mt-5 space-y-2 text-left bg-slate-50 rounded-xl p-3.5">
                 <div v-for="s in submittedSummary" :key="s.id" class="flex items-center justify-between text-xs">
-                  <span class="text-slate-600 truncate pr-2">{{ s.icon }} {{ s.name }}</span>
+                  <span class="text-slate-600 truncate pr-2">{{ s.name }}</span>
                   <span class="font-semibold text-[#0f172a] shrink-0">{{ s.qty }} {{ s.unit }}</span>
                 </div>
                 <div class="pt-2 mt-1 border-t border-slate-200 text-xs text-slate-500">
@@ -356,7 +356,7 @@ function startNewRequest() {
               </button>
             </div>
 
-            <!-- ------- สถานะ: กำลังเลือกรายการ ------- -->
+            <!-- ------- Status: เลือกรายการ ------- -->
             <template v-else>
               <div class="p-4 border-b border-slate-100 flex items-center justify-between">
                 <h2 class="text-base font-bold text-[#0f172a] flex items-center gap-2">
@@ -378,7 +378,9 @@ function startNewRequest() {
               <!-- รายการในตะกร้า -->
               <div v-else class="max-h-80 overflow-y-auto divide-y divide-slate-100">
                 <div v-for="c in cart" :key="c.id" class="p-3.5 flex items-start gap-3">
-                  <div class="w-9 h-9 rounded-lg bg-emerald-50 flex items-center justify-center text-base shrink-0">{{ c.icon }}</div>
+                  <div class="w-9 h-9 rounded-lg bg-emerald-50 text-[#065f46] flex items-center justify-center shrink-0">
+                    <Boxes class="w-4 h-4" />
+                  </div>
                   <div class="flex-1 min-w-0">
                     <p class="text-sm font-semibold text-[#0f172a] truncate">{{ c.name }}</p>
                     <p class="text-[11px] text-slate-400">คงเหลือในคลัง {{ c.stock }} {{ c.unit }}</p>

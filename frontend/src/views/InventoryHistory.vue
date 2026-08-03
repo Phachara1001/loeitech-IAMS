@@ -160,7 +160,7 @@ const totalYearlyOut = computed(() => {
             <History class="w-8 h-8" />
           </div>
           <div>
-            <h1 class="text-2xl sm:text-3xl font-bold text-white">ประวัติการเคลื่อนไหวพัสดุ (พ.3102-8)</h1>
+            <h1 class="text-2xl sm:text-3xl font-bold text-white">ประวัติการเคลื่อนไหวพัสดุ</h1>
             <p class="text-emerald-100/80 text-sm sm:text-base mt-1">บัญชีคุมพัสดุสิ้นเปลือง แสดงประวัติรับ-จ่าย และสรุปความต้องการเบิกใช้รายเดือน</p>
           </div>
         </div>
@@ -192,7 +192,7 @@ const totalYearlyOut = computed(() => {
         
         <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-100 pb-4">
           <div class="flex-1">
-            <label class="block text-xs font-bold text-slate-400 mb-1">เลือกรายการพัสดุเพื่อดูบัญชีคุม (พ.3102-8):</label>
+            <label class="block text-xs font-bold text-slate-400 mb-1">เลือกรายการพัสดุเพื่อดูบัญชีคุม:</label>
             <select 
               v-model="selectedSkuId" 
               class="w-full text-base md:text-lg font-extrabold text-slate-900 bg-slate-50 border-2 border-slate-200 rounded-xl p-3 focus:border-emerald-600 focus:outline-none cursor-pointer"

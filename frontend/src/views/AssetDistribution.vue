@@ -219,7 +219,7 @@ const handleAssignAsset = () => {
             <Building2 class="w-8 h-8" />
           </div>
           <div>
-            <h1 class="text-2xl sm:text-3xl font-bold text-white">ทะเบียนคุมครุภัณฑ์จ่ายให้หน่วย (พ.3108 หน้า 4)</h1>
+            <h1 class="text-2xl sm:text-3xl font-bold text-white">ทะเบียนคุมครุภัณฑ์จ่ายให้หน่วย</h1>
             <p class="text-emerald-100/80 text-sm sm:text-base mt-1">ระบบควบคุมการจัดสรร โยกย้ายสถานที่ และระบุบุคลากรผู้รับผิดชอบดูแลครุภัณฑ์</p>
           </div>
         </div>
@@ -295,7 +295,7 @@ const handleAssignAsset = () => {
         </div>
       </div>
 
-      <!-- Table View (พ.3108 หน้า 4) -->
+      <!-- Table View -->
       <div class="overflow-x-auto">
         <table class="w-full text-left text-sm whitespace-nowrap">
           <thead class="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold">

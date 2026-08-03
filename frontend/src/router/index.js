@@ -41,6 +41,11 @@ const routes = [
         component: () => import('../views/AssetList.vue')
       },
       {
+        path: 'new-asset',
+        name: 'NewAsset',
+        component: () => import('../views/NewAsset.vue')
+      },
+      {
         path: 'asset-distribution',
         name: 'AssetDistribution',
         component: () => import('../views/AssetDistribution.vue')
@@ -74,6 +79,11 @@ const routes = [
         path: 'report-export',
         name: 'ReportExport',
         component: () => import('../views/ReportExport.vue')
+      },
+      {
+        path: 'fiscal-year-settings',
+        name: 'FiscalYearSettings',
+        component: () => import('../views/FiscalYearSettings.vue')
       }
     ]
   }

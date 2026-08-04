@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import {
   PackagePlus,
   Calendar,
@@ -15,55 +15,71 @@ import {
   PlusCircle,
   FolderPlus,
   Package,
-  Sparkles
+  Sparkles,
+  Loader2
 } from 'lucide-vue-next'
+import * as inventoryApi from '../services/inventoryApi.js'
 
 // --- User Context & Role Check ---
 const currentUser = ref({
   id: 'USR-001',
-  name: 'นายสมศักดิ์ รักการดี',
-  role: 'Admin'
+  name: localStorage.getItem('tcaims_name') || 'ผู้ดูแลระบบ',
+  role: localStorage.getItem('tcaims_role') || 'Admin'
 })
 
-const isAuthorized = computed(() => ['Admin', 'Staff'].includes(currentUser.value.role))
+const isAuthorized = computed(() => ['Admin', 'Staff', 'admin', 'staff'].includes(currentUser.value.role))
 
-// --- Helper: Format DATE เป็นภาษาไทย ---
+// --- Helper: Format DATE ---
 const formatThaiDate = (dateString) => {
   if (!dateString) return ''
   const date = new Date(dateString)
   if (isNaN(date.getTime())) return dateString
-
-  return date.toLocaleDateString('th-TH', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric'
-  })
+  return date.toLocaleDateString('th-TH', { year: 'numeric', month: 'short', day: 'numeric' })
 }
 
-// --- Mock Master Items Database (ตาราง items) ---
-const items = ref([
-  { id: 'ITM-001', name: 'กระดาษ A4 80 แกรม (Double A)', category: 'วัสดุสำนักงาน', current_stock: 120, unit: 'รีม', min_stock: 20 },
-  { id: 'ITM-002', name: 'ปากกาลูกลื่น น้ำเงิน 0.5 มม.', category: 'วัสดุสำนักงาน', current_stock: 45, unit: 'ด้าม', min_stock: 50 },
-  { id: 'ITM-003', name: 'หมึกพิมพ์ HP Laserjet 85A', category: 'วัสดุคอมพิวเตอร์', current_stock: 8, unit: 'ตลับ', min_stock: 10 },
-  { id: 'ITM-004', name: 'น้ำยาทำความสะอาดพื้น 5,000 มล.', category: 'วัสดุงานบ้านงานครัว', current_stock: 15, unit: 'แกลลอน', min_stock: 5 }
-])
+// =============================================
+// ดึงรายการวัสดุจาก Backend (/api/items)
+// =============================================
+const items = ref([])
+const isLoadingItems = ref(false)
 
-// --- Stock Transactions History (ตาราง stock_transactions) ---
-const stockTransactions = ref([
-  {
-    id: 'TX-2026-001',
-    itemId: 'ITM-001',
-    itemName: 'กระดาษ A4 80 แกรม (Double A)',
-    type: 'IN',
-    qty: 50,
-    unitPrice: 115,
-    totalPrice: 5750,
-    receivedDate: '2026-07-15',
-    operator: 'นายสมศักดิ์ รักการดี'
+async function fetchItems() {
+  isLoadingItems.value = true
+  try {
+    items.value = await inventoryApi.getItems()
+  } catch (err) {
+    console.error('โหลดรายการวัสดุล้มเหลว:', err.message)
+  } finally {
+    isLoadingItems.value = false
   }
-])
+}
 
-// --- Form State ---
+// =============================================
+// ดึงประวัติการรับเข้าจาก Backend (/api/stock-receive)
+// =============================================
+const stockTransactions = ref([])
+const isLoadingHistory = ref(false)
+
+async function fetchRecentReceives() {
+  isLoadingHistory.value = true
+  try {
+    const data = await inventoryApi.getRecentReceives(10)
+    stockTransactions.value = data
+  } catch (err) {
+    console.error('โหลดประวัติล้มเหลว:', err.message)
+  } finally {
+    isLoadingHistory.value = false
+  }
+}
+
+onMounted(async () => {
+  await fetchItems()
+  await fetchRecentReceives()
+})
+
+// =============================================
+// Form State
+// =============================================
 const todayStr = new Date().toISOString().substring(0, 10)
 
 // 'EXISTING' = วัสดุเดิมที่มีอยู่แล้ว | 'NEW' = วัสดุใหม่
@@ -73,24 +89,18 @@ const formData = ref({
   receivedDate: todayStr,
   acquisitionMethod: 'สอบราคา',
   budgetType: 'เงินงบประมาณ',
-
-  // สำหรับวัสดุเดิม
   selectedItemId: '',
-
-  // สำหรับวัสดุใหม่
   newItemName: '',
   newItemCategory: 'วัสดุสำนักงาน',
   newItemUnit: 'ชิ้น',
-
-  // จำนวนและราคา
   unitPrice: 0,
   qty: 1,
   remark: ''
 })
 
-// ค้นหาวัตถุ Item กรณีเลือกรายการเดิม
+// ค้นหาวัตถุ Item กรณีเลือกรายการเดิม (ใช้ item.id จาก DB)
 const selectedExistingItem = computed(() => {
-  return items.value.find(item => item.id === formData.value.selectedItemId) || null
+  return items.value.find(item => item.id === Number(formData.value.selectedItemId)) || null
 })
 
 // คำนวณราคารวมอัตโนมัติ
@@ -118,88 +128,78 @@ const displayUnit = computed(() => {
   }
 })
 
-// คำนวณสต๊อกใหม่
+// คำนวณสต๊อกใหม่ (projected)
 const projectedStock = computed(() => {
   const inputQty = Number(formData.value.qty) || 0
   if (itemSourceType.value === 'EXISTING') {
     if (!selectedExistingItem.value) return 0
-    return selectedExistingItem.value.current_stock + inputQty
+    return (selectedExistingItem.value.quantity || 0) + inputQty
   } else {
-    return inputQty // ถ้าเป็นวัสดุใหม่ สต๊อกตั้งต้นคือจำนวนที่รับเข้ามาเลย
+    return inputQty
   }
 })
 
 // Modal Status
 const showSuccessModal = ref(false)
 const lastSavedData = ref(null)
+const isSaving = ref(false)
+const saveError = ref('')
 
-// --- Submit Function ---
-const handleSaveStockReceive = () => {
-  const qtyToAdd = Number(formData.value.qty)
-  const pricePerUnit = Number(formData.value.unitPrice)
-  let targetItemId = ''
-  let targetItemName = ''
+// =============================================
+// Submit → POST /api/stock-receive
+// =============================================
+const handleSaveStockReceive = async () => {
+  isSaving.value = true
+  saveError.value = ''
 
-  if (itemSourceType.value === 'EXISTING') {
-    if (!selectedExistingItem.value) return
-    // 1. อัปเดตตาราง items เดิม
-    selectedExistingItem.value.current_stock += qtyToAdd
-    targetItemId = selectedExistingItem.value.id
-    targetItemName = selectedExistingItem.value.name
-  } else {
-    if (!formData.value.newItemName.trim()) return
-    // 2. กรณีวัสดุใหม่ -> สร้างไอเทมใหม่เพิ่มลงตาราง items
-    targetItemId = `ITM-00${items.value.length + 1}`
-    targetItemName = formData.value.newItemName.trim()
+  try {
+    const payload = {
+      itemSourceType: itemSourceType.value,
+      selectedItemId: itemSourceType.value === 'EXISTING' ? Number(formData.value.selectedItemId) : undefined,
+      newItemName: itemSourceType.value === 'NEW' ? formData.value.newItemName.trim() : undefined,
+      newItemCategory: itemSourceType.value === 'NEW' ? formData.value.newItemCategory : undefined,
+      newItemUnit: itemSourceType.value === 'NEW' ? formData.value.newItemUnit : undefined,
+      qty: Number(formData.value.qty),
+      unitPrice: Number(formData.value.unitPrice),
+      receivedDate: formData.value.receivedDate,
+      acquisitionMethod: formData.value.acquisitionMethod,
+      budgetType: formData.value.budgetType,
+      remark: formData.value.remark,
+      operatorName: currentUser.value.name
+    }
 
-    items.value.push({
-      id: targetItemId,
-      name: targetItemName,
-      category: formData.value.newItemCategory,
-      current_stock: qtyToAdd,
-      unit: formData.value.newItemUnit,
-      min_stock: 5
-    })
-  }
+    const result = await inventoryApi.receiveStock(payload)
+    lastSavedData.value = result.data
+    showSuccessModal.value = true
 
-  // 3. เพิ่มลงตาราง stock_transactions
-  const newTx = {
-    id: `TX-${Date.now().toString().slice(-6)}`,
-    itemId: targetItemId,
-    itemName: targetItemName,
-    type: 'IN',
-    qty: qtyToAdd,
-    unitPrice: pricePerUnit,
-    totalPrice: qtyToAdd * pricePerUnit,
-    receivedDate: formData.value.receivedDate,
-    acquisitionMethod: formData.value.acquisitionMethod,
-    budgetType: formData.value.budgetType,
-    remark: formData.value.remark,
-    operator: currentUser.value.name,
-    createdAt: new Date().toLocaleString('th-TH')
-  }
+    // รีเฟรชข้อมูล
+    await fetchItems()
+    await fetchRecentReceives()
 
-  stockTransactions.value.unshift(newTx)
-  lastSavedData.value = newTx
-  showSuccessModal.value = true
-
-  // Reset Form
-  formData.value = {
-    receivedDate: todayStr,
-    acquisitionMethod: 'สอบราคา',
-    budgetType: 'เงินงบประมาณ',
-    selectedItemId: '',
-    newItemName: '',
-    newItemCategory: 'วัสดุสำนักงาน',
-    newItemUnit: 'ชิ้น',
-    unitPrice: 0,
-    qty: 1,
-    remark: ''
+    // Reset Form
+    formData.value = {
+      receivedDate: todayStr,
+      acquisitionMethod: 'สอบราคา',
+      budgetType: 'เงินงบประมาณ',
+      selectedItemId: '',
+      newItemName: '',
+      newItemCategory: 'วัสดุสำนักงาน',
+      newItemUnit: 'ชิ้น',
+      unitPrice: 0,
+      qty: 1,
+      remark: ''
+    }
+  } catch (err) {
+    saveError.value = err.message || 'บันทึกไม่สำเร็จ กรุณาลองใหม่'
+  } finally {
+    isSaving.value = false
   }
 }
 </script>
 
+
 <template>
+
   <div class="min-h-screen bg-slate-100/80 text-slate-800 p-4 sm:p-6 md:p-8 font-sans space-y-6">
 
     <!-- Guard Notice -->
@@ -355,7 +355,7 @@ const handleSaveStockReceive = () => {
                 class="w-full bg-slate-50 border-2 border-slate-200 rounded-2xl p-4 text-slate-900 font-bold text-lg md:text-xl focus:outline-none focus:border-emerald-600 focus:bg-white transition-all cursor-pointer shadow-sm">
                 <option value="" disabled>-- คลิกเพื่อเลือกรายการพัสดุเดิม --</option>
                 <option v-for="item in items" :key="item.id" :value="item.id">
-                  [{{ item.id }}] {{ item.name }} (มีอยู่แล้ว {{ item.current_stock }} {{ item.unit }})
+                  [{{ item.sku }}] {{ item.name }} (มีอยู่แล้ว {{ item.quantity }} {{ item.unit || 'หน่วย' }})
                 </option>
               </select>
             </div>
@@ -433,18 +433,24 @@ const handleSaveStockReceive = () => {
             </div>
           </div>
 
+          <!-- Error State -->
+          <div v-if="saveError" class="mt-3 flex items-center gap-2 text-red-600 bg-red-50 rounded-xl px-4 py-3 text-sm">
+            <span>⚠️ {{ saveError }}</span>
+          </div>
+
           <!-- Submit Button -->
           <div class="pt-4 border-t border-slate-100 flex justify-end">
             <button type="submit"
-              :disabled="(itemSourceType === 'EXISTING' && !selectedExistingItem) || (itemSourceType === 'NEW' && !formData.newItemName.trim())"
+              :disabled="isSaving || (itemSourceType === 'EXISTING' && !selectedExistingItem) || (itemSourceType === 'NEW' && !formData.newItemName.trim())"
               :class="[
                 'w-full sm:w-auto px-10 py-5 rounded-2xl text-xl font-extrabold text-white flex items-center justify-center gap-3 shadow-xl transition-all cursor-pointer active:scale-95',
-                (itemSourceType === 'EXISTING' && selectedExistingItem) || (itemSourceType === 'NEW' && formData.newItemName.trim())
+                (!isSaving && ((itemSourceType === 'EXISTING' && selectedExistingItem) || (itemSourceType === 'NEW' && formData.newItemName.trim())))
                   ? 'bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 shadow-emerald-600/30'
                   : 'bg-slate-300 text-slate-500 cursor-not-allowed'
               ]">
-              <CheckCircle2 class="w-7 h-7 stroke-[2.5]" />
-              <span>บันทึกการรับพัสดุเข้าคลัง</span>
+              <Loader2 v-if="isSaving" class="w-7 h-7 animate-spin" />
+              <CheckCircle2 v-else class="w-7 h-7 stroke-[2.5]" />
+              <span>{{ isSaving ? 'กำลังบันทึก...' : 'บันทึกการรับพัสดุเข้าคลัง' }}</span>
             </button>
           </div>
 
@@ -474,7 +480,7 @@ const handleSaveStockReceive = () => {
                 <div class="flex items-center justify-between text-base">
                   <span class="text-slate-400">สต๊อกเดิม:</span>
                   <span class="font-mono font-bold text-white text-lg">
-                    {{ itemSourceType === 'EXISTING' && selectedExistingItem ? selectedExistingItem.current_stock : 0 }}
+                    {{ itemSourceType === 'EXISTING' && selectedExistingItem ? selectedExistingItem.quantity : 0 }}
                     {{ displayUnit }}
                   </span>
                 </div>
@@ -509,18 +515,20 @@ const handleSaveStockReceive = () => {
             </h4>
 
             <div class="space-y-3 max-h-[250px] overflow-y-auto">
+              <div v-if="isLoadingHistory" class="py-4 text-center text-slate-400 text-sm">โหลดประวัติ...</div>
+              <div v-else-if="stockTransactions.length === 0" class="py-4 text-center text-slate-400 text-sm">ยังไม่มีประวัติ</div>
               <div v-for="tx in stockTransactions.slice(0, 3)" :key="tx.id"
                 class="p-3.5 bg-slate-50 rounded-2xl border border-slate-200/60 text-sm">
                 <div class="flex justify-between items-start font-bold text-slate-900">
-                  <span class="line-clamp-1">{{ tx.itemName }}</span>
-                  <span class="text-emerald-700 font-mono font-extrabold ml-2 shrink-0">+{{ tx.qty }}</span>
+                  <span class="line-clamp-1">{{ tx.item?.name || '-' }}</span>
+                  <span class="text-emerald-700 font-mono font-extrabold ml-2 shrink-0">+{{ tx.quantity }}</span>
                 </div>
                 <div class="text-xs text-slate-500 mt-1 flex justify-between items-center">
                   <span class="flex items-center gap-1">
                     <Calendar class="w-3 h-3 text-slate-400" />
-                    {{ formatThaiDate(tx.receivedDate) }}
+                    {{ formatThaiDate(tx.receivedDate || tx.createdAt) }}
                   </span>
-                  <span>฿{{ tx.totalPrice.toLocaleString() }}</span>
+                  <span>฿{{ (tx.totalPrice || 0).toLocaleString() }}</span>
                 </div>
               </div>
             </div>

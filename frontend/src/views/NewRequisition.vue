@@ -1,5 +1,5 @@
 <script setup>
-import { ref, reactive, computed } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import {
   Search,
   ShoppingCart,
@@ -16,28 +16,44 @@ import {
   ChevronRight,
   RotateCcw
 } from 'lucide-vue-next'
+import * as inventoryApi from '../services/inventoryApi.js'
 
 // ==========================================
-// 1. ข้อมูลคลังพัสดุสิ้นเปลือง (Mock Data - ยังไม่มี backend)
+// 1. ดึงรายการพัสดุจาก Backend
 // ==========================================
-const categories = ['ทั้งหมด', 'เครื่องเขียน', 'วัสดุสำนักงาน', 'วัสดุคอมพิวเตอร์', 'ความสะอาด', 'ไฟฟ้า']
+const supplies = ref([])
+const isLoadingSupplies = ref(false)
+const loadError = ref('')
 
-const supplies = ref([
-  { id: 'SUP-001', name: 'กระดาษ A4 80 แกรม', category: 'วัสดุสำนักงาน', unit: 'รีม', stock: 42, icon: '📄' },
-  { id: 'SUP-002', name: 'ปากกาลูกลื่นสีน้ำเงิน', category: 'เครื่องเขียน', unit: 'ด้าม', stock: 120, icon: '🖊️' },
-  { id: 'SUP-003', name: 'แฟ้มสันกว้าง 3 นิ้ว', category: 'วัสดุสำนักงาน', unit: 'เล่ม', stock: 8, icon: '🗂️' },
-  { id: 'SUP-004', name: 'ผงหมึกเครื่องถ่ายเอกสาร', category: 'วัสดุคอมพิวเตอร์', unit: 'กล่อง', stock: 0, icon: '🖨️' },
-  { id: 'SUP-005', name: 'คลิปหนีบกระดาษเบอร์ 1', category: 'เครื่องเขียน', unit: 'กล่อง', stock: 65, icon: '📎' },
-  { id: 'SUP-006', name: 'ลวดเย็บกระดาษเบอร์ 10', category: 'เครื่องเขียน', unit: 'กล่อง', stock: 30, icon: '📌' },
-  { id: 'SUP-007', name: 'แบตเตอรี่ AA อัลคาไลน์', category: 'ไฟฟ้า', unit: 'คู่', stock: 4, icon: '🔋' },
-  { id: 'SUP-008', name: 'น้ำยาทำความสะอาดกระจก', category: 'ความสะอาด', unit: 'ขวด', stock: 18, icon: '🧴' },
-  { id: 'SUP-009', name: 'ถุงขยะดำขนาด 30x40 นิ้ว', category: 'ความสะอาด', unit: 'แพ็ค', stock: 25, icon: '🗑️' },
-  { id: 'SUP-010', name: 'หมึกพิมพ์ Inkjet สีดำ', category: 'วัสดุคอมพิวเตอร์', unit: 'ตลับ', stock: 6, icon: '💧' },
-  { id: 'SUP-011', name: 'แผ่น CD-R เปล่า', category: 'วัสดุคอมพิวเตอร์', unit: 'แผ่น', stock: 50, icon: '💿' },
-  { id: 'SUP-012', name: 'สมุดบันทึกปกแข็ง A5', category: 'เครื่องเขียน', unit: 'เล่ม', stock: 22, icon: '📓' },
-  { id: 'SUP-013', name: 'เทปใส 1 นิ้ว', category: 'เครื่องเขียน', unit: 'ม้วน', stock: 40, icon: '📏' },
-  { id: 'SUP-014', name: 'ปลั๊กพ่วง 4 ช่อง 3 เมตร', category: 'ไฟฟ้า', unit: 'อัน', stock: 3, icon: '🔌' }
-])
+// สร้าง categories จาก DB จริง
+const categories = computed(() => {
+  const uniqueCats = [...new Set(supplies.value.map((i) => i.category).filter(Boolean))]
+  return ['ทั้งหมด', ...uniqueCats]
+})
+
+async function fetchSupplies() {
+  isLoadingSupplies.value = true
+  loadError.value = ''
+  try {
+    const data = await inventoryApi.getItems()
+    // map field ให้ตรงกับที่ใช้ใน component (stock = quantity, icon สร้างตาม category)
+    supplies.value = data.map((item) => ({
+      id: item.id,
+      sku: item.sku,
+      name: item.name,
+      category: item.category || 'อื่นๆ',
+      unit: item.unit || 'หน่วย',
+      stock: item.quantity,
+      minThreshold: item.minThreshold
+    }))
+  } catch (err) {
+    loadError.value = err.message || 'โหลดรายการพัสดุไม่สำเร็จ'
+  } finally {
+    isLoadingSupplies.value = false
+  }
+}
+
+onMounted(fetchSupplies)
 
 // ==========================================
 // 2. ค้นหา / กรองหมวดหมู่
@@ -48,12 +64,13 @@ const activeCategory = ref('ทั้งหมด')
 const filteredSupplies = computed(() => {
   return supplies.value.filter((item) => {
     const matchCategory = activeCategory.value === 'ทั้งหมด' || item.category === activeCategory.value
-    const matchSearch = item.name.toLowerCase().includes(searchQuery.value.trim().toLowerCase())
+    const matchSearch = item.name.toLowerCase().includes(searchQuery.value.trim().toLowerCase()) ||
+      item.sku?.toLowerCase().includes(searchQuery.value.trim().toLowerCase())
     return matchCategory && matchSearch
   })
 })
 
-// จำนวนที่กำลังเลือกไว้ในการ์ดแต่ละใบ (ก่อนกดเพิ่มลงตะกร้า)
+// จำนวนที่กำลังเลือกไว้ในการ์ดแต่ละใบ
 const pickQty = reactive({})
 function getPickQty(item) {
   return pickQty[item.id] ?? 1
@@ -68,7 +85,7 @@ function adjustPickQty(item, delta) {
 // 3. ระบบตะกร้าคำขอเบิก
 // ==========================================
 const cart = ref([])
-const itemNotices = reactive({}) // ข้อความแจ้งเตือนชั่วคราวรายชิ้น (เช่น เกินสต็อก)
+const itemNotices = reactive({})
 
 function flashNotice(id, message) {
   itemNotices[id] = message
@@ -96,7 +113,6 @@ function addToCart(item) {
       name: item.name,
       unit: item.unit,
       stock: item.stock,
-      icon: item.icon,
       qty: Math.min(qty, item.stock)
     })
   }
@@ -160,19 +176,36 @@ const submitted = ref(false)
 const requestCode = ref('')
 const submittedSummary = ref([])
 const submittedReason = ref('')
+const submitError = ref('')
 
-function handleSubmit() {
+// ==========================================
+// Submit → POST /api/requisitions
+// ==========================================
+async function handleSubmit() {
   touchedSubmit.value = true
   if (cart.value.length === 0 || reasonError.value || cartError.value) return
 
   isSubmitting.value = true
-  setTimeout(() => {
-    requestCode.value = `REQ-2569-${String(Math.floor(1000 + Math.random() * 9000))}`
+  submitError.value = ''
+
+  try {
+    const payload = {
+      items: cart.value.map((c) => ({ id: c.id, qty: c.qty })),
+      reason: reason.value.trim()
+    }
+
+    const result = await inventoryApi.createRequisition(payload)
+
+    // รับเลขที่คำขอจาก backend จริง
+    requestCode.value = result.data?.reqCode || 'REQ-UNKNOWN'
     submittedSummary.value = cart.value.map((c) => ({ ...c }))
     submittedReason.value = reason.value.trim()
-    isSubmitting.value = false
     submitted.value = true
-  }, 900)
+  } catch (err) {
+    submitError.value = err.message || 'ส่งคำขอไม่สำเร็จ กรุณาลองใหม่'
+  } finally {
+    isSubmitting.value = false
+  }
 }
 
 function startNewRequest() {
@@ -181,8 +214,10 @@ function startNewRequest() {
   touchedSubmit.value = false
   submitted.value = false
   requestCode.value = ''
+  submitError.value = ''
 }
 </script>
+
 
 <template>
   <div class="min-h-screen bg-[#f8fafc] font-sarabun p-4 sm:p-6 lg:p-8">
@@ -244,7 +279,18 @@ function startNewRequest() {
           </div>
 
           <!-- ตารางการ์ดรายการพัสดุ -->
-          <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+          <div v-if="isLoadingSupplies" class="py-16 flex flex-col items-center gap-3 text-slate-400">
+            <Loader2 class="w-8 h-8 animate-spin text-[#065f46]" />
+            <p class="text-sm">กำลังโหลดรายการพัสดุ...</p>
+          </div>
+
+          <div v-else-if="loadError" class="py-12 flex flex-col items-center gap-3">
+            <AlertCircle class="w-8 h-8 text-red-500" />
+            <p class="text-sm text-red-600">{{ loadError }}</p>
+            <button @click="fetchSupplies" class="text-xs text-[#065f46] underline">ลองใหม่</button>
+          </div>
+
+          <div v-else class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
             <div
               v-for="item in filteredSupplies"
               :key="item.id"
@@ -252,14 +298,14 @@ function startNewRequest() {
               :class="item.stock <= 0 ? 'opacity-60' : ''"
             >
               <div class="flex items-start justify-between gap-2">
-                <div class="w-11 h-11 rounded-xl bg-emerald-50 flex items-center justify-center text-xl shrink-0">
-                  {{ item.icon }}
+                <div class="w-11 h-11 rounded-xl bg-emerald-50 flex items-center justify-center shrink-0">
+                  <Boxes class="w-5 h-5 text-[#065f46]" />
                 </div>
                 <span
                   class="text-[11px] font-bold px-2 py-1 rounded-full whitespace-nowrap"
                   :class="item.stock <= 0
                     ? 'bg-red-50 text-red-600'
-                    : item.stock <= 5
+                    : item.stock <= (item.minThreshold || 5)
                     ? 'bg-amber-50 text-amber-600'
                     : 'bg-emerald-50 text-[#065f46]'"
                 >
@@ -336,7 +382,7 @@ function startNewRequest() {
 
               <div class="w-full mt-5 space-y-2 text-left bg-slate-50 rounded-xl p-3.5">
                 <div v-for="s in submittedSummary" :key="s.id" class="flex items-center justify-between text-xs">
-                  <span class="text-slate-600 truncate pr-2">{{ s.icon }} {{ s.name }}</span>
+                  <span class="text-slate-600 truncate pr-2">{{ s.name }}</span>
                   <span class="font-semibold text-[#0f172a] shrink-0">{{ s.qty }} {{ s.unit }}</span>
                 </div>
                 <div class="pt-2 mt-1 border-t border-slate-200 text-xs text-slate-500">
@@ -378,7 +424,9 @@ function startNewRequest() {
               <!-- รายการในตะกร้า -->
               <div v-else class="max-h-80 overflow-y-auto divide-y divide-slate-100">
                 <div v-for="c in cart" :key="c.id" class="p-3.5 flex items-start gap-3">
-                  <div class="w-9 h-9 rounded-lg bg-emerald-50 flex items-center justify-center text-base shrink-0">{{ c.icon }}</div>
+                  <div class="w-9 h-9 rounded-lg bg-emerald-50 flex items-center justify-center shrink-0">
+                    <Boxes class="w-4 h-4 text-[#065f46]" />
+                  </div>
                   <div class="flex-1 min-w-0">
                     <p class="text-sm font-semibold text-[#0f172a] truncate">{{ c.name }}</p>
                     <p class="text-[11px] text-slate-400">คงเหลือในคลัง {{ c.stock }} {{ c.unit }}</p>
@@ -452,6 +500,11 @@ function startNewRequest() {
                   <Send v-else class="w-4 h-4" />
                   {{ isSubmitting ? 'กำลังส่งคำขอ...' : 'ส่งคำขอเบิกพัสดุ' }}
                 </button>
+                <!-- Submit Error -->
+                <p v-if="submitError" class="mt-2 text-xs text-red-600 flex items-center gap-1">
+                  <AlertCircle class="w-3.5 h-3.5 shrink-0" />
+                  {{ submitError }}
+                </p>
               </div>
             </template>
           </div>

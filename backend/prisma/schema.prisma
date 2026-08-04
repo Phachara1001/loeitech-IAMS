@@ -32,18 +32,53 @@ model Department {
   @@map("departments")
 }
 
+// วัสดุสิ้นเปลือง (Inventory Stock)
 model Item {
-  id          Int                @id @default(autoincrement())
-  sku         String             @unique
-  name        String
-  description String?
-  category    String?
-  assets      Asset[]
-  stockTx     StockTransaction[]
-  createdAt   DateTime           @default(now())
-  updatedAt   DateTime           @updatedAt
+  id           Int                @id @default(autoincrement())
+  sku          String             @unique // รหัสวัสดุ เช่น 'CS-0001'
+  name         String             // ชื่อวัสดุ
+  description  String?            // คำอธิบายเพิ่มเติม
+  category     String?            // หมวดหมู่ เช่น 'กระดาษ'
+  unit         String?            // หน่วยนับ เช่น 'รีม', 'ตลับ'
+  quantity     Int                @default(0) // ยอดคงเหลือ
+  minThreshold Int                @default(0) // จุดเตือนสั่งซื้อ
+  unitPrice    Float              @default(0) // ราคาต่อหน่วย
+  stockTx      StockTransaction[]
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
 
   @@map("items")
+}
+
+// ครุภัณฑ์ (Fixed Asset)
+model Asset {
+  id                Int       @id @default(autoincrement())
+  seq               String    @unique // ลำดับครุภัณฑ์ e.g. "561-001"
+  name              String    // ชื่อพัสดุ
+  category          String    // หมวดหมู่/ประเภท
+  department        String    // แผนก/หน่วยงานที่ครอบครอง
+  
+  brand             String?   // ยี่ห้อ/รุ่น
+  serialNumber      String?   // หมายเลขเครื่อง (Serial Number) / ตัวถัง
+  specifications    String?   // คุณสมบัติ/สเปค
+  
+  acquiredDate      DateTime  // วันที่ได้มา
+  acquisitionMethod String    // วิธีการได้มา
+  budgetType        String    // แหล่งเงิน
+  unitPrice         Float     // ราคาต่อหน่วย
+  referenceCode     String?   // หมายเลขพัสดุหลัก / รหัสอ้างอิง e.g. "2310-004-0002"
+  
+  remark            String?   // หมายเหตุ
+  image             String?   // URL รูปภาพ
+  status            String    @default("Active") // Active, Repaired, Broken, Scrapped
+  
+  locationId        Int?
+  location          Location? @relation(fields: [locationId], references: [id])
+  
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@map("assets")
 }
 
 model Location {
@@ -55,22 +90,6 @@ model Location {
   updatedAt   DateTime @updatedAt
 
   @@map("locations")
-}
-
-model Asset {
-  id           Int      @id @default(autoincrement())
-  assetCode    String   @unique
-  itemId       Int
-  item         Item     @relation(fields: [itemId], references: [id])
-  locationId   Int?
-  location     Location? @relation(fields: [locationId], references: [id])
-  status       String   @default("AVAILABLE") // AVAILABLE, IN_USE, MAINTENANCE, RETIRED
-  purchaseDate DateTime?
-  price        Float?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-
-  @@map("assets")
 }
 
 model StockTransaction {

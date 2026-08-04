@@ -41,6 +41,11 @@ const routes = [
         component: () => import('../views/AssetList.vue')
       },
       {
+        path: 'new-asset',
+        name: 'NewAsset',
+        component: () => import('../views/NewAsset.vue')
+      },
+      {
         path: 'asset-distribution',
         name: 'AssetDistribution',
         component: () => import('../views/AssetDistribution.vue')

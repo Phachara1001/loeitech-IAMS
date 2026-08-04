@@ -16,6 +16,8 @@ const user = ref({
   avatar: null
 })
 
+const fiscalYear = ref('2569')
+
 // เช็คว่าปัจจุบันอยู่หน้าโปรไฟล์หรือไม่
 const isProfilePage = computed(() => route.path === '/profile')
 
@@ -36,6 +38,21 @@ function handleProfileUpdate(e) {
   if (e.detail) {
     if (e.detail.name) user.value.name = e.detail.name
     if (e.detail.avatar !== undefined) user.value.avatar = e.detail.avatar
+  }
+}
+
+function loadFiscalYear() {
+  const stored = localStorage.getItem('tcaims_fiscal_year')
+  if (stored) {
+    fiscalYear.value = stored
+  } else {
+    fiscalYear.value = '2569'
+  }
+}
+
+function handleFiscalYearUpdate(e) {
+  if (e.detail && e.detail.year) {
+    fiscalYear.value = e.detail.year
   }
 }
 
@@ -82,12 +99,15 @@ function handleClickOutside(event) {
 
 onMounted(() => {
   loadUserData()
+  loadFiscalYear()
   window.addEventListener('profile-updated', handleProfileUpdate)
+  window.addEventListener('fiscal-year-updated', handleFiscalYearUpdate)
   document.addEventListener('click', handleClickOutside)
 })
 
 onUnmounted(() => {
   window.removeEventListener('profile-updated', handleProfileUpdate)
+  window.removeEventListener('fiscal-year-updated', handleFiscalYearUpdate)
   document.removeEventListener('click', handleClickOutside)
 })
 </script>
@@ -98,8 +118,8 @@ onUnmounted(() => {
       <h1 class="text-xl font-semibold text-slate-900 hidden sm:block">
         ระบบบริหารครุภัณฑ์
       </h1>
-      <div class="ml-4 px-2.5 py-1 rounded-md bg-emerald-50 text-emerald-700 text-xs font-bold border border-emerald-100">
-        ปีงบประมาณ 2569
+      <div class="ml-4 px-2.5 py-1 rounded-md bg-emerald-50 text-emerald-700 text-xs font-bold border border-emerald-100 transition-all">
+        ปีงบประมาณ {{ fiscalYear }}
       </div>
     </div>
 

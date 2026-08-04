@@ -57,6 +57,7 @@ const menuGroups = [
       { name: 'จัดการข้อมูลพื้นฐาน', path: '/master-data', icon: Settings },
       { name: 'ประวัติการใช้งานระบบ', path: '/activity-logs', icon: Activity },
       { name: 'ออกรายงาน/ส่งออก', path: '/report-export', icon: FileText },
+      { name: 'ตั้งค่าปีงบประมาณ', path: '/fiscal-year-settings', icon: CalendarCheck },
     ]
   }
 ]

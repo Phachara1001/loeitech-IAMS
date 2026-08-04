@@ -7,7 +7,7 @@ import {
   Database, SendToBack, CalendarClock,
   ClipboardList, FilePlus,
   Settings, Activity, FileText,
-  Recycle, ClipboardCheck, ArrowLeftRight, Wrench
+  Recycle, ClipboardCheck, ArrowLeftRight, Wrench, CalendarCheck
 } from 'lucide-vue-next'
 
 const route = useRoute()

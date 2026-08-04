@@ -6,7 +6,8 @@ import {
   PackageSearch, Download, History,
   Database, SendToBack, CalendarClock,
   ClipboardList, FilePlus,
-  Settings, Activity, FileText, CalendarCheck
+  Settings, Activity, FileText,
+  Recycle, ClipboardCheck, ArrowLeftRight, Wrench, CalendarCheck
 } from 'lucide-vue-next'
 
 const route = useRoute()
@@ -32,6 +33,15 @@ const menuGroups = [
       { name: 'ทะเบียนครุภัณฑ์', path: '/asset-list', icon: Database },
       { name: 'จ่ายครุภัณฑ์ให้หน่วย', path: '/asset-distribution', icon: SendToBack },
       { name: 'ประวัติซ่อม/เคลื่อนย้าย', path: '/asset-timeline', icon: CalendarClock },
+      { name: 'ตรวจสอบพัสดุประจำปี', path: '/inventory-check', icon: ClipboardCheck },
+      { name: 'จำหน่ายพัสดุ/ครุภัณฑ์', path: '/asset-disposal', icon: Recycle },
+    ]
+  },
+  {
+    title: 'ระบบยืม-คืน และแจ้งซ่อม',
+    items: [
+      { name: 'ยืม-คืนพัสดุ/ครุภัณฑ์', path: '/borrow-return', icon: ArrowLeftRight },
+      { name: 'แจ้งซ่อม/บำรุงรักษา', path: '/maintenance-repair', icon: Wrench },
     ]
   },
   {

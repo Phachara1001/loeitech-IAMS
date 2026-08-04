@@ -81,9 +81,24 @@ const routes = [
         component: () => import('../views/ReportExport.vue')
       },
       {
-        path: 'fiscal-year-settings',
-        name: 'FiscalYearSettings',
-        component: () => import('../views/FiscalYearSettings.vue')
+        path: 'asset-disposal',
+        name: 'AssetDisposal',
+        component: () => import('../views/AssetDisposal.vue')
+      },
+      {
+        path: 'inventory-check',
+        name: 'InventoryCheck',
+        component: () => import('../views/InventoryCheck.vue')
+      },
+      {
+        path: 'maintenance-repair',
+        name: 'MaintenanceRepair',
+        component: () => import('../views/MaintenanceRepair.vue')
+      },
+      {
+        path: 'borrow-return',
+        name: 'BorrowReturn',
+        component: () => import('../views/BorrowReturn.vue')
       }
     ]
   }
@@ -99,17 +114,15 @@ function isAuthenticated() {
   return !!localStorage.getItem('tcaims_auth_token')
 }
 
-router.beforeEach((to, from, next) => {
+router.beforeEach((to, from) => {
   const loggedIn = isAuthenticated()
 
   if (to.name !== 'Login' && !loggedIn) {
     // ยังไม่ล็อกอิน แต่พยายามเข้าหน้าอื่น -> เด้งไปหน้า login
-    next({ name: 'Login', query: { redirect: to.fullPath } })
+    return { name: 'Login', query: { redirect: to.fullPath } }
   } else if (to.name === 'Login' && loggedIn) {
     // ล็อกอินอยู่แล้ว แต่พยายามเข้าหน้า login -> เด้งเข้า Dashboard
-    next({ name: 'Dashboard' })
-  } else {
-    next()
+    return { name: 'Dashboard' }
   }
 })
 

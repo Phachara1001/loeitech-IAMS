@@ -2,6 +2,8 @@
 import { ref } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { User, Lock, Eye, EyeOff, AlertCircle, Package, Boxes, ClipboardList, Loader2 } from 'lucide-vue-next'
+import ForgotPasswordModal from './ForgotPasswordModal.vue'
+import RegisterModal from './RegisterModal.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -11,6 +13,9 @@ const password = ref('')
 const showPassword = ref(false)
 const errorMessage = ref('')
 const isLoading = ref(false)
+
+const showForgotPasswordModal = ref(false)
+const showRegisterModal = ref(false)
 
 function handleSubmit() {
   errorMessage.value = ''
@@ -33,7 +38,11 @@ function handleSubmit() {
 }
 
 function handleForgotPassword() {
-  console.log('forgot password clicked')
+  showForgotPasswordModal.value = true
+}
+
+function handleOpenRegister() {
+  showRegisterModal.value = true
 }
 </script>
 
@@ -205,11 +214,35 @@ function handleForgotPassword() {
           </button>
         </form>
 
-        <p class="text-base text-slate-500 text-center lg:text-left mt-10">
+        <!-- ปุ่มสร้างบัญชี -->
+        <p class="text-lg text-slate-600 text-center lg:text-left mt-8">
+          ยังไม่มีบัญชีผู้ใช้งาน?
+          <button
+            type="button"
+            @click="handleOpenRegister"
+            class="font-bold text-[#0F3D26] hover:text-[#1B5E3C] hover:underline underline-offset-2"
+          >
+            สร้างบัญชี
+          </button>
+        </p>
+
+        <p class="text-base text-slate-500 text-center lg:text-left mt-6">
           พบปัญหาการเข้าใช้งาน ติดต่องานพัสดุ วิทยาลัยเทคนิค
         </p>
       </div>
     </div>
+
+    <!-- ป็อปอัปลืมรหัสผ่าน -->
+    <ForgotPasswordModal
+      v-if="showForgotPasswordModal"
+      @close="showForgotPasswordModal = false"
+    />
+
+    <!-- ป็อปอัปสร้างบัญชี -->
+    <RegisterModal
+      v-if="showRegisterModal"
+      @close="showRegisterModal = false"
+    />
   </div>
 </template>
 

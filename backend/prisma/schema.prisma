@@ -34,18 +34,19 @@ model Department {
 
 // วัสดุสิ้นเปลือง (Inventory Stock)
 model Item {
-  id           Int                @id @default(autoincrement())
-  sku          String             @unique // รหัสวัสดุ เช่น 'CS-0001'
-  name         String             // ชื่อวัสดุ
-  description  String?            // คำอธิบายเพิ่มเติม
-  category     String?            // หมวดหมู่ เช่น 'กระดาษ'
-  unit         String?            // หน่วยนับ เช่น 'รีม', 'ตลับ'
-  quantity     Int                @default(0) // ยอดคงเหลือ
-  minThreshold Int                @default(0) // จุดเตือนสั่งซื้อ
-  unitPrice    Float              @default(0) // ราคาต่อหน่วย
-  stockTx      StockTransaction[]
-  createdAt    DateTime           @default(now())
-  updatedAt    DateTime           @updatedAt
+  id               Int                @id @default(autoincrement())
+  sku              String             @unique // รหัสวัสดุ เช่น 'CS-0001'
+  name             String             // ชื่อวัสดุ
+  description      String?            // คำอธิบายเพิ่มเติม
+  category         String?            // หมวดหมู่ เช่น 'กระดาษ'
+  unit             String?            // หน่วยนับ เช่น 'รีม', 'ตลับ'
+  quantity         Int                @default(0) // ยอดคงเหลือ
+  minThreshold     Int                @default(0) // จุดเตือนสั่งซื้อ
+  unitPrice        Float              @default(0) // ราคาต่อหน่วย
+  stockTx          StockTransaction[]
+  requisitionItems RequisitionItem[]
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
 
   @@map("items")
 }
@@ -93,16 +94,56 @@ model Location {
 }
 
 model StockTransaction {
-  id              Int      @id @default(autoincrement())
-  itemId          Int
-  item            Item     @relation(fields: [itemId], references: [id])
-  transactionType String   // IN, OUT, ADJUSTMENT
-  quantity        Int
-  reference       String?  // e.g., PO Number, Request ID
-  remarks         String?
-  createdAt       DateTime @default(now())
+  id                  Int       @id @default(autoincrement())
+  itemId              Int
+  item                Item      @relation(fields: [itemId], references: [id])
+  transactionType     String    // IN, OUT, ADJUSTMENT
+  quantity            Int
+  unitPrice           Float     @default(0) // ราคาต่อหน่วย
+  totalPrice          Float     @default(0) // ราคารวม
+  receivedDate        DateTime? // วันที่รับตามเอกสาร
+  acquisitionMethod   String?   // วิธีการได้มา เช่น สอบราคา, ตกลงราคา
+  budgetType          String?   // ประเภทเงิน เช่น เงินงบประมาณ
+  operatorName        String?   // ชื่อผู้บันทึก
+  reference           String?   // e.g., PO Number, Request ID
+  remarks             String?
+  requisitionItem     RequisitionItem[]
+  createdAt           DateTime  @default(now())
 
   @@map("stock_transactions")
+}
+
+// คำขอเบิกพัสดุ
+model Requisition {
+  id          Int               @id @default(autoincrement())
+  reqCode     String            @unique // เลขที่คำขอ เช่น REQ-2569-0001
+  requesterId Int?              // ผู้ยื่นคำขอ (userId)
+  reason      String            // เหตุผลการเบิก
+  status      String            @default("PENDING") // PENDING, APPROVED, REJECTED
+  approvedBy  String?           // ชื่อผู้อนุมัติ
+  approvedAt  DateTime?         // วันที่อนุมัติ
+  remark      String?           // หมายเหตุของผู้อนุมัติ
+  items       RequisitionItem[]
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  @@map("requisitions")
+}
+
+// รายการพัสดุในคำขอเบิก
+model RequisitionItem {
+  id               Int              @id @default(autoincrement())
+  requisitionId    Int
+  requisition      Requisition      @relation(fields: [requisitionId], references: [id])
+  itemId           Int
+  item             Item             @relation(fields: [itemId], references: [id])
+  requestedQty     Int              // จำนวนที่ขอเบิก
+  approvedQty      Int?             // จำนวนที่อนุมัติ
+  stockTxId        Int?             // อ้างอิง StockTransaction ที่ตัด OUT
+  stockTx          StockTransaction? @relation(fields: [stockTxId], references: [id])
+  createdAt        DateTime         @default(now())
+
+  @@map("requisition_items")
 }
 
 model ActivityLog {

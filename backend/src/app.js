@@ -3,6 +3,9 @@ import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import assetRoutes from './routes/assetRoutes.js';
+import itemRoutes from './routes/itemRoutes.js';
+import stockReceiveRoutes from './routes/stockReceiveRoutes.js';
+import requisitionRoutes from './routes/requisitionRoutes.js';
 
 const app = express();
 
@@ -18,6 +21,9 @@ app.get('/health', (req, res) => {
 
 // API Routes
 app.use('/api/assets', assetRoutes);
+app.use('/api/items', itemRoutes);               // InventoryStock
+app.use('/api/stock-receive', stockReceiveRoutes); // InventoryReceive
+app.use('/api/requisitions', requisitionRoutes);  // NewRequisition
 
 // Error Handling Middleware
 app.use((err, req, res, next) => {

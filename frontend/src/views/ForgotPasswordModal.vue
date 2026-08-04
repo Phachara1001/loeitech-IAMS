@@ -1,0 +1,162 @@
+<script setup>
+import { ref } from 'vue'
+import { X, Mail, Loader2, CheckCircle2, KeyRound } from 'lucide-vue-next'
+
+const emit = defineEmits(['close'])
+
+const email = ref('')
+const isLoading = ref(false)
+const isSent = ref(false)
+const errorMessage = ref('')
+
+function handleSubmit() {
+  errorMessage.value = ''
+
+  if (!email.value.trim()) {
+    errorMessage.value = 'กรุณากรอกอีเมล'
+    return
+  }
+
+  const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+  if (!emailPattern.test(email.value.trim())) {
+    errorMessage.value = 'รูปแบบอีเมลไม่ถูกต้อง'
+    return
+  }
+
+  isLoading.value = true
+
+  // TODO: เชื่อมต่อ API จริงสำหรับส่งรหัสยืนยันไปยังอีเมล
+  setTimeout(() => {
+    isLoading.value = false
+    isSent.value = true
+  }, 1000)
+}
+
+function handleClose() {
+  emit('close')
+}
+</script>
+
+<template>
+  <Teleport to="body">
+    <div
+      class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#04140B]/60 backdrop-blur-sm font-sarabun"
+      @click.self="handleClose"
+    >
+      <div class="relative w-full max-w-md rounded-3xl overflow-hidden shadow-2xl modal-shimmer-bg">
+        <!-- แสงเรืองเพิ่มมิติเลื่อมเขียวอ่อน -->
+        <div class="absolute inset-0 pointer-events-none overflow-hidden">
+          <div class="absolute -top-10 -right-14 w-[220px] h-[220px] rounded-full bg-[#4ADE80] opacity-30 blur-[70px]"></div>
+          <div class="absolute -bottom-16 -left-10 w-[200px] h-[200px] rounded-full bg-[#04140B] opacity-70 blur-[60px]"></div>
+        </div>
+
+        <button
+          type="button"
+          @click="handleClose"
+          class="absolute top-4 right-4 z-20 text-white/60 hover:text-white transition"
+          aria-label="ปิดหน้าต่าง"
+        >
+          <X class="w-5 h-5" />
+        </button>
+
+        <div class="relative z-10 p-6 sm:p-7">
+          <template v-if="!isSent">
+            <div class="flex flex-col items-center text-center mb-6">
+              <div class="w-12 h-12 rounded-full bg-white/10 backdrop-blur-sm flex items-center justify-center mb-3 ring-1 ring-white/25">
+                <KeyRound class="w-6 h-6 text-emerald-200" />
+              </div>
+              <h3 class="text-xl font-bold text-white">ลืมรหัสผ่าน</h3>
+              <p class="text-white mt-1.5 text-sm leading-relaxed">
+                กรอกอีเมลที่ใช้ลงทะเบียนไว้ ระบบจะส่งรหัสยืนยันไปให้ทางอีเมล
+              </p>
+            </div>
+
+            <form class="space-y-4" @submit.prevent="handleSubmit" novalidate>
+              <div>
+                <label for="reset-email" class="block text-sm font-semibold text-white/90 mb-1.5">
+                  อีเมล
+                </label>
+                <div class="relative">
+                  <Mail class="w-4.5 h-4.5 text-[#0F3D26]/70 absolute left-4 top-1/2 -translate-y-1/2" />
+                  <input
+                    id="reset-email"
+                    v-model="email"
+                    type="email"
+                    autocomplete="email"
+                    placeholder="name@example.com"
+                    class="frosted-input w-full pl-12 pr-5 py-3.5 rounded-xl text-[#0B2417] text-sm placeholder:text-[#0F3D26]/50 focus:outline-none transition"
+                  />
+                </div>
+              </div>
+
+              <div
+                v-if="errorMessage"
+                class="flex items-start gap-2 rounded-xl bg-red-500/15 border border-red-400/30 px-3.5 py-2.5"
+                role="alert"
+              >
+                <p class="text-sm text-red-200">{{ errorMessage }}</p>
+              </div>
+
+              <button
+                type="submit"
+                :disabled="isLoading"
+                class="relative overflow-hidden w-full flex items-center justify-center gap-2 rounded-xl bg-white py-3 text-base font-bold text-[#072415] shadow-lg hover:shadow-xl hover:scale-[1.01] active:scale-[0.99] transition-all duration-200 disabled:opacity-70 disabled:cursor-not-allowed"
+              >
+                <Loader2 v-if="isLoading" class="w-4.5 h-4.5 animate-spin" />
+                <span>{{ isLoading ? 'กำลังส่งคำขอ...' : 'ส่งคำขอรหัสผ่าน' }}</span>
+              </button>
+            </form>
+          </template>
+
+          <template v-else>
+            <div class="flex flex-col items-center text-center py-2">
+              <div class="w-14 h-14 rounded-full bg-emerald-400/15 flex items-center justify-center mb-4 ring-1 ring-emerald-300/30">
+                <CheckCircle2 class="w-8 h-8 text-emerald-200" />
+              </div>
+              <h3 class="text-xl font-bold text-white mb-1.5">ส่งคำขอสำเร็จ</h3>
+              <p class="text-white text-sm leading-relaxed">
+                เราได้ส่งรหัสยืนยันไปที่ <span class="text-white font-semibold">{{ email }}</span>
+                แล้ว กรุณาตรวจสอบกล่องข้อความของท่าน
+              </p>
+              <button
+                type="button"
+                @click="handleClose"
+                class="mt-6 w-full rounded-xl bg-white py-3 text-base font-bold text-[#072415] shadow-lg hover:shadow-xl hover:scale-[1.01] active:scale-[0.99] transition-all duration-200"
+              >
+                ปิดหน้าต่างนี้
+              </button>
+            </div>
+          </template>
+        </div>
+      </div>
+    </div>
+  </Teleport>
+</template>
+
+<style scoped>
+@import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap');
+
+.font-sarabun {
+  font-family: 'Sarabun', sans-serif;
+}
+
+/* พื้นหลังไล่เฉดเขียวเข้มเลื่อมเขียวอ่อน */
+.modal-shimmer-bg {
+  background: linear-gradient(135deg, #04140B 0%, #0B2E1C 28%, #1B5E3C 58%, #2F9E5C 82%, #4ADE80 100%);
+}
+
+/* กล่องกรอกข้อมูลสไตล์กระจกฝ้า */
+.frosted-input {
+  background: rgba(255, 255, 255, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  box-shadow: 0 4px 18px rgba(4, 20, 11, 0.18);
+}
+
+.frosted-input:focus {
+  background: rgba(255, 255, 255, 0.75);
+  border-color: rgba(255, 255, 255, 0.8);
+  box-shadow: 0 0 0 4px rgba(74, 222, 128, 0.25);
+}
+</style>

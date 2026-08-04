@@ -7,16 +7,22 @@ datasource db {
 }
 
 model User {
-  id           Int           @id @default(autoincrement())
-  username     String        @unique
-  password     String
-  email        String        @unique
-  role         String        @default("USER") // e.g., ADMIN, USER
-  departmentId Int?
-  department   Department?   @relation(fields: [departmentId], references: [id])
-  activities   ActivityLog[]
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
+  id                   Int           @id @default(autoincrement())
+  username             String        @unique
+  password             String
+  email                String        @unique
+  name                 String        @default("")
+  role                 String        @default("USER") // e.g., ADMIN, USER
+  departmentId         Int?
+  department           Department?   @relation(fields: [departmentId], references: [id])
+  activities           ActivityLog[]
+
+  // สำหรับฟีเจอร์ลืมรหัสผ่าน: เก็บรหัสยืนยัน 6 หลักและเวลาหมดอายุ
+  resetPasswordCode    String?
+  resetPasswordExpires DateTime?
+
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
 
   @@map("users")
 }

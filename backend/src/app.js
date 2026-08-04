@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
+import authRoutes from './routes/authRoutes.js';
 import assetRoutes from './routes/assetRoutes.js';
 import itemRoutes from './routes/itemRoutes.js';
 import stockReceiveRoutes from './routes/stockReceiveRoutes.js';
@@ -20,6 +21,7 @@ app.get('/health', (req, res) => {
 });
 
 // API Routes
+app.use('/api/auth', authRoutes);              // Login, Register, Forgot/Reset Password
 app.use('/api/assets', assetRoutes);
 app.use('/api/items', itemRoutes);               // InventoryStock
 app.use('/api/stock-receive', stockReceiveRoutes); // InventoryReceive

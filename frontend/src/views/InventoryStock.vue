@@ -6,8 +6,10 @@ import {
   Package, AlertTriangle, X, Check, Loader2, Boxes, ChevronDown
 } from 'lucide-vue-next'
 import * as inventoryApi from '../services/inventoryApi.js'
+import { useToast } from '../composables/useToast.js'
 
 const router = useRouter()
+const toast = useToast()
 
 // สิทธิ์การเข้าถึง
 const currentRole = ref(localStorage.getItem('tcaims_role') || 'admin')
@@ -36,6 +38,7 @@ async function fetchItems() {
     categories.value = uniqueCats
   } catch (err) {
     loadError.value = err.message || 'ไม่สามารถโหลดข้อมูลได้'
+    toast.error('ไม่สามารถโหลดข้อมูลพัสดุได้')
   } finally {
     isLoading.value = false
   }
@@ -135,12 +138,14 @@ async function saveForm() {
       const updated = await inventoryApi.updateItem(form.value.id, payload)
       const index = items.value.findIndex((i) => i.id === form.value.id)
       if (index !== -1) items.value[index] = updated
+      toast.success('แก้ไขข้อมูลพัสดุสำเร็จ')
     }
 
     isFormOpen.value = false
     await fetchItems() // โหลดใหม่เพื่อให้ข้อมูลสดเสมอ
   } catch (err) {
     formError.value = err.message || 'บันทึกไม่สำเร็จ'
+    toast.error('บันทึกข้อมูลไม่สำเร็จ: ' + formError.value)
   } finally {
     isSaving.value = false
   }
@@ -166,9 +171,10 @@ async function deleteItem() {
   try {
     await inventoryApi.deleteItem(itemToDelete.value.id)
     items.value = items.value.filter((i) => i.id !== itemToDelete.value.id)
+    toast.success('ลบพัสดุเรียบร้อยแล้ว')
     itemToDelete.value = null
   } catch (err) {
-    alert('ลบไม่สำเร็จ: ' + err.message)
+    toast.error('ลบไม่สำเร็จ: ' + err.message)
   } finally {
     isDeleting.value = false
   }

@@ -19,6 +19,9 @@ import {
   Loader2
 } from 'lucide-vue-next'
 import * as inventoryApi from '../services/inventoryApi.js'
+import { useToast } from '../composables/useToast.js'
+
+const toast = useToast()
 
 // --- User Context & Role Check ---
 const currentUser = ref({
@@ -49,6 +52,7 @@ async function fetchItems() {
     items.value = await inventoryApi.getItems()
   } catch (err) {
     console.error('โหลดรายการวัสดุล้มเหลว:', err.message)
+    toast.error('ไม่สามารถโหลดข้อมูลวัสดุสิ้นเปลืองได้')
   } finally {
     isLoadingItems.value = false
   }
@@ -171,6 +175,7 @@ const handleSaveStockReceive = async () => {
     const result = await inventoryApi.receiveStock(payload)
     lastSavedData.value = result.data
     showSuccessModal.value = true
+    toast.success('บันทึกรับเข้าพัสดุสำเร็จ!')
 
     // รีเฟรชข้อมูล
     await fetchItems()
@@ -191,6 +196,7 @@ const handleSaveStockReceive = async () => {
     }
   } catch (err) {
     saveError.value = err.message || 'บันทึกไม่สำเร็จ กรุณาลองใหม่'
+    toast.error('เกิดข้อผิดพลาด: ' + saveError.value)
   } finally {
     isSaving.value = false
   }

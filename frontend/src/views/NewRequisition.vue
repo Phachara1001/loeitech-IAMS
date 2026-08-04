@@ -17,6 +17,9 @@ import {
   RotateCcw
 } from 'lucide-vue-next'
 import * as inventoryApi from '../services/inventoryApi.js'
+import { useToast } from '../composables/useToast.js'
+
+const toast = useToast()
 
 // ==========================================
 // 1. ดึงรายการพัสดุจาก Backend
@@ -48,6 +51,7 @@ async function fetchSupplies() {
     }))
   } catch (err) {
     loadError.value = err.message || 'โหลดรายการพัสดุไม่สำเร็จ'
+    toast.error('ไม่สามารถโหลดข้อมูลคลังพัสดุได้')
   } finally {
     isLoadingSupplies.value = false
   }
@@ -201,8 +205,10 @@ async function handleSubmit() {
     submittedSummary.value = cart.value.map((c) => ({ ...c }))
     submittedReason.value = reason.value.trim()
     submitted.value = true
+    toast.success('ส่งคำขอเบิกพัสดุสำเร็จ!')
   } catch (err) {
     submitError.value = err.message || 'ส่งคำขอไม่สำเร็จ กรุณาลองใหม่'
+    toast.error('เกิดข้อผิดพลาด: ' + submitError.value)
   } finally {
     isSubmitting.value = false
   }

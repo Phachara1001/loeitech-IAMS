@@ -1,12 +1,16 @@
 <script setup>
 import { ref } from 'vue'
+import axios from 'axios'
 import { useRouter, useRoute } from 'vue-router'
 import { User, Lock, Eye, EyeOff, AlertCircle, Package, Boxes, ClipboardList, Loader2 } from 'lucide-vue-next'
 import ForgotPasswordModal from './ForgotPasswordModal.vue'
 import RegisterModal from './RegisterModal.vue'
+import { useToast } from '../composables/useToast'
+import { API_BASE } from '../config/api'
 
 const router = useRouter()
 const route = useRoute()
+const toast = useToast()
 
 const username = ref('')
 const password = ref('')
@@ -17,7 +21,14 @@ const isLoading = ref(false)
 const showForgotPasswordModal = ref(false)
 const showRegisterModal = ref(false)
 
-function handleSubmit() {
+function extractErrorMessage(error) {
+  const data = error.response?.data
+  if (data?.errors?.length) return data.errors.join(' / ')
+  if (data?.message) return data.message
+  return 'เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง'
+}
+
+async function handleSubmit() {
   errorMessage.value = ''
 
   if (!username.value.trim() || !password.value.trim()) {
@@ -27,14 +38,28 @@ function handleSubmit() {
 
   isLoading.value = true
 
-  setTimeout(() => {
-    isLoading.value = false
-    localStorage.setItem('tcaims_auth_token', 'mock-token')
-    localStorage.setItem('tcaims_user', JSON.stringify({ name: username.value }))
+  try {
+    const response = await axios.post(`${API_BASE}/auth/login`, {
+      username: username.value.trim(),
+      password: password.value
+    })
+
+    const { user, token } = response.data.data
+
+    localStorage.setItem('tcaims_auth_token', token)
+    localStorage.setItem('tcaims_user', JSON.stringify({ name: user.name || user.username, avatar: null }))
+    // role จาก backend เป็นตัวพิมพ์ใหญ่ (ADMIN/STAFF/USER) แปลงเป็นพิมพ์เล็กให้ตรงกับที่หน้าอื่นเช็คสิทธิ์ไว้
+    localStorage.setItem('tcaims_role', String(user.role || 'user').toLowerCase())
 
     const redirectPath = route.query.redirect || '/'
     router.push(redirectPath)
-  }, 900)
+  } catch (error) {
+    const msg = extractErrorMessage(error)
+    errorMessage.value = msg
+    toast.error(msg)
+  } finally {
+    isLoading.value = false
+  }
 }
 
 function handleForgotPassword() {
@@ -43,6 +68,11 @@ function handleForgotPassword() {
 
 function handleOpenRegister() {
   showRegisterModal.value = true
+}
+
+function handleRegistered(registeredEmail) {
+  username.value = registeredEmail
+  toast.info('กรอกรหัสผ่านที่ตั้งไว้เพื่อเข้าสู่ระบบ')
 }
 </script>
 
@@ -242,6 +272,7 @@ function handleOpenRegister() {
     <RegisterModal
       v-if="showRegisterModal"
       @close="showRegisterModal = false"
+      @registered="handleRegistered"
     />
   </div>
 </template>

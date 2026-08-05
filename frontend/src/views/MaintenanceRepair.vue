@@ -4,11 +4,15 @@ import {
   Wrench, Plus, X, Check, Loader2, AlertTriangle, Image as ImageIcon,
   CheckCircle2, Ban, History, DollarSign, Camera
 } from 'lucide-vue-next'
+import * as inventoryApi from '../services/inventoryApi.js'
+import { useToast } from '../composables/useToast.js'
+
+const toast = useToast()
 
 // สิทธิ์การเข้าถึง: ทุก role แจ้งซ่อมได้ (Admin, Staff, User) แต่การประเมิน/อนุมัติทำได้เฉพาะ Admin, Staff
-// TODO: เชื่อมกับระบบยืนยันตัวตนจริง เช่น decode role จาก JWT หรือข้อมูลผู้ใช้หลัง login
 const currentRole = ref(localStorage.getItem('tcaims_role') || 'admin')
-const canManage = computed(() => ['admin', 'staff'].includes(currentRole.value))
+const canManage = computed(() => ['admin', 'staff', 'Admin', 'Staff'].includes(currentRole.value))
+const currentUserName = ref(localStorage.getItem('tcaims_name') || 'ผู้ใช้ทั่วไป')
 
 const tabs = [
   { key: 'new', label: 'แจ้งซ่อมใหม่', icon: Plus, color: 'text-[#065f46]', chip: 'bg-emerald-50 ring-emerald-100' },
@@ -17,16 +21,48 @@ const tabs = [
 ]
 const activeTab = ref('new')
 
-/* ---------------- ครุภัณฑ์สำหรับแจ้งซ่อม (mock) ---------------- */
-const assets = ref([
-  { id: 'AST-0001', name: 'เครื่องคอมพิวเตอร์ตั้งโต๊ะ Acer Veriton', location: 'อาคาร 1 ห้อง 201' },
-  { id: 'AST-0011', name: 'เครื่องปรับอากาศ Daikin 18000 BTU', location: 'อาคาร 3 สำนักงานงานพัสดุ' },
-  { id: 'AST-0032', name: 'เครื่องพิมพ์ Laser HP LaserJet P1102', location: 'อาคาร 1 ห้อง 101' },
-  { id: 'AST-0071', name: 'โปรเจกเตอร์ Epson EB-X05', location: 'อาคาร 1 ห้อง 201' }
-])
+const assets = ref([])
+const repairRequests = ref([])
+const isLoading = ref(false)
+const loadError = ref('')
+
+async function fetchData() {
+  isLoading.value = true
+  loadError.value = ''
+  try {
+    const [assetsData, repairsData] = await Promise.all([
+      inventoryApi.getAssets(),
+      inventoryApi.getRepairs()
+    ])
+    assets.value = assetsData
+    repairRequests.value = repairsData
+  } catch (err) {
+    loadError.value = err.message || 'โหลดข้อมูลล้มเหลว'
+    toast.error('ไม่สามารถโหลดข้อมูลแจ้งซ่อมได้: ' + loadError.value)
+  } finally {
+    isLoading.value = false
+  }
+}
+
+onMounted(fetchData)
+
+// รายการซ่อมแซมที่กำลังรอดำเนินการ (PENDING, APPROVED, REPAIRING)
+const activeRepairs = computed(() => {
+  return repairRequests.value.filter(r => r.status === 'PENDING' || r.status === 'APPROVED' || r.status === 'REPAIRING')
+})
+
+// ประวัติซ่อมเสร็จสิ้นแล้ว หรือถูกปฏิเสธ (COMPLETED, REJECTED)
+const repairHistory = computed(() => {
+  return repairRequests.value.filter(r => r.status === 'COMPLETED' || r.status === 'REJECTED')
+})
+
+// คำนวณยอดรวมค่าใช้จ่ายการซ่อมแซมทั้งหมด
+const totalRepairCost = computed(() => {
+  return repairHistory.value.reduce((sum, r) => sum + (r.repairCost || 0), 0)
+})
 
 /* ---------------- ฟอร์มแจ้งซ่อม ---------------- */
-const form = ref({ assetId: '', detail: '', photoPreview: null })
+const form = ref({ assetId: '', detail: '', urgency: 'NORMAL', photoPreview: null })
 const fileInputRef = ref(null)
 const formError = ref('')
 const isSubmitting = ref(false)
@@ -48,7 +84,7 @@ function handlePhotoChange(event) {
   reader.readAsDataURL(file)
 }
 
-function submitRepairRequest() {
+async function submitRepairRequest() {
   if (!form.value.assetId || !form.value.detail.trim()) {
     formError.value = 'กรุณาเลือกครุภัณฑ์และระบุอาการชำรุดให้ครบถ้วน'
     return
@@ -56,64 +92,39 @@ function submitRepairRequest() {
   isSubmitting.value = true
   formError.value = ''
 
-  // TODO: เชื่อมต่อ API บันทึกคำขอแจ้งซ่อมจริงในภายหลัง (รวมถึงอัปโหลดรูปภาพ)
-  setTimeout(() => {
-    const asset = assets.value.find((a) => a.id === form.value.assetId)
-    const nextNumber = repairRequests.value.length + 1
-    repairRequests.value.unshift({
-      id: `RPR-2569-${String(nextNumber).padStart(3, '0')}`,
-      assetName: asset?.name || '',
-      assetId: form.value.assetId,
-      detail: form.value.detail.trim(),
-      photo: form.value.photoPreview,
-      reportedBy: 'ผู้ใช้งานปัจจุบัน',
-      date: new Date().toLocaleDateString('th-TH', { dateStyle: 'medium' }),
-      status: 'รอประเมิน',
-      decision: '',
-      cost: null
-    })
+  try {
+    const payload = {
+      assetId: Number(form.value.assetId),
+      reporterName: currentUserName.value,
+      description: form.value.detail.trim(),
+      urgency: form.value.urgency
+    }
 
-    form.value = { assetId: '', detail: '', photoPreview: null }
-    isSubmitting.value = false
+    await inventoryApi.createRepair(payload)
+    toast.success('ยื่นเรื่องแจ้งซ่อมครุภัณฑ์สำเร็จ!')
+    form.value = { assetId: '', detail: '', urgency: 'NORMAL', photoPreview: null }
     showSubmitSuccess.value = true
     activeTab.value = 'list'
+    await fetchData()
     setTimeout(() => { showSubmitSuccess.value = false }, 3000)
-  }, 700)
+  } catch (err) {
+    formError.value = err.message || 'ส่งคำขอแจ้งซ่อมไม่สำเร็จ'
+    toast.error('เกิดข้อผิดพลาด: ' + formError.value)
+  } finally {
+    isSubmitting.value = false
+  }
 }
 
-/* ---------------- รายการแจ้งซ่อม ---------------- */
-const repairRequests = ref([
-  {
-    id: 'RPR-2569-001',
-    assetName: 'เครื่องพิมพ์ Laser HP LaserJet P1102',
-    assetId: 'AST-0032',
-    detail: 'พิมพ์งานแล้วมีเส้นดำพาดกลางหน้ากระดาษ และมักติดกระดาษบ่อยครั้ง',
-    photo: null,
-    reportedBy: 'ครูประจำแผนก',
-    date: '18 ก.ค. 2569',
-    status: 'อนุมัติส่งซ่อม',
-    decision: 'เห็นควรส่งซ่อม เนื่องจากค่าซ่อมประเมินไม่เกิน 20% ของราคาเครื่องใหม่',
-    cost: null
-  },
-  {
-    id: 'RPR-2569-002',
-    assetName: 'โปรเจกเตอร์ Epson EB-X05',
-    assetId: 'AST-0071',
-    detail: 'ภาพฉายมีสีเพี้ยน และหลอดภาพเริ่มมืดลงเรื่อย ๆ',
-    photo: null,
-    reportedBy: 'สมชาย ใจดี',
-    date: '12 ก.ค. 2569',
-    status: 'รอประเมิน',
-    decision: '',
-    cost: null
-  }
-])
-
 function statusStyle(status) {
-  if (status === 'ซ่อมเสร็จแล้ว') return 'bg-emerald-50 text-emerald-700 border-emerald-100'
-  if (status === 'อนุมัติส่งซ่อม') return 'bg-sky-50 text-sky-700 border-sky-100'
-  if (status === 'แทงชำรุด') return 'bg-red-50 text-red-700 border-red-100'
-  return 'bg-amber-50 text-amber-700 border-amber-100'
+  if (status === 'COMPLETED' || status === 'ซ่อมเสร็จแล้ว') return 'bg-emerald-50 text-emerald-700 border-emerald-100'
+  if (status === 'APPROVED' || status === 'REPAIRING' || status === 'อนุมัติส่งซ่อม') return 'bg-sky-50 text-sky-700 border-sky-100'
+  if (status === 'REJECTED' || status === 'แทงชำรุด') return 'bg-red-50 text-red-700 border-red-100'
+  return 'bg-amber-50 text-amber-700 border-amber-100' // PENDING (รอประเมิน)
+}
+
+function formatThaiDate(dateStr) {
+  if (!dateStr) return '-'
+  return new Date(dateStr).toLocaleDateString('th-TH', { dateStyle: 'medium' })
 }
 
 /* ---------------- ประเมิน/อนุมัติ (Admin, Staff) ---------------- */
@@ -127,19 +138,40 @@ function openEvaluate(req) {
 function closeEvaluate() {
   evaluatingId.value = null
 }
-function approveRepair(req) {
-  req.status = 'อนุมัติส่งซ่อม'
-  req.decision = evalDecision.value.trim() || 'เห็นควรส่งซ่อม'
-  evaluatingId.value = null
+
+async function approveRepair(req) {
+  try {
+    await inventoryApi.updateRepairStatus(req.id, {
+      status: 'APPROVED',
+      approvedBy: currentUserName.value,
+      remark: evalDecision.value.trim() || 'เห็นควรส่งซ่อม'
+    })
+    toast.success('อนุมัติสั่งซ่อมครุภัณฑ์เรียบร้อย')
+    evaluatingId.value = null
+    await fetchData()
+  } catch (err) {
+    toast.error('ไม่สามารถอนุมัติได้: ' + err.message)
+  }
 }
-function markAsDamaged(req) {
-  req.status = 'แทงชำรุด'
-  req.decision = evalDecision.value.trim() || 'ค่าซ่อมไม่คุ้มค่า เห็นควรทำเรื่องแทงชำรุด'
-  evaluatingId.value = null
+
+async function markAsDamaged(req) {
+  try {
+    await inventoryApi.updateRepairStatus(req.id, {
+      status: 'REJECTED',
+      approvedBy: currentUserName.value,
+      remark: evalDecision.value.trim() || 'ค่าซ่อมไม่คุ้มค่า เห็นควรทำเรื่องแทงชำรุด/จำหน่ายออก'
+    })
+    toast.success('ปฏิเสธการซ่อม/ทำเรื่องแทงชำรุดครุภัณฑ์แล้ว')
+    evaluatingId.value = null
+    await fetchData()
+  } catch (err) {
+    toast.error('ล้มเหลว: ' + err.message)
+  }
 }
 
 const completingId = ref(null)
 const completeCost = ref('')
+
 function openComplete(req) {
   completingId.value = req.id
   completeCost.value = ''
@@ -147,27 +179,26 @@ function openComplete(req) {
 function closeComplete() {
   completingId.value = null
 }
-function completeRepair(req) {
-  req.status = 'ซ่อมเสร็จแล้ว'
-  req.cost = Number(completeCost.value) || 0
-  repairHistory.value.unshift({
-    id: req.id,
-    assetName: req.assetName,
-    assetId: req.assetId,
-    detail: req.detail,
-    date: new Date().toLocaleDateString('th-TH', { dateStyle: 'medium' }),
-    cost: req.cost
-  })
-  completingId.value = null
+
+async function completeRepair(req) {
+  if (!completeCost.value) {
+    toast.warning('กรุณาระบุค่าใช้จ่ายการซ่อมจริง')
+    return
+  }
+  try {
+    await inventoryApi.updateRepairStatus(req.id, {
+      status: 'COMPLETED',
+      approvedBy: currentUserName.value,
+      repairCost: Number(completeCost.value) || 0,
+      remark: 'ดำเนินการซ่อมแซมครุภัณฑ์เสร็จสิ้นเรียบร้อย'
+    })
+    toast.success('บันทึกปิดงานซ่อมแซมสำเร็จ!')
+    completingId.value = null
+    await fetchData()
+  } catch (err) {
+    toast.error('บันทึกปิดงานล้มเหลว: ' + err.message)
+  }
 }
-
-/* ---------------- ประวัติการซ่อม/ค่าใช้จ่าย ---------------- */
-const repairHistory = ref([
-  { id: 'RPR-2568-014', assetName: 'เครื่องปรับอากาศ Daikin 18000 BTU', assetId: 'AST-0011', detail: 'ล้างทำความสะอาดคอยล์เย็นและเติมน้ำยาแอร์', date: '02 มี.ค. 2569', cost: 1800 },
-  { id: 'RPR-2568-009', assetName: 'เครื่องคอมพิวเตอร์ตั้งโต๊ะ Acer Veriton', assetId: 'AST-0001', detail: 'เปลี่ยนพาวเวอร์ซัพพลายที่เสีย', date: '14 ม.ค. 2569', cost: 950 }
-])
-
-const totalRepairCost = computed(() => repairHistory.value.reduce((sum, r) => sum + (r.cost || 0), 0))
 </script>
 
 <template>
@@ -225,13 +256,24 @@ const totalRepairCost = computed(() => repairHistory.value.reduce((sum, r) => su
     </div>
 
     <!-- ===== แท็บ: แจ้งซ่อมใหม่ (ทุก role) ===== -->
-    <div v-if="activeTab === 'new'" class="bg-white rounded-2xl border border-emerald-100 shadow-sm hover:shadow-md transition-shadow p-6 max-w-2xl">
+    <div v-if="activeTab === 'new'" class="bg-white rounded-2xl border border-[#047857] shadow-sm hover:shadow-md transition-shadow p-6 max-w-2xl">
       <div class="space-y-4">
         <div>
           <label class="block text-sm font-medium text-slate-700 mb-1.5">เลือกครุภัณฑ์ที่ต้องการแจ้งซ่อม</label>
           <select v-model="form.assetId" class="w-full px-3.5 py-2.5 rounded-lg border border-slate-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#065f46]/20 focus:border-[#065f46] transition">
             <option value="" disabled>-- เลือกครุภัณฑ์ --</option>
-            <option v-for="a in assets" :key="a.id" :value="a.id">{{ a.name }} ({{ a.location }})</option>
+            <option v-for="a in assets" :key="a.id" :value="a.id">
+              [{{ a.seq || '-' }}] {{ a.name }}
+            </option>
+          </select>
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium text-slate-700 mb-1.5">ระดับความเร่งด่วน</label>
+          <select v-model="form.urgency" class="w-full px-3.5 py-2.5 rounded-lg border border-slate-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#065f46]/20 focus:border-[#065f46] transition">
+            <option value="NORMAL">ปกติ (NORMAL)</option>
+            <option value="URGENT">ด่วน (URGENT)</option>
+            <option value="CRITICAL">ด่วนที่สุด (CRITICAL)</option>
           </select>
         </div>
 
@@ -280,33 +322,37 @@ const totalRepairCost = computed(() => repairHistory.value.reduce((sum, r) => su
 
     <!-- ===== แท็บ: รายการแจ้งซ่อม ===== -->
     <div v-else-if="activeTab === 'list'" class="bg-white rounded-2xl border border-emerald-100 shadow-sm divide-y divide-slate-100">
-      <div v-for="req in repairRequests" :key="req.id" class="p-5 hover:bg-emerald-50/40 transition-colors border-l-4 border-transparent hover:border-[#065f46]">
+      <div v-for="req in activeRepairs" :key="req.id" class="p-5 hover:bg-emerald-50/40 transition-colors border-l-4 border-transparent hover:border-[#065f46]">
         <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
           <div class="flex gap-3 min-w-0">
             <div class="w-14 h-14 rounded-lg bg-slate-50 border border-slate-100 overflow-hidden shrink-0 flex items-center justify-center">
-              <img v-if="req.photo" :src="req.photo" alt="รูปอาการชำรุด" class="w-full h-full object-cover" />
-              <ImageIcon v-else class="w-5 h-5 text-slate-300" />
+              <ImageIcon class="w-5 h-5 text-slate-300" />
             </div>
             <div class="min-w-0">
               <div class="flex items-center gap-2 flex-wrap">
-                <span class="text-xs font-mono text-slate-400">{{ req.id }}</span>
-                <span :class="['px-2.5 py-0.5 rounded-full text-xs font-semibold border', statusStyle(req.status)]">{{ req.status }}</span>
+                <span class="text-xs font-mono text-slate-400">{{ req.repairCode }}</span>
+                <span :class="['px-2.5 py-0.5 rounded-full text-xs font-semibold border', statusStyle(req.status)]">
+                  {{ req.status === 'PENDING' ? 'รอประเมิน' : req.status === 'APPROVED' ? 'อนุมัติส่งซ่อม' : req.status === 'REPAIRING' ? 'กำลังซ่อม' : req.status }}
+                </span>
+                <span v-if="req.urgency !== 'NORMAL'" class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-100">
+                  {{ req.urgency === 'URGENT' ? 'ด่วน' : 'ด่วนที่สุด' }}
+                </span>
               </div>
-              <p class="text-sm font-semibold text-slate-800 mt-1.5">{{ req.assetName }} <span class="text-slate-400 font-normal">({{ req.assetId }})</span></p>
-              <p class="text-xs text-slate-500 mt-1">{{ req.detail }}</p>
-              <p class="text-xs text-slate-400 mt-1">แจ้งโดย {{ req.reportedBy }} · {{ req.date }}</p>
-              <p v-if="req.decision" class="text-xs text-slate-500 mt-1.5 bg-slate-50 rounded-lg px-2.5 py-1.5">
-                <span class="font-semibold text-slate-600">ผลการประเมิน:</span> {{ req.decision }}
+              <p class="text-sm font-semibold text-slate-800 mt-1.5">{{ req.asset?.name || 'ครุภัณฑ์' }} <span class="text-slate-400 font-normal">({{ req.asset?.seq || '-' }})</span></p>
+              <p class="text-xs text-slate-500 mt-1">{{ req.description }}</p>
+              <p class="text-xs text-slate-400 mt-1">แจ้งโดย {{ req.reporterName }} · {{ formatThaiDate(req.createdAt) }}</p>
+              <p v-if="req.remark" class="text-xs text-slate-500 mt-1.5 bg-slate-50 rounded-lg px-2.5 py-1.5">
+                <span class="font-semibold text-slate-600">ความเห็น/เหตุผล:</span> {{ req.remark }}
               </p>
             </div>
           </div>
 
           <div v-if="canManage" class="flex items-center gap-2 shrink-0">
-            <button v-if="req.status === 'รอประเมิน'" type="button" @click="openEvaluate(req)" class="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold bg-sky-50 text-sky-700 hover:bg-sky-100 hover:shadow-sm transition-all">
+            <button v-if="req.status === 'PENDING'" type="button" @click="openEvaluate(req)" class="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold bg-sky-50 text-sky-700 hover:bg-sky-100 hover:shadow-sm transition-all">
               <CheckCircle2 class="w-3.5 h-3.5" />
               ประเมิน
             </button>
-            <button v-else-if="req.status === 'อนุมัติส่งซ่อม'" type="button" @click="openComplete(req)" class="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold bg-emerald-50 text-emerald-700 hover:bg-emerald-100 hover:shadow-sm transition-all">
+            <button v-else-if="req.status === 'APPROVED' || req.status === 'REPAIRING'" type="button" @click="openComplete(req)" class="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold bg-emerald-50 text-emerald-700 hover:bg-emerald-100 hover:shadow-sm transition-all">
               <Check class="w-3.5 h-3.5" />
               บันทึกซ่อมเสร็จ
             </button>
@@ -344,7 +390,7 @@ const totalRepairCost = computed(() => repairHistory.value.reduce((sum, r) => su
         </div>
       </div>
 
-      <div v-if="repairRequests.length === 0" class="py-16 text-center text-slate-400 text-sm">ยังไม่มีรายการแจ้งซ่อม</div>
+      <div v-if="activeRepairs.length === 0" class="py-16 text-center text-slate-400 text-sm">ยังไม่มีรายการแจ้งซ่อมที่อยู่ระหว่างดำเนินการ</div>
     </div>
 
     <!-- ===== แท็บ: ประวัติการซ่อม/ค่าใช้จ่าย ===== -->
@@ -373,11 +419,16 @@ const totalRepairCost = computed(() => repairHistory.value.reduce((sum, r) => su
             </thead>
             <tbody class="divide-y divide-slate-100">
               <tr v-for="h in repairHistory" :key="h.id" class="group hover:bg-emerald-50/60 transition-colors">
-                <td class="px-4 py-3 text-slate-500 font-mono text-xs border-l-4 border-transparent group-hover:border-[#065f46] transition-colors">{{ h.id }}</td>
-                <td class="px-4 py-3 text-slate-800 font-medium">{{ h.assetName }}</td>
-                <td class="px-4 py-3 text-slate-500">{{ h.detail }}</td>
-                <td class="px-4 py-3 text-slate-500">{{ h.date }}</td>
-                <td class="px-4 py-3 text-right text-slate-800 font-semibold">{{ h.cost.toLocaleString() }} บาท</td>
+                <td class="px-4 py-3 text-slate-500 font-mono text-xs border-l-4 border-transparent group-hover:border-[#065f46] transition-colors">{{ h.repairCode }}</td>
+                <td class="px-4 py-3 text-slate-800 font-medium">
+                  {{ h.asset?.name || 'ครุภัณฑ์' }} <span class="text-slate-400 font-normal">({{ h.asset?.seq || '-' }})</span>
+                </td>
+                <td class="px-4 py-3 text-slate-500">
+                  {{ h.description }}
+                  <p v-if="h.remark" class="text-xs text-slate-400 mt-1">หมายเหตุ: {{ h.remark }}</p>
+                </td>
+                <td class="px-4 py-3 text-slate-500">{{ formatThaiDate(h.finishDate || h.updatedAt) }}</td>
+                <td class="px-4 py-3 text-right text-slate-800 font-semibold">{{ h.repairCost.toLocaleString() }} บาท</td>
               </tr>
               <tr v-if="repairHistory.length === 0">
                 <td colspan="5" class="px-4 py-12 text-center text-slate-400">ยังไม่มีประวัติการซ่อม</td>

@@ -57,3 +57,62 @@ export const createRequisition = (data) =>
 /** ดึงรายการคำขอเบิกทั้งหมด */
 export const getRequisitions = (params = {}) =>
   api.get('/api/requisitions', { params }).then((r) => r.data.data)
+
+/** อนุมัติคำขอเบิก */
+export const approveRequisition = (id, data) =>
+  api.put(`/api/requisitions/${id}/approve`, data).then((r) => r.data)
+
+/** ปฏิเสธคำขอเบิก */
+export const rejectRequisition = (id, data) =>
+  api.put(`/api/requisitions/${id}/reject`, data).then((r) => r.data)
+
+// ==========================================
+// Assets (Fixed Assets)
+// ==========================================
+
+/** ดึงข้อมูลครุภัณฑ์ทั้งหมด */
+export const getAssets = () =>
+  api.get('/api/assets').then((r) => r.data.data)
+
+// ==========================================
+// Borrows (Borrow & Return)
+// ==========================================
+
+/** ดึงรายการประวัติและคำขอยืมทั้งหมด */
+export const getBorrows = () =>
+  api.get('/api/borrows').then((r) => r.data.data)
+
+/** ยื่นคำขอยืมพัสดุครุภัณฑ์ */
+export const createBorrow = (data) =>
+  api.post('/api/borrows', data).then((r) => r.data)
+
+/** อนุมัติการยืมพัสดุ */
+export const approveBorrow = (id, data) =>
+  api.put(`/api/borrows/${id}/approve`, data).then((r) => r.data)
+
+/** ปฏิเสธการยืมพัสดุ */
+export const rejectBorrow = (id, data) =>
+  api.put(`/api/borrows/${id}/reject`, data).then((r) => r.data)
+
+/** บันทึกรับคืนพัสดุครุภัณฑ์ */
+export const returnBorrow = (id, data) =>
+  api.put(`/api/borrows/${id}/return`, data).then((r) => r.data)
+
+// ==========================================
+// Repairs (Maintenance & Repair)
+// ==========================================
+
+/** ดึงข้อมูลรายการซ่อมแซมและประวัติทั้งหมด */
+export const getRepairs = () =>
+  api.get('/api/repairs').then((r) => r.data.data)
+
+/** ยื่นเรื่องแจ้งซ่อมครุภัณฑ์พัสดุ */
+export const createRepair = (data) =>
+  api.post('/api/repairs', data).then((r) => r.data)
+
+/** อัปเดตสถานะการแจ้งซ่อม (อนุมัติ, กำลังซ่อม, ซ่อมสำเร็จ) */
+export const updateRepairStatus = (id, data) =>
+  api.put(`/api/repairs/${id}/status`, data).then((r) => r.data)
+
+
+

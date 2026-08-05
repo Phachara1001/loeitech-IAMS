@@ -6,6 +6,8 @@ import assetRoutes from './routes/assetRoutes.js';
 import itemRoutes from './routes/itemRoutes.js';
 import stockReceiveRoutes from './routes/stockReceiveRoutes.js';
 import requisitionRoutes from './routes/requisitionRoutes.js';
+import borrowRoutes from './routes/borrowRoutes.js';
+import repairRoutes from './routes/repairRoutes.js';
 
 const app = express();
 
@@ -24,6 +26,8 @@ app.use('/api/assets', assetRoutes);
 app.use('/api/items', itemRoutes);               // InventoryStock
 app.use('/api/stock-receive', stockReceiveRoutes); // InventoryReceive
 app.use('/api/requisitions', requisitionRoutes);  // NewRequisition
+app.use('/api/borrows', borrowRoutes);             // BorrowReturn
+app.use('/api/repairs', repairRoutes);             // MaintenanceRepair
 
 // Error Handling Middleware
 app.use((err, req, res, next) => {

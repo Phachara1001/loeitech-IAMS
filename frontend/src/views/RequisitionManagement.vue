@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import {
   FileText,
   Search,
@@ -15,16 +15,21 @@ import {
   AlertCircle,
   TrendingDown,
   History,
-  Calendar
+  Calendar,
+  Loader2
 } from 'lucide-vue-next'
+import * as inventoryApi from '../services/inventoryApi.js'
+import { useToast } from '../composables/useToast.js'
+
+const toast = useToast()
 
 // ==========================================
 // 1. USER & ROLE CONTEXT
 // ==========================================
 const currentUser = ref({
   id: 'USR-001',
-  name: 'นายสมชาย ใจดี',
-  role: 'User' // 'Admin' | 'Staff' | 'User'
+  name: localStorage.getItem('tcaims_name') || 'ผู้ตรวจสอบพัสดุ',
+  role: localStorage.getItem('tcaims_role') || 'Admin' // 'Admin' | 'Staff' | 'User'
 })
 
 // --- Helper: Format DATETIME เป็นภาษาไทย ---
@@ -44,64 +49,32 @@ const formatThaiDateTime = (dateString) => {
 }
 
 // ==========================================
-// 2. MOCK DATABASE (Simulated PostgreSQL Stock)
+// 2. REAL DATABASE CONNECTION
 // ==========================================
-const inventoryStock = ref([
-  { id: 'SKU-001', name: 'กระดาษ A4 80 GSM (รีม)', category: 'วัสดุสำนักงาน', qty: 150, unit: 'รีม' },
-  { id: 'SKU-002', name: 'ปากกาลูกลื่น น้ำเงิน 0.5mm', category: 'วัสดุสำนักงาน', qty: 320, unit: 'ด้าม' },
-  { id: 'SKU-003', name: 'หมึกพิมพ์ HP Laser Toner 85A', category: 'วัสดุคอมพิวเตอร์', qty: 8, unit: 'กล่อง' },
-  { id: 'SKU-004', name: 'ถุงมือยางอนามัย Size L', category: 'วัสดุการทดลอง', qty: 45, unit: 'กล่อง' }
-])
+const inventoryStock = ref([])
+const requisitions = ref([])
+const isLoading = ref(false)
+const loadError = ref('')
 
-// Mock รายการใบขอเบิกพัสดุ (Requisition Orders)
-const requisitions = ref([
-  {
-    id: 'REQ-2026-001',
-    requesterId: 'USR-001',
-    requesterName: 'นายสมชาย ใจดี',
-    department: 'เทคโนโลยีสารสนเทศ',
-    requestDate: '2026-07-20 09:30',
-    reason: 'ใช้ในการจัดเตรียมเอกสารประเมินคุณภาพการศึกษาประจำปี',
-    status: 'PENDING', // PENDING | APPROVED | REJECTED
-    items: [
-      { skuId: 'SKU-001', name: 'กระดาษ A4 80 GSM (รีม)', qty: 5, unit: 'รีม' },
-      { skuId: 'SKU-002', name: 'ปากกาลูกลื่น น้ำเงิน 0.5mm', qty: 10, unit: 'ด้าม' }
-    ],
-    approvedBy: null,
-    approvedDate: null,
-    rejectReason: null
-  },
-  {
-    id: 'REQ-2026-002',
-    requesterId: 'USR-002',
-    requesterName: 'นางสาววิภาดา พัสดุ',
-    department: 'งานการเงินและบัญชี',
-    requestDate: '2026-07-19 14:15',
-    reason: 'เบิกเปลี่ยนตลับหมึกเครื่องพิมพ์ส่วนกลางที่หมด',
-    status: 'APPROVED',
-    items: [
-      { skuId: 'SKU-003', name: 'หมึกพิมพ์ HP Laser Toner 85A', qty: 2, unit: 'กล่อง' }
-    ],
-    approvedBy: 'นายผู้ดูแล ระบบ (Staff)',
-    approvedDate: '2026-07-19 15:00',
-    rejectReason: null
-  },
-  {
-    id: 'REQ-2026-003',
-    requesterId: 'USR-001',
-    requesterName: 'นายสมชาย ใจดี',
-    department: 'เทคโนโลยีสารสนเทศ',
-    requestDate: '2026-07-15 11:00',
-    reason: 'เบิกใช้สอนภาคปฏิบัติห้องแล็บ 4',
-    status: 'REJECTED',
-    items: [
-      { skuId: 'SKU-004', name: 'ถุงมือยางอนามัย Size L', qty: 50, unit: 'กล่อง' }
-    ],
-    approvedBy: 'หัวหน้างาน พัสดุ (Admin)',
-    approvedDate: '2026-07-15 13:20',
-    rejectReason: 'จำนวนคงเหลือในคลังไม่เพียงพอ (คงเหลือ 45 กล่อง)'
+async function fetchData() {
+  isLoading.value = true
+  loadError.value = ''
+  try {
+    const [itemsData, reqsData] = await Promise.all([
+      inventoryApi.getItems(),
+      inventoryApi.getRequisitions()
+    ])
+    inventoryStock.value = itemsData
+    requisitions.value = reqsData
+  } catch (err) {
+    loadError.value = err.message || 'ไม่สามารถดึงข้อมูลจากระบบได้'
+    toast.error('โหลดข้อมูลล้มเหลว: ' + loadError.value)
+  } finally {
+    isLoading.value = false
   }
-])
+}
+
+onMounted(fetchData)
 
 // ==========================================
 // 3. SEARCH & FILTER LOGIC
@@ -112,13 +85,18 @@ const statusFilter = ref('')
 const filteredRequisitions = computed(() => {
   return requisitions.value.filter(req => {
     // RBAC Control: User เห็นเฉพาะของตัวเอง | Staff/Admin เห็นทั้งหมด
-    if (currentUser.value.role === 'User' && req.requesterId !== currentUser.value.id) {
+    if (currentUser.value.role === 'User' && req.requesterId && req.requesterId !== currentUser.value.id) {
       return false
     }
 
-    const matchesSearch = req.id.toLowerCase().includes(searchQuery.value.toLowerCase()) ||
-      req.requesterName.includes(searchQuery.value) ||
-      req.department.includes(searchQuery.value)
+    const reqCodeStr = req.reqCode || `REQ-${req.id}`
+    const requesterNameStr = req.requesterName || 'ไม่ระบุชื่อ'
+    const departmentStr = req.department || 'สำนักงาน'
+
+    const matchesSearch = reqCodeStr.toLowerCase().includes(searchQuery.value.toLowerCase()) ||
+      requesterNameStr.includes(searchQuery.value) ||
+      departmentStr.includes(searchQuery.value) ||
+      (req.reason && req.reason.includes(searchQuery.value))
 
     const matchesStatus = statusFilter.value === '' || req.status === statusFilter.value
 
@@ -131,64 +109,55 @@ const filteredRequisitions = computed(() => {
 // ==========================================
 const isDetailModalOpen = ref(false)
 const selectedReq = ref(null)
+const isActionLoading = ref(false)
 
 const openDetailModal = (req) => {
   selectedReq.value = req
   isDetailModalOpen.value = true
 }
 
-// อนุมัติการเบิก -> หัก สต็อก
-const handleApprove = (req) => {
+// อนุมัติการเบิก -> หัก สต็อก (ผ่าน Backend transaction)
+const handleApprove = async (req) => {
   if (currentUser.value.role === 'User') return
 
-  if (confirm(`ยืนยันการอนุมัติใบขอเบิกเลขที่ ${req.id} ?\nระบบจะทำการหักยอดพัสดุในคลังอัตโนมัติ`)) {
-    let isStockSufficient = true
-    let errorMsg = ''
-
-    req.items.forEach(item => {
-      const stockItem = inventoryStock.value.find(s => s.id === item.skuId)
-      if (!stockItem || stockItem.qty < item.qty) {
-        isStockSufficient = false
-        errorMsg += `\n- ${item.name} (ขอเบิก ${item.qty} ${item.unit} / คงเหลือในคลัง ${stockItem ? stockItem.qty : 0} ${item.unit})`
-      }
-    })
-
-    if (!isStockSufficient) {
-      alert(`ไม่สามารถอนุมัติได้ เนื่องจากสต็อกไม่เพียงพอ:${errorMsg}`)
-      return
+  if (confirm(`ยืนยันการอนุมัติใบขอเบิกเลขที่ ${req.reqCode || req.id} ?\nระบบจะทำการหักยอดพัสดุในคลังอัตโนมัติ`)) {
+    isActionLoading.value = true
+    try {
+      await inventoryApi.approveRequisition(req.id, {
+        approvedBy: currentUser.value.name,
+        remark: 'อนุมัติจ่ายพัสดุเรียบร้อย'
+      })
+      toast.success('อนุมัติและหักยอดสต็อกเรียบร้อยแล้ว!')
+      isDetailModalOpen.value = false
+      await fetchData() // อัปเดตตารางและจำนวนสต๊อกใหม่
+    } catch (err) {
+      toast.error('ไม่สามารถอนุมัติได้: ' + err.message)
+    } finally {
+      isActionLoading.value = false
     }
-
-    req.items.forEach(item => {
-      const stockItem = inventoryStock.value.find(s => s.id === item.skuId)
-      if (stockItem) {
-        stockItem.qty -= item.qty
-      }
-    })
-
-    req.status = 'APPROVED'
-    req.approvedBy = `${currentUser.value.name} (${currentUser.value.role})`
-    const now = new Date()
-    req.approvedDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
-
-    alert(`อนุมัติคำขอเบิก ${req.id} เรียบร้อยแล้ว! ระบบตัดยอดสต็อกและลงประวัติการจ่ายเรียบร้อย`)
-    isDetailModalOpen.value = false
   }
 }
 
 // ปฏิเสธการเบิก
-const handleReject = (req) => {
+const handleReject = async (req) => {
   if (currentUser.value.role === 'User') return
 
-  const reason = prompt(`กรุณาระบุเหตุผลในการปฏิเสธใบเบิก ${req.id}:`)
-  if (reason !== null && reason.trim() !== '') {
-    req.status = 'REJECTED'
-    req.approvedBy = `${currentUser.value.name} (${currentUser.value.role})`
-    const now = new Date()
-    req.approvedDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
-    req.rejectReason = reason
-
-    alert(`ปฏิเสธคำขอเบิก ${req.id} เรียบร้อยแล้ว`)
-    isDetailModalOpen.value = false
+  const reasonText = prompt(`กรุณาระบุเหตุผลในการปฏิเสธใบเบิก ${req.reqCode || req.id}:`)
+  if (reasonText !== null && reasonText.trim() !== '') {
+    isActionLoading.value = true
+    try {
+      await inventoryApi.rejectRequisition(req.id, {
+        approvedBy: currentUser.value.name,
+        remark: reasonText.trim()
+      })
+      toast.success('ปฏิเสธคำขอเบิกพัสดุเรียบร้อยแล้ว')
+      isDetailModalOpen.value = false
+      await fetchData()
+    } catch (err) {
+      toast.error('ปฏิเสธไม่สำเร็จ: ' + err.message)
+    } finally {
+      isActionLoading.value = false
+    }
   }
 }
 
@@ -199,12 +168,12 @@ const isNewModalOpen = ref(false)
 const newReq = ref({
   reason: '',
   items: [
-    { skuId: '', qty: 1 }
+    { itemId: '', qty: 1 }
   ]
 })
 
 const addFormItem = () => {
-  newReq.value.items.push({ skuId: '', qty: 1 })
+  newReq.value.items.push({ itemId: '', qty: 1 })
 }
 
 const removeFormItem = (index) => {
@@ -213,43 +182,39 @@ const removeFormItem = (index) => {
   }
 }
 
-const handleCreateRequisition = () => {
+const handleCreateRequisition = async () => {
   if (!newReq.value.reason) {
-    alert('กรุณาระบุเหตุผลการขอเบิก')
+    toast.warning('กรุณาระบุเหตุผลการขอเบิก')
     return
   }
 
-  const formattedItems = newReq.value.items.map(i => {
-    const stockItem = inventoryStock.value.find(s => s.id === i.skuId)
-    return {
-      skuId: i.skuId,
-      name: stockItem ? stockItem.name : 'พัสดุทั่วไป',
-      qty: Number(i.qty),
-      unit: stockItem ? stockItem.unit : 'หน่วย'
+  const hasEmptyItem = newReq.value.items.some(i => !i.itemId)
+  if (hasEmptyItem) {
+    toast.warning('กรุณาเลือกรายการพัสดุให้ครบถ้วน')
+    return
+  }
+
+  isActionLoading.value = true
+  try {
+    const payload = {
+      reason: newReq.value.reason.trim(),
+      items: newReq.value.items.map(i => ({
+        id: Number(i.itemId),
+        qty: Number(i.qty)
+      }))
     }
-  })
 
-  const now = new Date()
-  const formattedNow = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
-
-  const newId = `REQ-2026-00${requisitions.value.length + 1}`
-  requisitions.value.unshift({
-    id: newId,
-    requesterId: currentUser.value.id,
-    requesterName: currentUser.value.name,
-    department: 'เทคโนโลยีสารสนเทศ',
-    requestDate: formattedNow,
-    reason: newReq.value.reason,
-    status: 'PENDING',
-    items: formattedItems,
-    approvedBy: null,
-    approvedDate: null,
-    rejectReason: null
-  })
-
-  alert(`ส่งใบขอเบิกเลขที่ ${newId} เรียบร้อยแล้ว! รอเจ้าหน้าที่พัสดุตรวจสอบ`)
-  isNewModalOpen.value = false
-  newReq.value = { reason: '', items: [{ skuId: '', qty: 1 }] }
+    const result = await inventoryApi.createRequisition(payload)
+    const code = result.data?.reqCode || 'REQ-SUCCESS'
+    toast.success(`ส่งคำขอเบิกเลขที่ ${code} เรียบร้อยแล้ว!`)
+    isNewModalOpen.value = false
+    newReq.value = { reason: '', items: [{ itemId: '', qty: 1 }] }
+    await fetchData()
+  } catch (err) {
+    toast.error('ไม่สามารถส่งคำขอเบิกได้: ' + err.message)
+  } finally {
+    isActionLoading.value = false
+  }
 }
 
 // ==========================================
@@ -380,16 +345,16 @@ const getStatusBadge = (status) => {
           <tbody class="divide-y divide-slate-200 font-medium">
             <tr v-for="req in filteredRequisitions" :key="req.id" class="hover:bg-slate-50/80 transition-colors">
               <td class="px-6 py-4 font-mono font-bold text-slate-900">
-                {{ req.id }}
+                {{ req.reqCode || 'REQ-' + req.id }}
               </td>
               <td class="px-6 py-4">
-                <div class="font-extrabold text-slate-900 text-base">{{ req.requesterName }}</div>
-                <div class="text-xs text-slate-500">{{ req.department }}</div>
+                <div class="font-extrabold text-slate-900 text-base">{{ req.requesterName || 'ผู้เบิกทั่วไป' }}</div>
+                <div class="text-xs text-slate-500">{{ req.department || 'หน่วยงานกลาง' }}</div>
               </td>
               <td class="px-6 py-4 text-slate-600 font-medium">
                 <div class="flex items-center gap-1.5">
                   <Calendar class="w-4 h-4 text-slate-400" />
-                  <span>{{ formatThaiDateTime(req.requestDate) }}</span>
+                  <span>{{ formatThaiDateTime(req.createdAt) }}</span>
                 </div>
               </td>
               <td class="px-6 py-4 text-center">
@@ -455,7 +420,7 @@ const getStatusBadge = (status) => {
           <div>
             <span class="text-xs font-mono font-bold text-slate-400">REQUISITION DETAIL</span>
             <h3 class="font-extrabold text-slate-900 text-2xl flex items-center gap-2">
-              ใบขอเบิกเลขที่ {{ selectedReq.id }}
+              ใบขอเบิกเลขที่ {{ selectedReq.reqCode || 'REQ-' + selectedReq.id }}
             </h3>
           </div>
           <button @click="isDetailModalOpen = false" class="text-slate-400 hover:text-slate-700 p-2 rounded-xl transition-colors cursor-pointer">
@@ -469,14 +434,14 @@ const getStatusBadge = (status) => {
           <div class="grid grid-cols-2 gap-4 bg-slate-50 p-4 rounded-2xl border border-slate-200/80">
             <div>
               <span class="text-xs text-slate-400 font-bold block">ผู้ขอเบิก</span>
-              <strong class="text-slate-900 text-lg">{{ selectedReq.requesterName }}</strong>
-              <span class="text-xs text-slate-500 block">{{ selectedReq.department }}</span>
+              <strong class="text-slate-900 text-lg">{{ selectedReq.requesterName || 'ผู้เบิกทั่วไป' }}</strong>
+              <span class="text-xs text-slate-500 block">{{ selectedReq.department || 'หน่วยงานกลาง' }}</span>
             </div>
             <div>
               <span class="text-xs text-slate-400 font-bold block">วันที่ขอเบิก</span>
               <div class="flex items-center gap-1.5 text-slate-900 font-medium mt-0.5">
                 <Calendar class="w-4 h-4 text-slate-400" />
-                <span>{{ formatThaiDateTime(selectedReq.requestDate) }}</span>
+                <span>{{ formatThaiDateTime(selectedReq.createdAt) }}</span>
               </div>
             </div>
           </div>
@@ -502,16 +467,16 @@ const getStatusBadge = (status) => {
                   </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-200 font-medium">
-                  <tr v-for="item in selectedReq.items" :key="item.skuId">
+                  <tr v-for="item in selectedReq.items" :key="item.id">
                     <td class="px-4 py-3 text-slate-900 font-bold">
-                      {{ item.name }}
+                      {{ item.item?.name || 'พัสดุทั่วไป' }}
                     </td>
                     <td class="px-4 py-3 text-center font-bold text-emerald-800">
-                      {{ item.qty }} {{ item.unit }}
+                      {{ item.requestedQty }} {{ item.item?.unit || 'หน่วย' }}
                     </td>
                     <td class="px-4 py-3 text-center font-mono">
-                      <span :class="[(inventoryStock.find(s => s.id === item.skuId)?.qty || 0) < item.qty ? 'text-rose-600 font-extrabold' : 'text-slate-600']">
-                        {{ inventoryStock.find(s => s.id === item.skuId)?.qty || 0 }} {{ item.unit }}
+                      <span :class="[(inventoryStock.find(s => s.id === item.itemId)?.quantity || 0) < item.requestedQty ? 'text-rose-600 font-extrabold' : 'text-slate-600']">
+                        {{ inventoryStock.find(s => s.id === item.itemId)?.quantity || 0 }} {{ item.item?.unit || 'หน่วย' }}
                       </span>
                     </td>
                   </tr>
@@ -528,10 +493,10 @@ const getStatusBadge = (status) => {
             </div>
             <div class="text-xs text-slate-500 flex items-center gap-1">
               <Calendar class="w-3.5 h-3.5 text-slate-400" />
-              <span>เมื่อวันที่: {{ formatThaiDateTime(selectedReq.approvedDate) }}</span>
+              <span>เมื่อวันที่: {{ formatThaiDateTime(selectedReq.approvedAt) }}</span>
             </div>
-            <div v-if="selectedReq.rejectReason" class="text-sm text-rose-700 font-bold pt-1">
-              เหตุผลที่ปฏิเสธ: {{ selectedReq.rejectReason }}
+            <div v-if="selectedReq.remark" class="text-sm text-rose-700 font-bold pt-1">
+              เหตุผลการปฏิเสธ: {{ selectedReq.remark }}
             </div>
           </div>
 
@@ -611,13 +576,13 @@ const getStatusBadge = (status) => {
             <div class="space-y-3">
               <div v-for="(item, idx) in newReq.items" :key="idx" class="flex gap-2 items-center bg-slate-50 p-3 rounded-xl border border-slate-200">
                 <select 
-                  v-model="item.skuId" 
+                  v-model="item.itemId" 
                   required
                   class="flex-1 border border-slate-300 rounded-lg p-2 text-sm font-bold text-slate-800 bg-white focus:outline-none"
                 >
                   <option value="" disabled>-- เลือกรายการพัสดุ --</option>
                   <option v-for="stock in inventoryStock" :key="stock.id" :value="stock.id">
-                    {{ stock.name }} (คงเหลือ: {{ stock.qty }} {{ stock.unit }})
+                    {{ stock.name }} (คงเหลือ: {{ stock.quantity }} {{ stock.unit || 'หน่วย' }})
                   </option>
                 </select>
 

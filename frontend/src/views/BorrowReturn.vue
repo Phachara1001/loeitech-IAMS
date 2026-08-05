@@ -1,26 +1,54 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import {
   ArrowLeftRight, Plus, X, Check, Loader2, AlertTriangle, Bell,
   CheckCircle2, Ban, PackageCheck, Clock
 } from 'lucide-vue-next'
+import * as inventoryApi from '../services/inventoryApi.js'
+import { useToast } from '../composables/useToast.js'
+
+const toast = useToast()
 
 // สิทธิ์การเข้าถึง: ทุก role ยืมได้ (Admin, Staff, User) แต่การอนุมัติ/รับคืน ทำได้เฉพาะ Admin, Staff
-// TODO: เชื่อมกับระบบยืนยันตัวตนจริง เช่น decode role จาก JWT หรือข้อมูลผู้ใช้หลัง login
 const currentRole = ref(localStorage.getItem('tcaims_role') || 'admin')
-const canManage = computed(() => ['admin', 'staff'].includes(currentRole.value))
+const canManage = computed(() => ['admin', 'staff', 'Admin', 'Staff'].includes(currentRole.value))
+const currentUserName = ref(localStorage.getItem('tcaims_name') || 'ผู้ใช้งานระบบ')
 
-const assets = ref([
-  { id: 'AST-0071', name: 'โปรเจกเตอร์ Epson EB-X05' },
-  { id: 'AST-0088', name: 'กล้องถ่ายภาพ Canon EOS 200D' },
-  { id: 'AST-0093', name: 'ลำโพงเคลื่อนที่พร้อมไมโครโฟน' },
-  { id: 'AST-0101', name: 'โน้ตบุ๊ก Lenovo ThinkPad' }
-])
+const assets = ref([])
+const records = ref([])
+const isLoading = ref(false)
+const loadError = ref('')
+
+async function fetchData() {
+  isLoading.value = true
+  loadError.value = ''
+  try {
+    const [assetsData, borrowsData] = await Promise.all([
+      inventoryApi.getAssets(),
+      inventoryApi.getBorrows()
+    ])
+    assets.value = assetsData
+    records.value = borrowsData
+  } catch (err) {
+    loadError.value = err.message || 'โหลดข้อมูลล้มเหลว'
+    toast.error('ไม่สามารถโหลดข้อมูลการยืม-คืนได้: ' + loadError.value)
+  } finally {
+    isLoading.value = false
+  }
+}
+
+onMounted(fetchData)
+
+// กรองเฉพาะครุภัณฑ์ที่มีสถานะ Active เท่านั้นสำหรับให้เลือกยืมใน dropdown
+const availableAssetsForBorrow = computed(() => {
+  return assets.value.filter(a => a.status === 'Active' || a.status === 'active')
+})
 
 /* ---------------- วันที่ปัจจุบัน สำหรับคำนวณใกล้/เกินกำหนด ---------------- */
 const now = new Date()
 
 function daysUntil(dateStr) {
+  if (!dateStr) return 0
   const target = new Date(dateStr)
   const diff = Math.ceil((target - now) / (1000 * 60 * 60 * 24))
   return diff
@@ -31,75 +59,17 @@ function formatThaiDate(dateStr) {
   return new Date(dateStr).toLocaleDateString('th-TH', { dateStyle: 'medium' })
 }
 
-/* ---------------- รายการยืม-คืน (mock ใช้ปี ค.ศ. จริงเพื่อให้คำนวณกำหนดคืนถูกต้อง) ---------------- */
-const records = ref([
-  {
-    id: 'BRW-2569-001',
-    assetName: 'โปรเจกเตอร์ Epson EB-X05',
-    assetId: 'AST-0071',
-    borrower: 'สมชาย ใจดี',
-    purpose: 'ใช้ประกอบการสอนวิชาคอมพิวเตอร์ธุรกิจ',
-    borrowDate: '2026-07-18',
-    dueDate: '2026-07-25',
-    returnDate: null,
-    condition: null,
-    status: 'กำลังยืม'
-  },
-  {
-    id: 'BRW-2569-002',
-    assetName: 'กล้องถ่ายภาพ Canon EOS 200D',
-    assetId: 'AST-0088',
-    borrower: 'สมหญิง รักเรียน',
-    purpose: 'บันทึกภาพกิจกรรมวันไหว้ครู',
-    borrowDate: '2026-07-10',
-    dueDate: '2026-07-15',
-    returnDate: null,
-    condition: null,
-    status: 'กำลังยืม'
-  },
-  {
-    id: 'BRW-2569-003',
-    assetName: 'โน้ตบุ๊ก Lenovo ThinkPad',
-    assetId: 'AST-0101',
-    borrower: 'ครูประจำแผนก',
-    purpose: 'ใช้จัดทำเอกสารประกอบการสอน',
-    borrowDate: '2026-07-01',
-    dueDate: '2026-07-08',
-    returnDate: '2026-07-08',
-    condition: 'ปกติ',
-    status: 'คืนแล้ว'
-  },
-  {
-    id: 'BRW-2569-004',
-    assetName: 'ลำโพงเคลื่อนที่พร้อมไมโครโฟน',
-    assetId: 'AST-0093',
-    borrower: 'สมชาย ใจดี',
-    purpose: 'ใช้ในกิจกรรมปฐมนิเทศนักศึกษาใหม่',
-    borrowDate: '',
-    dueDate: '',
-    returnDate: null,
-    condition: null,
-    status: 'รออนุมัติ'
-  }
-])
-
 function statusStyle(status) {
-  if (status === 'คืนแล้ว') return 'bg-emerald-50 text-emerald-700 border-emerald-100'
-  if (status === 'กำลังยืม') return 'bg-sky-50 text-sky-700 border-sky-100'
-  if (status === 'เกินกำหนด') return 'bg-red-50 text-red-700 border-red-100'
-  if (status === 'ไม่อนุมัติ') return 'bg-slate-100 text-slate-500 border-slate-200'
-  return 'bg-amber-50 text-amber-700 border-amber-100'
+  if (status === 'RETURNED' || status === 'คืนแล้ว') return 'bg-emerald-50 text-emerald-700 border-emerald-100'
+  if (status === 'BORROWED' || status === 'กำลังยืม') return 'bg-sky-50 text-sky-700 border-sky-100'
+  if (status === 'OVERDUE' || status === 'เกินกำหนด') return 'bg-red-50 text-red-700 border-red-100'
+  if (status === 'REJECTED' || status === 'ไม่อนุมัติ') return 'bg-slate-100 text-slate-500 border-slate-200'
+  return 'bg-amber-50 text-amber-700 border-amber-100' // PENDING
 }
 
-// อัปเดตสถานะเป็น "เกินกำหนด" อัตโนมัติถ้ายังไม่คืนและเลยกำหนดแล้ว
-records.value.forEach((r) => {
-  if (r.status === 'กำลังยืม' && r.dueDate && daysUntil(r.dueDate) < 0) {
-    r.status = 'เกินกำหนด'
-  }
-})
-
+// ตรวจสอบกำหนดคืนและแจ้งเตือน
 const dueSoonOrOverdue = computed(() =>
-  records.value.filter((r) => (r.status === 'กำลังยืม' || r.status === 'เกินกำหนด') && r.dueDate)
+  records.value.filter((r) => (r.status === 'BORROWED') && r.dueDate)
     .map((r) => ({ ...r, daysLeft: daysUntil(r.dueDate) }))
     .filter((r) => r.daysLeft <= 3)
     .sort((a, b) => a.daysLeft - b.daysLeft)
@@ -118,7 +88,7 @@ function openForm() {
 }
 function closeForm() { isFormOpen.value = false }
 
-function saveForm() {
+async function saveForm() {
   if (!form.value.assetId || !form.value.purpose.trim() || !form.value.dueDate) {
     formError.value = 'กรุณาเลือกรายการ ระบุวัตถุประสงค์ และกำหนดวันส่งคืนให้ครบถ้วน'
     return
@@ -126,34 +96,58 @@ function saveForm() {
   isSaving.value = true
   formError.value = ''
 
-  // TODO: เชื่อมต่อ API บันทึกคำขอยืมจริงในภายหลัง
-  setTimeout(() => {
-    const asset = assets.value.find((a) => a.id === form.value.assetId)
-    const nextNumber = records.value.length + 1
-    records.value.unshift({
-      id: `BRW-2569-${String(nextNumber).padStart(3, '0')}`,
-      assetName: asset?.name || '',
-      assetId: form.value.assetId,
-      borrower: 'ผู้ใช้งานปัจจุบัน',
-      purpose: form.value.purpose.trim(),
-      borrowDate: '',
+  try {
+    const todayStr = new Date().toISOString().substring(0, 10)
+    const payload = {
+      assetId: Number(form.value.assetId),
+      borrowerName: currentUserName.value,
+      borrowerDept: 'งานพัสดุกลาง',
+      borrowDate: todayStr,
       dueDate: form.value.dueDate,
-      returnDate: null,
-      condition: null,
-      status: 'รออนุมัติ'
-    })
-    isSaving.value = false
+      purpose: form.value.purpose.trim()
+    }
+
+    await inventoryApi.createBorrow(payload)
+    toast.success('ยื่นคำขอยืมครุภัณฑ์สำเร็จ!')
     isFormOpen.value = false
-  }, 600)
+    await fetchData()
+  } catch (err) {
+    formError.value = err.message || 'ส่งคำขอยืมไม่สำเร็จ'
+    toast.error('ล้มเหลว: ' + formError.value)
+  } finally {
+    isSaving.value = false
+  }
 }
 
 /* ---------------- อนุมัติการยืม (Admin, Staff) ---------------- */
-function approveBorrow(record) {
-  record.status = 'กำลังยืม'
-  record.borrowDate = new Date().toISOString().slice(0, 10)
+async function approveBorrow(record) {
+  if (confirm(`ยืนยันการอนุมัติใบยืมเลขที่ ${record.borrowCode || record.id} ?`)) {
+    try {
+      await inventoryApi.approveBorrow(record.id, {
+        approvedBy: currentUserName.value
+      })
+      toast.success('อนุมัติคำขอยืมครุภัณฑ์เรียบร้อย')
+      await fetchData()
+    } catch (err) {
+      toast.error('อนุมัติไม่สำเร็จ: ' + err.message)
+    }
+  }
 }
-function rejectBorrow(record) {
-  record.status = 'ไม่อนุมัติ'
+
+async function rejectBorrow(record) {
+  const remark = prompt(`ระบุเหตุผลในการปฏิเสธการยืมครุภัณฑ์:`)
+  if (remark !== null && remark.trim() !== '') {
+    try {
+      await inventoryApi.rejectBorrow(record.id, {
+        approvedBy: currentUserName.value,
+        remark: remark.trim()
+      })
+      toast.success('ปฏิเสธคำขอยืมพัสดุครุภัณฑ์เรียบร้อย')
+      await fetchData()
+    } catch (err) {
+      toast.error('ปฏิเสธการยืมไม่สำเร็จ: ' + err.message)
+    }
+  }
 }
 
 /* ---------------- บันทึกรับคืน (Admin, Staff) ---------------- */
@@ -167,11 +161,18 @@ function openReturn(record) {
 }
 function closeReturn() { returningId.value = null }
 
-function confirmReturn(record) {
-  record.status = 'คืนแล้ว'
-  record.returnDate = new Date().toISOString().slice(0, 10)
-  record.condition = returnCondition.value
-  returningId.value = null
+async function confirmReturn(record) {
+  try {
+    await inventoryApi.returnBorrow(record.id, {
+      returnedTo: currentUserName.value,
+      remark: `ส่งคืนครุภัณฑ์ในสภาพ: ${returnCondition.value}`
+    })
+    toast.success('บันทึกรับคืนครุภัณฑ์เรียบร้อยแล้ว!')
+    returningId.value = null
+    await fetchData()
+  } catch (err) {
+    toast.error('บันทึกรับคืนไม่สำเร็จ: ' + err.message)
+  }
 }
 </script>
 
@@ -200,7 +201,7 @@ function confirmReturn(record) {
       </div>
       <div class="space-y-1.5">
         <div v-for="r in dueSoonOrOverdue" :key="r.id" class="flex items-center justify-between gap-3 text-sm">
-          <span class="text-amber-800 truncate">{{ r.assetName }} <span class="text-amber-600">· {{ r.borrower }}</span></span>
+          <span class="text-amber-800 truncate">{{ r.asset?.name || 'ครุภัณฑ์' }} <span class="text-amber-600">· {{ r.borrowerName }}</span></span>
           <span class="font-semibold text-amber-700 shrink-0">
             {{ r.daysLeft < 0 ? `เลยกำหนด ${Math.abs(r.daysLeft)} วัน` : r.daysLeft === 0 ? 'ครบกำหนดวันนี้' : `เหลืออีก ${r.daysLeft} วัน` }}
           </span>
@@ -226,21 +227,23 @@ function confirmReturn(record) {
           <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
             <div class="min-w-0">
               <div class="flex items-center gap-2 flex-wrap">
-                <span class="text-xs font-mono text-slate-400">{{ r.id }}</span>
-                <span :class="['px-2.5 py-0.5 rounded-full text-xs font-semibold border', statusStyle(r.status)]">{{ r.status }}</span>
+                <span class="text-xs font-mono text-slate-400">{{ r.borrowCode || r.id }}</span>
+                <span :class="['px-2.5 py-0.5 rounded-full text-xs font-semibold border', statusStyle(r.status)]">
+                  {{ r.status === 'PENDING' ? 'รออนุมัติ' : r.status === 'BORROWED' ? 'กำลังยืม' : r.status === 'RETURNED' ? 'คืนแล้ว' : r.status === 'REJECTED' ? 'ไม่อนุมัติ' : r.status }}
+                </span>
               </div>
-              <p class="text-sm font-semibold text-slate-800 mt-1.5">{{ r.assetName }} <span class="text-slate-400 font-normal">({{ r.assetId }})</span></p>
-              <p class="text-xs text-slate-500 mt-1">ผู้ยืม: {{ r.borrower }} · วัตถุประสงค์: {{ r.purpose }}</p>
+              <p class="text-sm font-semibold text-slate-800 mt-1.5">{{ r.asset?.name || 'ครุภัณฑ์' }} <span class="text-slate-400 font-normal">({{ r.asset?.seq || '-' }})</span></p>
+              <p class="text-xs text-slate-500 mt-1">ผู้ยืม: {{ r.borrowerName }} · แผนก: {{ r.borrowerDept }} · วัตถุประสงค์: {{ r.purpose }}</p>
               <p class="text-xs text-slate-400 mt-1 flex items-center gap-1.5">
                 <Clock class="w-3.5 h-3.5 shrink-0" />
                 <span v-if="r.borrowDate">ยืมเมื่อ {{ formatThaiDate(r.borrowDate) }} ·</span>
                 กำหนดคืน {{ r.dueDate ? formatThaiDate(r.dueDate) : '-' }}
-                <span v-if="r.returnDate"> · คืนจริง {{ formatThaiDate(r.returnDate) }} ({{ r.condition }})</span>
+                <span v-if="r.returnDate"> · คืนจริง {{ formatThaiDate(r.returnDate) }} ({{ r.remark || 'สภาพปกติ' }})</span>
               </p>
             </div>
 
             <div v-if="canManage" class="flex items-center gap-2 shrink-0">
-              <template v-if="r.status === 'รออนุมัติ'">
+              <template v-if="r.status === 'PENDING'">
                 <button type="button" @click="approveBorrow(r)" class="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold bg-sky-50 text-sky-700 hover:bg-sky-100 hover:shadow-sm transition-all">
                   <CheckCircle2 class="w-3.5 h-3.5" />
                   อนุมัติ
@@ -251,7 +254,7 @@ function confirmReturn(record) {
                 </button>
               </template>
               <button
-                v-else-if="r.status === 'กำลังยืม' || r.status === 'เกินกำหนด'"
+                v-else-if="r.status === 'BORROWED' || r.status === 'OVERDUE'"
                 type="button"
                 @click="openReturn(r)"
                 class="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold bg-emerald-50 text-emerald-700 hover:bg-emerald-100 hover:shadow-sm transition-all"
@@ -307,7 +310,9 @@ function confirmReturn(record) {
               <label class="block text-sm font-medium text-slate-700 mb-1.5">รายการที่ต้องการยืม</label>
               <select v-model="form.assetId" class="w-full px-3.5 py-2.5 rounded-lg border border-slate-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#065f46]/20 focus:border-[#065f46] transition">
                 <option value="" disabled>-- เลือกรายการ --</option>
-                <option v-for="a in assets" :key="a.id" :value="a.id">{{ a.name }}</option>
+                <option v-for="a in availableAssetsForBorrow" :key="a.id" :value="a.id">
+                  [{{ a.seq }}] {{ a.name }}
+                </option>
               </select>
             </div>
 

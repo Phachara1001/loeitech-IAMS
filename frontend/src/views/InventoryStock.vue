@@ -1,34 +1,54 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   Search, SlidersHorizontal, Plus, History, Pencil, Trash2,
   Package, AlertTriangle, X, Check, Loader2, Boxes, ChevronDown
 } from 'lucide-vue-next'
+import * as inventoryApi from '../services/inventoryApi.js'
+import { useToast } from '../composables/useToast.js'
 
 const router = useRouter()
+const toast = useToast()
 
-// สิทธิ์การเข้าถึง: ดูข้อมูลได้ทุก role (admin, staff, user) / เพิ่ม-แก้ไข-ลบ ได้เฉพาะ admin, staff
-// TODO: เชื่อมกับระบบยืนยันตัวตนจริง เช่น decode role จาก JWT หรือข้อมูลผู้ใช้หลัง login
-// ตอนนี้ดึงจาก localStorage ไปก่อน (เซ็ตตอน login) ถ้ายังไม่มีค่า ให้ default เป็น 'user' (สิทธิ์น้อยสุด ปลอดภัยไว้ก่อน)
+// สิทธิ์การเข้าถึง
 const currentRole = ref(localStorage.getItem('tcaims_role') || 'admin')
 const canManage = computed(() => ['admin', 'staff'].includes(currentRole.value))
 
-const categories = ['กระดาษ', 'หมึกพิมพ์', 'เครื่องเขียน', 'อุปกรณ์ทำความสะอาด']
+// =============================================
+// ข้อมูลหมวดหมู่ (ดึงจาก items ที่มีอยู่จริงใน DB)
+// =============================================
+const categories = ref([])
 
-// ข้อมูล mock (ยังไม่เชื่อม backend/database จริง)
-const items = ref([
-  { id: 'CS-0001', name: 'กระดาษ A4 80 แกรม', category: 'กระดาษ', unit: 'รีม', quantity: 42, minThreshold: 20, price: 115 },
-  { id: 'CS-0002', name: 'กระดาษ A3 80 แกรม', category: 'กระดาษ', unit: 'รีม', quantity: 8, minThreshold: 10, price: 230 },
-  { id: 'CS-0003', name: 'หมึกพิมพ์ Canon 728 (ดำ)', category: 'หมึกพิมพ์', unit: 'ตลับ', quantity: 15, minThreshold: 5, price: 1850 },
-  { id: 'CS-0004', name: 'หมึกพิมพ์ HP 682 (สี)', category: 'หมึกพิมพ์', unit: 'ตลับ', quantity: 0, minThreshold: 3, price: 550 },
-  { id: 'CS-0005', name: 'ปากกาลูกลื่นสีน้ำเงิน', category: 'เครื่องเขียน', unit: 'กล่อง', quantity: 30, minThreshold: 10, price: 120 },
-  { id: 'CS-0006', name: 'ลวดเสียบกระดาษเบอร์ 1', category: 'เครื่องเขียน', unit: 'กล่อง', quantity: 6, minThreshold: 8, price: 45 },
-  { id: 'CS-0007', name: 'แฟ้มเอกสาร 2 ห่วง', category: 'เครื่องเขียน', unit: 'เล่ม', quantity: 24, minThreshold: 10, price: 35 },
-  { id: 'CS-0008', name: 'น้ำยาล้างกระจก', category: 'อุปกรณ์ทำความสะอาด', unit: 'ขวด', quantity: 12, minThreshold: 5, price: 85 }
-])
+// =============================================
+// ดึงข้อมูลจาก Backend
+// =============================================
+const items = ref([])
+const isLoading = ref(false)
+const loadError = ref('')
 
-// ค้นหา + กรอง
+async function fetchItems() {
+  isLoading.value = true
+  loadError.value = ''
+  try {
+    const data = await inventoryApi.getItems()
+    items.value = data
+    // สร้าง categories จากข้อมูลจริงใน DB
+    const uniqueCats = [...new Set(data.map((i) => i.category).filter(Boolean))]
+    categories.value = uniqueCats
+  } catch (err) {
+    loadError.value = err.message || 'ไม่สามารถโหลดข้อมูลได้'
+    toast.error('ไม่สามารถโหลดข้อมูลพัสดุได้')
+  } finally {
+    isLoading.value = false
+  }
+}
+
+onMounted(fetchItems)
+
+// =============================================
+// ค้นหา + กรอง (client-side)
+// =============================================
 const searchQuery = ref('')
 const selectedCategory = ref('all')
 
@@ -36,7 +56,7 @@ const filteredItems = computed(() => {
   return items.value.filter((item) => {
     const matchSearch =
       item.name.toLowerCase().includes(searchQuery.value.toLowerCase()) ||
-      item.id.toLowerCase().includes(searchQuery.value.toLowerCase())
+      item.sku.toLowerCase().includes(searchQuery.value.toLowerCase())
     const matchCategory = selectedCategory.value === 'all' || item.category === selectedCategory.value
     return matchSearch && matchCategory
   })
@@ -59,24 +79,35 @@ function goToHistory(item) {
   router.push({ name: 'InventoryHistory', query: { itemId: item.id, itemName: item.name } })
 }
 
-// เพิ่ม / แก้ไข
+// =============================================
+// เพิ่มพัสดุใหม่ → ไปหน้า InventoryReceive
+// =============================================
+function openAddForm() {
+  router.push({ name: 'InventoryReceive' })
+}
+
+// =============================================
+// แก้ไขข้อมูลพัสดุ
+// =============================================
 const isFormOpen = ref(false)
 const isEditMode = ref(false)
 const isSaving = ref(false)
 const formError = ref('')
-const form = ref({ id: '', name: '', category: categories[0], unit: '', quantity: 0, minThreshold: 0, price: 0 })
-
-function openAddForm() {
-  isEditMode.value = false
-  formError.value = ''
-  form.value = { id: '', name: '', category: categories[0], unit: '', quantity: 0, minThreshold: 0, price: 0 }
-  isFormOpen.value = true
-}
+const form = ref({ id: null, sku: '', name: '', category: '', unit: '', quantity: 0, minThreshold: 0, unitPrice: 0 })
 
 function openEditForm(item) {
   isEditMode.value = true
   formError.value = ''
-  form.value = { ...item }
+  form.value = {
+    id: item.id,
+    sku: item.sku,
+    name: item.name,
+    category: item.category || '',
+    unit: item.unit || '',
+    quantity: item.quantity,
+    minThreshold: item.minThreshold,
+    unitPrice: item.unitPrice
+  }
   isFormOpen.value = true
 }
 
@@ -84,7 +115,7 @@ function closeForm() {
   isFormOpen.value = false
 }
 
-function saveForm() {
+async function saveForm() {
   if (!form.value.name.trim() || !form.value.unit.trim()) {
     formError.value = 'กรุณากรอกชื่อพัสดุและหน่วยนับให้ครบถ้วน'
     return
@@ -93,25 +124,38 @@ function saveForm() {
   isSaving.value = true
   formError.value = ''
 
-  // TODO: เชื่อมต่อ API บันทึกข้อมูลจริงในภายหลัง
-  setTimeout(() => {
-    if (isEditMode.value) {
-      const index = items.value.findIndex((i) => i.id === form.value.id)
-      if (index !== -1) items.value[index] = { ...form.value }
-    } else {
-      const nextNumber = items.value.length + 1
-      items.value.push({
-        ...form.value,
-        id: `CS-${String(nextNumber).padStart(4, '0')}`
-      })
+  try {
+    const payload = {
+      name: form.value.name.trim(),
+      category: form.value.category || null,
+      unit: form.value.unit.trim(),
+      quantity: Number(form.value.quantity),
+      minThreshold: Number(form.value.minThreshold),
+      unitPrice: parseFloat(form.value.unitPrice) || 0
     }
-    isSaving.value = false
+
+    if (isEditMode.value) {
+      const updated = await inventoryApi.updateItem(form.value.id, payload)
+      const index = items.value.findIndex((i) => i.id === form.value.id)
+      if (index !== -1) items.value[index] = updated
+      toast.success('แก้ไขข้อมูลพัสดุสำเร็จ')
+    }
+
     isFormOpen.value = false
-  }, 500)
+    await fetchItems() // โหลดใหม่เพื่อให้ข้อมูลสดเสมอ
+  } catch (err) {
+    formError.value = err.message || 'บันทึกไม่สำเร็จ'
+    toast.error('บันทึกข้อมูลไม่สำเร็จ: ' + formError.value)
+  } finally {
+    isSaving.value = false
+  }
 }
 
+// =============================================
 // ลบรายการ
+// =============================================
 const itemToDelete = ref(null)
+const isDeleting = ref(false)
 
 function confirmDelete(item) {
   itemToDelete.value = item
@@ -121,11 +165,22 @@ function cancelDelete() {
   itemToDelete.value = null
 }
 
-function deleteItem() {
-  items.value = items.value.filter((i) => i.id !== itemToDelete.value.id)
-  itemToDelete.value = null
+async function deleteItem() {
+  if (!itemToDelete.value) return
+  isDeleting.value = true
+  try {
+    await inventoryApi.deleteItem(itemToDelete.value.id)
+    items.value = items.value.filter((i) => i.id !== itemToDelete.value.id)
+    toast.success('ลบพัสดุเรียบร้อยแล้ว')
+    itemToDelete.value = null
+  } catch (err) {
+    toast.error('ลบไม่สำเร็จ: ' + err.message)
+  } finally {
+    isDeleting.value = false
+  }
 }
 </script>
+
 
 <template>
   <div class="p-6 lg:p-8 w-full">
@@ -214,8 +269,23 @@ function deleteItem() {
         </div>
       </div>
 
+      <!-- Loading State -->
+      <div v-if="isLoading" class="py-20 flex flex-col items-center gap-3 text-slate-400">
+        <Loader2 class="w-8 h-8 animate-spin text-[#065f46]" />
+        <p class="text-sm">กำลังโหลดข้อมูลพัสดุ...</p>
+      </div>
+
+      <!-- Error State -->
+      <div v-else-if="loadError" class="py-16 flex flex-col items-center gap-3">
+        <div class="w-12 h-12 rounded-full bg-red-50 flex items-center justify-center">
+          <AlertTriangle class="w-6 h-6 text-red-500" />
+        </div>
+        <p class="text-sm text-red-600 font-medium">{{ loadError }}</p>
+        <button @click="fetchItems" class="text-xs text-[#065f46] underline hover:no-underline">ลองใหม่</button>
+      </div>
+
       <!-- ตารางข้อมูล -->
-      <div class="overflow-x-auto max-h-[65vh] overflow-y-auto no-scrollbar">
+      <div v-else class="overflow-x-auto max-h-[65vh] overflow-y-auto no-scrollbar">
         <table class="w-full text-sm">
           <thead class="sticky top-0 z-10">
             <tr class="bg-gradient-to-r from-[#065f46] to-[#047857] text-left">
@@ -231,12 +301,12 @@ function deleteItem() {
           </thead>
           <tbody class="divide-y divide-slate-100">
             <tr v-for="item in filteredItems" :key="item.id" class="group hover:bg-emerald-50/60 transition-colors">
-              <td class="px-4 py-3 text-slate-500 font-mono text-xs border-l-4 border-transparent group-hover:border-[#065f46] transition-colors">{{ item.id }}</td>
+              <td class="px-4 py-3 text-slate-500 font-mono text-xs border-l-4 border-transparent group-hover:border-[#065f46] transition-colors">{{ item.sku }}</td>
               <td class="px-4 py-3 text-slate-800 font-medium">{{ item.name }}</td>
-              <td class="px-4 py-3 text-slate-500">{{ item.category }}</td>
-              <td class="px-4 py-3 text-right text-slate-500 font-medium">฿{{ item.price?.toLocaleString() || '-' }}</td>
-              <td class="px-4 py-3 text-right text-slate-800 font-semibold">{{ item.quantity.toLocaleString() }}</td>
-              <td class="px-4 py-3 text-slate-500">{{ item.unit }}</td>
+              <td class="px-4 py-3 text-slate-500">{{ item.category || '-' }}</td>
+              <td class="px-4 py-3 text-right text-slate-500 font-medium">฿{{ item.unitPrice?.toLocaleString() || '-' }}</td>
+              <td class="px-4 py-3 text-right text-slate-800 font-semibold">{{ item.quantity?.toLocaleString() }}</td>
+              <td class="px-4 py-3 text-slate-500">{{ item.unit || '-' }}</td>
               <td class="px-4 py-3">
                 <span :class="['px-2.5 py-1 rounded-full text-xs font-semibold border shadow-sm', statusOf(item).style]">
                   {{ statusOf(item).label }}
@@ -275,7 +345,7 @@ function deleteItem() {
             </tr>
 
             <tr v-if="filteredItems.length === 0">
-              <td colspan="7" class="px-4 py-12 text-center text-slate-400">
+              <td colspan="8" class="px-4 py-12 text-center text-slate-400">
                 ไม่พบรายการพัสดุที่ตรงกับเงื่อนไขการค้นหา
               </td>
             </tr>
@@ -283,7 +353,7 @@ function deleteItem() {
         </table>
       </div>
 
-      <div class="px-4 py-3 border-t border-slate-100 text-xs text-slate-400">
+      <div v-if="!isLoading && !loadError" class="px-4 py-3 border-t border-slate-100 text-xs text-slate-400">
         แสดง {{ filteredItems.length }} จาก {{ items.length }} รายการ
       </div>
     </div>
@@ -360,7 +430,7 @@ function deleteItem() {
               <div>
                 <label class="block text-sm font-medium text-slate-700 mb-1.5">ราคาต่อหน่วย</label>
                 <input
-                  v-model.number="form.price"
+                  v-model.number="form.unitPrice"
                   type="number"
                   min="0"
                   step="0.01"

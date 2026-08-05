@@ -1,8 +1,12 @@
 <script setup>
 import { ref } from 'vue'
+import axios from 'axios'
 import { X, Mail, User, Lock, Eye, EyeOff, Loader2, CheckCircle2, UserPlus } from 'lucide-vue-next'
+import { useToast } from '../composables/useToast'
+import { API_BASE } from '../config/api'
 
-const emit = defineEmits(['close'])
+const emit = defineEmits(['close', 'registered'])
+const toast = useToast()
 
 const email = ref('')
 const fullName = ref('')
@@ -40,18 +44,37 @@ function validate() {
   return ''
 }
 
-function handleSubmit() {
+function extractErrorMessage(error) {
+  const data = error.response?.data
+  if (data?.errors?.length) return data.errors.join(' / ')
+  if (data?.message) return data.message
+  return 'เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง'
+}
+
+async function handleSubmit() {
   const validationError = validate()
   errorMessage.value = validationError
   if (validationError) return
 
   isLoading.value = true
 
-  // TODO: เชื่อมต่อ API จริงสำหรับสร้างบัญชีผู้ใช้
-  setTimeout(() => {
-    isLoading.value = false
+  try {
+    await axios.post(`${API_BASE}/auth/register`, {
+      name: fullName.value.trim(),
+      email: email.value.trim(),
+      password: password.value,
+      confirmPassword: confirmPassword.value
+    })
+    toast.success('สร้างบัญชีสำเร็จ')
     isDone.value = true
-  }, 1000)
+    emit('registered', email.value.trim())
+  } catch (error) {
+    const msg = extractErrorMessage(error)
+    errorMessage.value = msg
+    toast.error(msg)
+  } finally {
+    isLoading.value = false
+  }
 }
 
 function handleClose() {

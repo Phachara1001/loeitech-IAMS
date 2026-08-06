@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import {
   PackagePlus,
   Calendar,
@@ -107,6 +107,21 @@ const selectedExistingItem = computed(() => {
   return items.value.find(item => item.id === Number(formData.value.selectedItemId)) || null
 })
 
+// ✅ Auto-fill ราคาต่อหน่วยจากรายการที่เลือก
+watch(
+  () => formData.value.selectedItemId,
+  (newId) => {
+    if (newId && itemSourceType.value === 'EXISTING') {
+      const found = items.value.find(item => item.id === Number(newId))
+      if (found) {
+        formData.value.unitPrice = found.unitPrice ?? found.price ?? 0
+      }
+    } else {
+      formData.value.unitPrice = 0
+    }
+  }
+)
+
 // คำนวณราคารวมอัตโนมัติ
 const totalPrice = computed(() => {
   const price = Number(formData.value.unitPrice) || 0
@@ -200,6 +215,47 @@ const handleSaveStockReceive = async () => {
   } finally {
     isSaving.value = false
   }
+}
+
+// =============================================
+// State & Methods สำหรับ Modal เลือกวัสดุเดิม
+// =============================================
+const isItemSelectorOpen = ref(false)
+const searchQuery = ref('')
+const selectedCategory = ref('ทั้งหมด')
+
+// ดึงหมวดหมู่ทั้งหมดที่มีใน items
+const availableCategories = computed(() => {
+  const cats = new Set(items.value.map(item => item.category).filter(Boolean))
+  return ['ทั้งหมด', ...Array.from(cats)]
+})
+
+// กรองวัสดุตามหมวดหมู่และช่องค้นหา
+const filteredItems = computed(() => {
+  return items.value.filter(item => {
+    const matchesSearch = item.name.toLowerCase().includes(searchQuery.value.toLowerCase()) || 
+                          (item.sku && item.sku.toLowerCase().includes(searchQuery.value.toLowerCase()))
+    
+    if (selectedCategory.value === 'ทั้งหมด') {
+      return matchesSearch
+    }
+    return matchesSearch && item.category === selectedCategory.value
+  })
+})
+
+function openItemSelectorModal() {
+  searchQuery.value = ''
+  selectedCategory.value = 'ทั้งหมด'
+  isItemSelectorOpen.value = true
+}
+
+function closeItemSelectorModal() {
+  isItemSelectorOpen.value = false
+}
+
+function selectItemFromModal(item) {
+  formData.value.selectedItemId = item.id.toString()
+  closeItemSelectorModal()
 }
 </script>
 
@@ -357,13 +413,18 @@ const handleSaveStockReceive = async () => {
               <label class="block text-base font-extrabold text-slate-800 mb-2 flex items-center gap-2">
                 <Boxes class="w-5 h-5 text-emerald-600" /> เลือกรายการพัสดุเดิม <span class="text-rose-500">*</span>
               </label>
-              <select v-model="formData.selectedItemId" required
-                class="w-full bg-slate-50 border-2 border-slate-200 rounded-2xl p-4 text-slate-900 font-bold text-lg md:text-xl focus:outline-none focus:border-emerald-600 focus:bg-white transition-all cursor-pointer shadow-sm">
-                <option value="" disabled>-- คลิกเพื่อเลือกรายการพัสดุเดิม --</option>
-                <option v-for="item in items" :key="item.id" :value="item.id">
-                  [{{ item.sku }}] {{ item.name }} (มีอยู่แล้ว {{ item.quantity }} {{ item.unit || 'หน่วย' }})
-                </option>
-              </select>
+              
+              <!-- ปุ่มเปิด Modal เลือกพัสดุ (คลีน ไม่มีไอคอน / ไม่มีกล่องเขียวด้านล่าง) -->
+              <button type="button" @click="openItemSelectorModal"
+                class="w-full bg-slate-50 border-2 border-slate-200 hover:border-emerald-500 rounded-2xl p-4 text-left font-bold text-lg md:text-xl transition-all cursor-pointer shadow-sm flex items-center justify-between text-slate-700 hover:bg-emerald-50/20">
+                <span v-if="selectedExistingItem" class="text-emerald-800">
+                  {{ selectedExistingItem.name }} (มีอยู่แล้ว {{ selectedExistingItem.quantity }} {{ selectedExistingItem.unit || 'หน่วย' }})
+                </span>
+                <span v-else class="text-slate-400">
+                  -- คลิกเพื่อค้นหาและเลือกรายการพัสดุเดิม --
+                </span>
+                <span class="text-xs bg-slate-200 text-slate-600 hover:bg-slate-300 px-3 py-1.5 rounded-full transition-all">ค้นหาพัสดุ</span>
+              </button>
             </div>
 
             <!-- Case 2: ช่องกรอกวัสดุใหม่ (จะโชว์เฉพาะเมื่อเลือก "วัสดุใหม่") -->
@@ -408,11 +469,21 @@ const handleSaveStockReceive = async () => {
             <!-- จำนวน & ราคา -->
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-6 mt-6">
               <div>
-                <label class="block text-base font-extrabold text-slate-800 mb-2">
+                <label class="block text-base font-extrabold text-slate-800 mb-2 flex items-center gap-2">
                   ราคาต่อหน่วย (บาท) <span class="text-rose-500">*</span>
+                  <span v-if="itemSourceType === 'EXISTING' && selectedExistingItem"
+                    class="ml-1 text-xs font-semibold bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full">ดึงอัตโนมัติ ✓</span>
                 </label>
-                <input v-model="formData.unitPrice" type="number" step="0.01" min="0" required placeholder="0.00"
-                  class="w-full bg-slate-50 border-2 border-slate-200 rounded-2xl p-4 text-slate-900 font-extrabold text-xl focus:outline-none focus:border-emerald-600 focus:bg-white transition-all" />
+                <input
+                  v-model="formData.unitPrice"
+                  type="number" step="0.01" min="0" required placeholder="0.00"
+                  :readonly="itemSourceType === 'EXISTING' && !!selectedExistingItem"
+                  :class="[
+                    'w-full border-2 rounded-2xl p-4 font-extrabold text-xl focus:outline-none transition-all',
+                    itemSourceType === 'EXISTING' && selectedExistingItem
+                      ? 'bg-emerald-50 border-emerald-300 text-emerald-800 cursor-not-allowed'
+                      : 'bg-slate-50 border-slate-200 text-slate-900 focus:border-emerald-600 focus:bg-white'
+                  ]" />
               </div>
 
               <div>
@@ -546,6 +617,7 @@ const handleSaveStockReceive = async () => {
     </div>
 
     <!-- Success Modal -->
+    <!-- Success Modal -->
     <div v-if="showSuccessModal"
       class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm">
       <div class="bg-white rounded-3xl p-8 max-w-md w-full shadow-2xl border border-slate-100 text-center space-y-6">
@@ -567,6 +639,134 @@ const handleSaveStockReceive = async () => {
           class="w-full py-4 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold rounded-2xl text-lg shadow-lg cursor-pointer transition-all">
           ตกลง / ทำรายการต่อไป
         </button>
+      </div>
+    </div>
+
+    <!-- ✅ Modal เลือกพัสดุเดิม (Item Selector Modal) ตามดีไซน์รูปภาพ -->
+    <div v-if="isItemSelectorOpen"
+      class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm transition-all duration-300">
+      <div class="bg-slate-50 rounded-3xl w-full max-w-5xl h-[85vh] shadow-2xl border border-slate-100 flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+        
+        <!-- Header -->
+        <div class="bg-white p-6 border-b border-slate-100 flex items-center justify-between shrink-0">
+          <div>
+            <h3 class="text-2xl font-black text-slate-900 flex items-center gap-2">
+              <Boxes class="w-7 h-7 text-emerald-600" />
+              ค้นหาและเลือกรายการพัสดุเดิมในคลัง
+            </h3>
+            <p class="text-sm font-semibold text-slate-500 mt-1">คลิกเลือกรายการที่ต้องการรับเข้าคลังเพื่อดึงข้อมูลราคาต่อหน่วย</p>
+          </div>
+          <button @click="closeItemSelectorModal" type="button"
+            class="w-10 h-10 rounded-full bg-slate-100 hover:bg-rose-50 text-slate-500 hover:text-rose-600 flex items-center justify-center transition-all cursor-pointer">
+            <span class="text-2xl font-black">&times;</span>
+          </button>
+        </div>
+
+        <!-- Filter & Search Bar -->
+        <div class="bg-white px-6 pb-6 border-b border-slate-100 space-y-4 shrink-0">
+          <!-- Search Input -->
+          <div class="relative">
+            <span class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+              <svg class="h-5 w-5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+            </span>
+            <input
+              v-model="searchQuery"
+              type="text"
+              placeholder="ค้นหาชื่อพัสดุ หรือรหัสวัสดุ..."
+              class="w-full bg-slate-50 border-2 border-slate-200 focus:border-emerald-500 rounded-2xl pl-12 pr-4 py-4 text-slate-900 font-bold text-lg focus:bg-white focus:outline-none transition-all shadow-sm"
+            />
+          </div>
+
+          <!-- Category Chips -->
+          <div class="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-thin">
+            <button
+              v-for="cat in availableCategories"
+              :key="cat"
+              type="button"
+              @click="selectedCategory = cat"
+              :class="[
+                'px-5 py-2.5 rounded-full text-sm font-black whitespace-nowrap transition-all cursor-pointer active:scale-95',
+                selectedCategory === cat
+                  ? 'bg-emerald-800 text-white shadow-md shadow-emerald-800/20'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-800'
+              ]"
+            >
+              {{ cat }}
+            </button>
+          </div>
+        </div>
+
+        <!-- Grid Cards Area -->
+        <div class="flex-1 overflow-y-auto p-6 bg-slate-100/50">
+          <div v-if="filteredItems.length === 0" class="flex flex-col items-center justify-center py-12 text-slate-400">
+            <Package class="w-16 h-16 stroke-[1.5] mb-2 text-slate-300" />
+            <p class="text-lg font-bold">ไม่พบข้อมูลพัสดุตามเงื่อนไขที่ค้นหา</p>
+          </div>
+
+          <div v-else class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
+            <div
+              v-for="item in filteredItems"
+              :key="item.id"
+              @click="selectItemFromModal(item)"
+              class="bg-white rounded-2xl p-5 border-2 border-slate-200/80 hover:border-emerald-500 hover:shadow-lg transition-all cursor-pointer flex flex-col justify-between relative group"
+            >
+              <!-- Stock Badge -->
+              <span
+                :class="[
+                  'absolute top-4 right-4 text-xs font-black px-3 py-1 rounded-full',
+                  item.quantity > 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-600'
+                ]"
+              >
+                {{ item.quantity > 0 ? `คงเหลือ ${item.quantity} ${item.unit || 'หน่วย'}` : 'หมดสต็อก' }}
+              </span>
+
+              <!-- Icon & Meta -->
+              <div class="space-y-4">
+                <div class="w-12 h-12 rounded-xl bg-emerald-50 flex items-center justify-center group-hover:bg-emerald-600 transition-colors">
+                  <Package class="w-6 h-6 text-emerald-600 group-hover:text-white transition-colors" />
+                </div>
+
+                <!-- Product Detail -->
+                <div>
+                  <h4 class="font-extrabold text-slate-900 text-lg line-clamp-2 group-hover:text-emerald-700 transition-colors">
+                    {{ item.name }}
+                  </h4>
+                  <p class="text-xs font-bold text-slate-400 mt-1">
+                    {{ item.category || 'ไม่ระบุหมวดหมู่' }}
+                  </p>
+                </div>
+              </div>
+
+              <!-- Price & Action -->
+              <div class="pt-5 mt-4 border-t border-slate-100 flex items-center justify-between">
+                <div>
+                  <span class="text-xs text-slate-400 font-bold block">ราคาต่อหน่วย</span>
+                  <span class="text-lg font-black text-slate-900">
+                    ฿{{ (item.unitPrice ?? item.price ?? 0).toLocaleString('th-TH', { minimumFractionDigits: 2 }) }}
+                  </span>
+                </div>
+                
+                <span class="text-sm font-black text-emerald-700 bg-emerald-50 group-hover:bg-emerald-600 group-hover:text-white px-4 py-2 rounded-xl transition-all flex items-center gap-1">
+                  เลือกพัสดุ
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="bg-white p-5 border-t border-slate-100 flex justify-end shrink-0">
+          <button
+            type="button"
+            @click="closeItemSelectorModal"
+            class="px-6 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold rounded-xl text-base transition-all cursor-pointer"
+          >
+            ปิดหน้าต่าง
+          </button>
+        </div>
+
       </div>
     </div>
 

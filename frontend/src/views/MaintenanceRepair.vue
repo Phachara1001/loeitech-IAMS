@@ -2,7 +2,7 @@
 import { ref, computed, onMounted } from 'vue'
 import {
   Wrench, Plus, X, Check, Loader2, AlertTriangle, Image as ImageIcon,
-  CheckCircle2, Ban, History, DollarSign, Camera
+  CheckCircle2, Ban, History, DollarSign, Camera, Search, Clock
 } from 'lucide-vue-next'
 import * as inventoryApi from '../services/inventoryApi.js'
 import { useToast } from '../composables/useToast.js'
@@ -60,6 +60,46 @@ const repairHistory = computed(() => {
 const totalRepairCost = computed(() => {
   return repairHistory.value.reduce((sum, r) => sum + (r.repairCost || 0), 0)
 })
+
+// Stats: นับสถานะ
+const stats = computed(() => ({
+  pending:   repairRequests.value.filter(r => r.status === 'PENDING').length,
+  repairing: repairRequests.value.filter(r => r.status === 'APPROVED' || r.status === 'REPAIRING').length,
+  done:      repairRequests.value.filter(r => r.status === 'COMPLETED').length,
+  rejected:  repairRequests.value.filter(r => r.status === 'REJECTED').length,
+}))
+
+/* ---------------- Modal: เลือกครุภัณฑ์ ---------------- */
+const assetSelectorOpen = ref(false)
+const assetSearchQuery = ref('')
+const assetCatFilter = ref('ทั้งหมด')
+
+const assetCategories = computed(() => {
+  const cats = new Set(assets.value.map(a => a.category).filter(Boolean))
+  return ['ทั้งหมด', ...Array.from(cats)]
+})
+
+const filteredAssets = computed(() => {
+  return assets.value.filter(a => {
+    const q = assetSearchQuery.value.toLowerCase()
+    const matchQ = a.name.toLowerCase().includes(q) || (a.seq || '').toLowerCase().includes(q)
+    const matchCat = assetCatFilter.value === 'ทั้งหมด' || a.category === assetCatFilter.value
+    return matchQ && matchCat
+  })
+})
+
+const selectedAsset = computed(() => assets.value.find(a => a.id === Number(form.value.assetId)) || null)
+
+function openAssetSelector() {
+  assetSearchQuery.value = ''
+  assetCatFilter.value = 'ทั้งหมด'
+  assetSelectorOpen.value = true
+}
+
+function pickAsset(asset) {
+  form.value.assetId = asset.id.toString()
+  assetSelectorOpen.value = false
+}
 
 /* ---------------- ฟอร์มแจ้งซ่อม ---------------- */
 const form = ref({ assetId: '', detail: '', urgency: 'NORMAL', photoPreview: null })
@@ -127,61 +167,64 @@ function formatThaiDate(dateStr) {
   return new Date(dateStr).toLocaleDateString('th-TH', { dateStyle: 'medium' })
 }
 
-/* ---------------- ประเมิน/อนุมัติ (Admin, Staff) ---------------- */
-const evaluatingId = ref(null)
-const evalDecision = ref('')
+/* ---------------- Modal: ประเมิน ---------------- */
+const evalModal = ref({ open: false, record: null, remark: '' })
 
 function openEvaluate(req) {
-  evaluatingId.value = req.id
-  evalDecision.value = ''
+  evalModal.value = { open: true, record: req, remark: '' }
 }
 function closeEvaluate() {
-  evaluatingId.value = null
+  evalModal.value.open = false
 }
 
-async function approveRepair(req) {
+async function approveRepair() {
+  const req = evalModal.value.record
+  if (!req) return
   try {
     await inventoryApi.updateRepairStatus(req.id, {
       status: 'APPROVED',
       approvedBy: currentUserName.value,
-      remark: evalDecision.value.trim() || 'เห็นควรส่งซ่อม'
+      remark: evalModal.value.remark.trim() || 'เห็นควรส่งซ่อม'
     })
     toast.success('อนุมัติสั่งซ่อมครุภัณฑ์เรียบร้อย')
-    evaluatingId.value = null
+    closeEvaluate()
     await fetchData()
   } catch (err) {
     toast.error('ไม่สามารถอนุมัติได้: ' + err.message)
   }
 }
 
-async function markAsDamaged(req) {
+async function markAsDamaged() {
+  const req = evalModal.value.record
+  if (!req) return
   try {
     await inventoryApi.updateRepairStatus(req.id, {
       status: 'REJECTED',
       approvedBy: currentUserName.value,
-      remark: evalDecision.value.trim() || 'ค่าซ่อมไม่คุ้มค่า เห็นควรทำเรื่องแทงชำรุด/จำหน่ายออก'
+      remark: evalModal.value.remark.trim() || 'ค่าซ่อมไม่คุ้มค่า เห็นควรทำเรื่องแทงชำรุด/จำหน่ายออก'
     })
-    toast.success('ปฏิเสธการซ่อม/ทำเรื่องแทงชำรุดครุภัณฑ์แล้ว')
-    evaluatingId.value = null
+    toast.success('ทำเรื่องแทงชำรุดครุภัณฑ์เรียบร้อย')
+    closeEvaluate()
     await fetchData()
   } catch (err) {
     toast.error('ล้มเหลว: ' + err.message)
   }
 }
 
-const completingId = ref(null)
-const completeCost = ref('')
+/* ---------------- Modal: บันทึกซ่อมเสร็จ ---------------- */
+const completeModal = ref({ open: false, record: null, cost: '' })
 
 function openComplete(req) {
-  completingId.value = req.id
-  completeCost.value = ''
+  completeModal.value = { open: true, record: req, cost: '' }
 }
 function closeComplete() {
-  completingId.value = null
+  completeModal.value.open = false
 }
 
-async function completeRepair(req) {
-  if (!completeCost.value) {
+async function completeRepair() {
+  const req = completeModal.value.record
+  if (!req) return
+  if (!completeModal.value.cost) {
     toast.warning('กรุณาระบุค่าใช้จ่ายการซ่อมจริง')
     return
   }
@@ -189,11 +232,11 @@ async function completeRepair(req) {
     await inventoryApi.updateRepairStatus(req.id, {
       status: 'COMPLETED',
       approvedBy: currentUserName.value,
-      repairCost: Number(completeCost.value) || 0,
+      repairCost: Number(completeModal.value.cost) || 0,
       remark: 'ดำเนินการซ่อมแซมครุภัณฑ์เสร็จสิ้นเรียบร้อย'
     })
     toast.success('บันทึกปิดงานซ่อมแซมสำเร็จ!')
-    completingId.value = null
+    closeComplete()
     await fetchData()
   } catch (err) {
     toast.error('บันทึกปิดงานล้มเหลว: ' + err.message)
@@ -229,6 +272,46 @@ async function completeRepair(req) {
       </div>
     </Transition>
 
+    <!-- ===== Summary Cards ===== -->
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+      <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-amber-50 flex items-center justify-center shrink-0">
+          <Clock class="w-5 h-5 text-amber-500" />
+        </div>
+        <div>
+          <p class="text-2xl font-black text-slate-900 leading-none">{{ stats.pending }}</p>
+          <p class="text-xs text-slate-500 mt-0.5">รอประเมิน</p>
+        </div>
+      </div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-sky-50 flex items-center justify-center shrink-0">
+          <Wrench class="w-5 h-5 text-sky-500" />
+        </div>
+        <div>
+          <p class="text-2xl font-black text-slate-900 leading-none">{{ stats.repairing }}</p>
+          <p class="text-xs text-slate-500 mt-0.5">กำลังซ่อม</p>
+        </div>
+      </div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center shrink-0">
+          <CheckCircle2 class="w-5 h-5 text-emerald-600" />
+        </div>
+        <div>
+          <p class="text-2xl font-black text-slate-900 leading-none">{{ stats.done }}</p>
+          <p class="text-xs text-slate-500 mt-0.5">ซ่อมเสร็จ</p>
+        </div>
+      </div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-purple-50 flex items-center justify-center shrink-0">
+          <DollarSign class="w-5 h-5 text-purple-500" />
+        </div>
+        <div>
+          <p class="text-lg font-black text-slate-900 leading-none">{{ totalRepairCost.toLocaleString() }}</p>
+          <p class="text-xs text-slate-500 mt-0.5">ค่าซ่อมรวม (บาท)</p>
+        </div>
+      </div>
+    </div>
+
     <!-- แท็บ -->
     <div class="flex items-center gap-2 bg-white rounded-2xl border border-emerald-100 shadow-sm p-2 mb-6 overflow-x-auto">
       <button
@@ -237,7 +320,7 @@ async function completeRepair(req) {
         type="button"
         @click="activeTab = tab.key"
         :class="[
-          'flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all whitespace-nowrap shrink-0',
+          'flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all whitespace-nowrap shrink-0 cursor-pointer',
           activeTab === tab.key
             ? 'bg-gradient-to-r from-[#065f46] to-[#047857] text-white shadow-md'
             : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700'
@@ -251,30 +334,53 @@ async function completeRepair(req) {
         >
           <component :is="tab.icon" :class="['w-3.5 h-3.5', activeTab === tab.key ? 'text-white' : tab.color]" />
         </span>
-        {{ tab.label }}
+        <span>{{ tab.label }}</span>
+        <!-- แสดงยอดรวมจำนวนในแต่ละแท็บ -->
+        <span v-if="tab.key === 'list' && activeRepairs.length > 0"
+          :class="['text-xs px-2 py-0.5 rounded-full font-bold', activeTab === tab.key ? 'bg-white text-[#065f46]' : 'bg-amber-100 text-amber-800']">
+          {{ activeRepairs.length }}
+        </span>
+        <span v-if="tab.key === 'history' && repairHistory.length > 0"
+          :class="['text-xs px-2 py-0.5 rounded-full font-bold', activeTab === tab.key ? 'bg-white text-[#047857]' : 'bg-sky-100 text-sky-800']">
+          {{ repairHistory.length }}
+        </span>
       </button>
     </div>
 
     <!-- ===== แท็บ: แจ้งซ่อมใหม่ (ทุก role) ===== -->
-    <div v-if="activeTab === 'new'" class="bg-white rounded-2xl border border-[#047857] shadow-sm hover:shadow-md transition-shadow p-6 max-w-2xl">
+    <div v-if="activeTab === 'new'" class="flex justify-center">
+    <div class="bg-white rounded-2xl border border-[#047857] shadow-sm hover:shadow-md transition-shadow p-6 w-full max-w-xl">
       <div class="space-y-4">
         <div>
-          <label class="block text-sm font-medium text-slate-700 mb-1.5">เลือกครุภัณฑ์ที่ต้องการแจ้งซ่อม</label>
-          <select v-model="form.assetId" class="w-full px-3.5 py-2.5 rounded-lg border border-slate-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#065f46]/20 focus:border-[#065f46] transition">
-            <option value="" disabled>-- เลือกครุภัณฑ์ --</option>
-            <option v-for="a in assets" :key="a.id" :value="a.id">
-              [{{ a.seq || '-' }}] {{ a.name }}
-            </option>
-          </select>
+          <label class="block text-sm font-medium text-slate-700 mb-1.5">ครุภัณฑ์ที่ต้องการแจ้งซ่อม</label>
+          <!-- ปุ่มเปิด Modal เลือกครุภัณฑ์ -->
+          <button type="button" @click="openAssetSelector"
+            class="w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 transition-all cursor-pointer"
+            :class="selectedAsset ? 'border-[#047857] bg-emerald-50/50' : 'border-slate-200 bg-white hover:border-slate-300'">
+            <div v-if="selectedAsset" class="text-left min-w-0">
+              <p class="text-sm font-bold text-[#065f46] truncate">{{ selectedAsset.name }}</p>
+              <p class="text-xs text-slate-500">เลขครุภัณฑ์: {{ selectedAsset.seq || '-' }}</p>
+            </div>
+            <span v-else class="text-sm text-slate-400">-- คลิกเพื่อค้นหาและเลือกครุภัณฑ์ --</span>
+            <span class="ml-3 shrink-0 px-3 py-1 rounded-lg bg-slate-100 text-slate-600 text-xs font-semibold">{{ selectedAsset ? 'เปลี่ยน' : 'ค้นหา' }}</span>
+          </button>
         </div>
 
         <div>
           <label class="block text-sm font-medium text-slate-700 mb-1.5">ระดับความเร่งด่วน</label>
-          <select v-model="form.urgency" class="w-full px-3.5 py-2.5 rounded-lg border border-slate-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#065f46]/20 focus:border-[#065f46] transition">
-            <option value="NORMAL">ปกติ (NORMAL)</option>
-            <option value="URGENT">ด่วน (URGENT)</option>
-            <option value="CRITICAL">ด่วนที่สุด (CRITICAL)</option>
-          </select>
+          <div class="grid grid-cols-3 gap-2">
+            <button v-for="opt in [
+              { v: 'NORMAL',   l: 'ปกติ',      active: 'bg-slate-700 border-slate-700 text-white' },
+              { v: 'URGENT',   l: 'ด่วน',       active: 'bg-orange-500 border-orange-500 text-white' },
+              { v: 'CRITICAL', l: 'ด่วนที่สุด', active: 'bg-red-500 border-red-500 text-white' }
+            ]" :key="opt.v" type="button" @click="form.urgency = opt.v"
+              :class="[
+                'py-2.5 rounded-xl text-sm font-semibold border-2 transition-all cursor-pointer',
+                form.urgency === opt.v ? opt.active : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'
+              ]">
+              {{ opt.l }}
+            </button>
+          </div>
         </div>
 
         <div>
@@ -319,78 +425,75 @@ async function completeRepair(req) {
         </button>
       </div>
     </div>
+    </div>
 
     <!-- ===== แท็บ: รายการแจ้งซ่อม ===== -->
-    <div v-else-if="activeTab === 'list'" class="bg-white rounded-2xl border border-emerald-100 shadow-sm divide-y divide-slate-100">
-      <div v-for="req in activeRepairs" :key="req.id" class="p-5 hover:bg-emerald-50/40 transition-colors border-l-4 border-transparent hover:border-[#065f46]">
-        <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
-          <div class="flex gap-3 min-w-0">
-            <div class="w-14 h-14 rounded-lg bg-slate-50 border border-slate-100 overflow-hidden shrink-0 flex items-center justify-center">
-              <ImageIcon class="w-5 h-5 text-slate-300" />
-            </div>
+    <div v-else-if="activeTab === 'list'" class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+      <!-- Header -->
+      <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+        <p class="text-sm font-medium text-slate-500">
+          ทั้งหมด <span class="font-bold text-slate-900">{{ activeRepairs.length }}</span> รายการ
+        </p>
+        <button type="button" @click="activeTab = 'new'"
+          class="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-bold bg-[#065f46] text-white hover:bg-[#047857] shadow-sm hover:shadow-md transition-all cursor-pointer">
+          <Plus class="w-4 h-4" />
+          แจ้งซ่อมใหม่
+        </button>
+      </div>
+
+      <div class="divide-y divide-slate-100">
+        <div v-for="req in activeRepairs" :key="req.id" class="p-6 hover:bg-slate-50/50 transition-colors">
+          <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div class="min-w-0">
-              <div class="flex items-center gap-2 flex-wrap">
-                <span class="text-xs font-mono text-slate-400">{{ req.repairCode }}</span>
-                <span :class="['px-2.5 py-0.5 rounded-full text-xs font-semibold border', statusStyle(req.status)]">
+              <div class="flex items-center gap-2 mb-1.5">
+                <span class="text-xs font-mono text-slate-400 font-semibold">{{ req.repairCode }}</span>
+                <span :class="['px-2 py-0.5 rounded-full text-[11px] font-bold border', statusStyle(req.status)]">
                   {{ req.status === 'PENDING' ? 'รอประเมิน' : req.status === 'APPROVED' ? 'อนุมัติส่งซ่อม' : req.status === 'REPAIRING' ? 'กำลังซ่อม' : req.status }}
                 </span>
                 <span v-if="req.urgency !== 'NORMAL'" class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-100">
                   {{ req.urgency === 'URGENT' ? 'ด่วน' : 'ด่วนที่สุด' }}
                 </span>
               </div>
-              <p class="text-sm font-semibold text-slate-800 mt-1.5">{{ req.asset?.name || 'ครุภัณฑ์' }} <span class="text-slate-400 font-normal">({{ req.asset?.seq || '-' }})</span></p>
-              <p class="text-xs text-slate-500 mt-1">{{ req.description }}</p>
-              <p class="text-xs text-slate-400 mt-1">แจ้งโดย {{ req.reporterName }} · {{ formatThaiDate(req.createdAt) }}</p>
-              <p v-if="req.remark" class="text-xs text-slate-500 mt-1.5 bg-slate-50 rounded-lg px-2.5 py-1.5">
-                <span class="font-semibold text-slate-600">ความเห็น/เหตุผล:</span> {{ req.remark }}
+              <h4 class="text-base font-bold text-slate-800">
+                {{ req.asset?.name || 'ครุภัณฑ์' }} <span class="text-slate-400 font-normal">({{ req.asset?.seq || '-' }})</span>
+              </h4>
+              <p class="text-xs text-slate-500 mt-1">ผู้แจ้ง: <span class="font-semibold">{{ req.reporterName }}</span></p>
+              <div class="flex items-center gap-1.5 text-xs text-slate-400 mt-0.5">
+                <Clock class="w-3.5 h-3.5" />
+                <span>วันที่แจ้ง: {{ formatThaiDate(req.createdAt) }}</span>
+              </div>
+              <p v-if="req.description" class="text-xs text-slate-500 mt-2 bg-slate-50 px-3 py-2 rounded-lg border border-slate-100">
+                <span class="font-semibold text-slate-600">อาการชำรุด:</span> {{ req.description }}
+              </p>
+              <p v-if="req.remark" class="text-xs text-slate-500 mt-1.5 bg-amber-50 px-3 py-2 rounded-lg border border-amber-100">
+                <span class="font-semibold text-amber-700">หมายเหตุ:</span> {{ req.remark }}
               </p>
             </div>
-          </div>
 
-          <div v-if="canManage" class="flex items-center gap-2 shrink-0">
-            <button v-if="req.status === 'PENDING'" type="button" @click="openEvaluate(req)" class="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold bg-sky-50 text-sky-700 hover:bg-sky-100 hover:shadow-sm transition-all">
-              <CheckCircle2 class="w-3.5 h-3.5" />
-              ประเมิน
-            </button>
-            <button v-else-if="req.status === 'APPROVED' || req.status === 'REPAIRING'" type="button" @click="openComplete(req)" class="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold bg-emerald-50 text-emerald-700 hover:bg-emerald-100 hover:shadow-sm transition-all">
-              <Check class="w-3.5 h-3.5" />
-              บันทึกซ่อมเสร็จ
-            </button>
+            <div v-if="canManage" class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 shrink-0">
+              <template v-if="req.status === 'PENDING'">
+                <button type="button" @click="openEvaluate(req)"
+                  class="flex items-center justify-center gap-1.5 px-5 py-2.5 rounded-xl text-sm font-bold border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition-all cursor-pointer shadow-sm">
+                  <CheckCircle2 class="w-4 h-4 text-emerald-600" />
+                  ประเมิน/อนุมัติ
+                </button>
+              </template>
+              <template v-else-if="req.status === 'APPROVED' || req.status === 'REPAIRING'">
+                <button type="button" @click="openComplete(req)"
+                  class="flex items-center justify-center gap-1.5 px-5 py-2.5 rounded-xl text-sm font-bold bg-[#0ea5e9] text-white hover:bg-[#0284c7] transition-all cursor-pointer shadow-sm">
+                  <Check class="w-4 h-4" />
+                  บันทึกซ่อมเสร็จ
+                </button>
+              </template>
+            </div>
           </div>
         </div>
 
-        <!-- แผงประเมิน (inline) -->
-        <div v-if="evaluatingId === req.id" class="mt-4 p-4 rounded-xl bg-emerald-50/50 border border-emerald-100">
-          <label class="block text-xs font-semibold text-slate-600 mb-1.5">ความเห็นการประเมิน</label>
-          <textarea v-model="evalDecision" rows="2" placeholder="ระบุเหตุผล เช่น ความคุ้มค่าของการซ่อมเทียบกับราคาซื้อใหม่..." class="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm bg-white resize-none focus:outline-none focus:ring-2 focus:ring-[#065f46]/20 focus:border-[#065f46] transition"></textarea>
-          <div class="flex items-center gap-2 mt-3">
-            <button type="button" @click="approveRepair(req)" class="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold bg-sky-600 text-white shadow-sm hover:bg-sky-700 hover:shadow-md transition-all">
-              <CheckCircle2 class="w-3.5 h-3.5" />
-              อนุมัติส่งซ่อม
-            </button>
-            <button type="button" @click="markAsDamaged(req)" class="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold bg-red-600 text-white shadow-sm hover:bg-red-700 hover:shadow-md transition-all">
-              <Ban class="w-3.5 h-3.5" />
-              ทำเรื่องแทงชำรุด
-            </button>
-            <button type="button" @click="closeEvaluate" class="px-3 py-2 rounded-lg text-xs font-medium text-slate-500 hover:bg-slate-100 transition-colors">ยกเลิก</button>
-          </div>
-        </div>
-
-        <!-- แผงบันทึกซ่อมเสร็จ (inline) -->
-        <div v-if="completingId === req.id" class="mt-4 p-4 rounded-xl bg-emerald-50/50 border border-emerald-100">
-          <label class="block text-xs font-semibold text-slate-600 mb-1.5">ค่าใช้จ่ายในการซ่อม (บาท)</label>
-          <input v-model="completeCost" type="number" min="0" placeholder="0" class="w-40 px-3 py-2 rounded-lg border border-slate-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#065f46]/20 focus:border-[#065f46] transition" />
-          <div class="flex items-center gap-2 mt-3">
-            <button type="button" @click="completeRepair(req)" class="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold bg-gradient-to-r from-[#065f46] to-[#047857] text-white shadow-sm hover:shadow-md transition-all">
-              <Check class="w-3.5 h-3.5" />
-              บันทึก
-            </button>
-            <button type="button" @click="closeComplete" class="px-3 py-2 rounded-lg text-xs font-medium text-slate-500 hover:bg-slate-100 transition-colors">ยกเลิก</button>
-          </div>
+        <div v-if="activeRepairs.length === 0" class="py-16 text-center text-slate-400 text-sm">
+          <Wrench class="w-12 h-12 mx-auto mb-3 text-slate-200" />
+          ไม่มีรายการแจ้งซ่อมที่รอดำเนินการ
         </div>
       </div>
-
-      <div v-if="activeRepairs.length === 0" class="py-16 text-center text-slate-400 text-sm">ยังไม่มีรายการแจ้งซ่อมที่อยู่ระหว่างดำเนินการ</div>
     </div>
 
     <!-- ===== แท็บ: ประวัติการซ่อม/ค่าใช้จ่าย ===== -->
@@ -439,6 +542,201 @@ async function completeRepair(req) {
       </div>
     </div>
   </div>
+
+  <!-- ====== Modal: เลือกครุภัณฑ์ ====== -->
+  <Transition
+    enter-active-class="transition ease-out duration-200"
+    enter-from-class="opacity-0 scale-95"
+    enter-to-class="opacity-100 scale-100"
+    leave-active-class="transition ease-in duration-150"
+    leave-from-class="opacity-100 scale-100"
+    leave-to-class="opacity-0 scale-95"
+  >
+    <div v-if="assetSelectorOpen"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4"
+      @click.self="assetSelectorOpen = false">
+      <div class="bg-white rounded-2xl w-full max-w-3xl h-[80vh] flex flex-col overflow-hidden shadow-2xl">
+        <!-- Header -->
+        <div class="px-6 py-5 border-b border-slate-100 shrink-0">
+          <div class="flex items-center justify-between mb-4">
+            <div>
+              <h3 class="text-lg font-bold text-slate-900">ค้นหาและเลือกครุภัณฑ์</h3>
+              <p class="text-xs text-slate-500 mt-0.5">คลิกที่การ์ดเพื่อเลือกครุภัณฑ์ที่ต้องการแจ้งซ่อม</p>
+            </div>
+            <button type="button" @click="assetSelectorOpen = false"
+              class="w-9 h-9 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-500 transition-colors cursor-pointer">
+              <X class="w-4 h-4" />
+            </button>
+          </div>
+          <!-- Search -->
+          <div class="relative mb-3">
+            <Search class="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+            <input v-model="assetSearchQuery" type="text" placeholder="ค้นหาชื่อครุภัณฑ์ หรือเลขครุภัณฑ์..."
+              class="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:border-[#047857] focus:ring-2 focus:ring-[#065f46]/10 transition" />
+          </div>
+          <!-- Category Chips -->
+          <div class="flex items-center gap-2 overflow-x-auto pb-1">
+            <button v-for="cat in assetCategories" :key="cat" type="button" @click="assetCatFilter = cat"
+              :class="[
+                'px-4 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all cursor-pointer shrink-0',
+                assetCatFilter === cat ? 'bg-[#065f46] text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              ]">
+              {{ cat }}
+            </button>
+          </div>
+        </div>
+        <!-- Cards Grid -->
+        <div class="flex-1 overflow-y-auto p-5">
+          <div v-if="filteredAssets.length === 0" class="py-12 text-center text-slate-400">
+            <Wrench class="w-12 h-12 mx-auto mb-2 text-slate-200" />
+            <p class="text-sm">ไม่พบครุภัณฑ์ที่ค้นหา</p>
+          </div>
+          <div v-else class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+            <div v-for="asset in filteredAssets" :key="asset.id"
+              @click="pickAsset(asset)"
+              class="bg-white rounded-xl border-2 border-slate-200 hover:border-[#047857] hover:shadow-md transition-all cursor-pointer p-4 flex flex-col gap-3 group">
+              <div class="flex items-start justify-between">
+                <div class="w-10 h-10 rounded-xl bg-emerald-50 group-hover:bg-[#065f46] flex items-center justify-center transition-colors shrink-0">
+                  <Wrench class="w-5 h-5 text-[#065f46] group-hover:text-white transition-colors" />
+                </div>
+                <span :class="['text-xs font-bold px-2 py-0.5 rounded-full', asset.status === 'Active' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700']">
+                  {{ asset.status === 'Active' ? 'พร้อมใช้' : 'ชำรุด' }}
+                </span>
+              </div>
+              <div class="flex-1">
+                <h4 class="text-sm font-semibold text-slate-900 group-hover:text-[#065f46] transition-colors line-clamp-2">{{ asset.name }}</h4>
+                <p class="text-xs text-slate-400 mt-0.5">{{ asset.seq || '-' }} · {{ asset.category || 'ไม่ระบุ' }}</p>
+              </div>
+              <div class="pt-3 border-t border-slate-100 flex items-center justify-between">
+                <span class="text-xs text-slate-400">{{ asset.location?.name || 'ไม่ระบุสถานที่' }}</span>
+                <span class="text-xs font-bold text-[#065f46] bg-emerald-50 group-hover:bg-[#065f46] group-hover:text-white px-3 py-1 rounded-lg transition-all">
+                  เลือก
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <!-- Footer -->
+        <div class="px-6 py-4 border-t border-slate-100 shrink-0 flex justify-end">
+          <button type="button" @click="assetSelectorOpen = false"
+            class="px-6 py-2.5 rounded-xl border border-slate-200 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition-colors cursor-pointer">
+            ปิดหน้าต่าง
+          </button>
+        </div>
+      </div>
+    </div>
+  </Transition>
+
+  <!-- ====== Modal: ประเมินคำขอซ่อม ====== -->
+  <Transition
+    enter-active-class="transition ease-out duration-150"
+    enter-from-class="opacity-0 scale-95"
+    enter-to-class="opacity-100 scale-100"
+    leave-active-class="transition ease-in duration-100"
+    leave-from-class="opacity-100 scale-100"
+    leave-to-class="opacity-0 scale-95"
+  >
+    <div v-if="evalModal.open"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4"
+      @click.self="closeEvaluate">
+      <div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
+        <!-- Header -->
+        <div class="px-6 py-4 border-b border-slate-100">
+          <div class="flex items-center gap-3">
+            <div class="w-9 h-9 rounded-xl bg-amber-50 flex items-center justify-center shrink-0">
+              <CheckCircle2 class="w-5 h-5 text-amber-600" />
+            </div>
+            <div>
+              <h3 class="text-base font-bold text-slate-900">ประเมินคำขอซ่อม</h3>
+              <p class="text-xs text-slate-500 mt-0.5">{{ evalModal.record?.asset?.name }}</p>
+            </div>
+          </div>
+        </div>
+        <!-- Body -->
+        <div class="p-6 space-y-4">
+          <p class="text-sm text-slate-600 bg-slate-50 rounded-xl px-4 py-3 line-clamp-3">
+            {{ evalModal.record?.description }}
+          </p>
+          <div>
+            <label class="block text-sm font-semibold text-slate-700 mb-1.5">ความเห็น / เหตุผล (ถ้ามี)</label>
+            <textarea v-model="evalModal.remark" rows="2"
+              placeholder="เช่น ควรส่งซ่อม / ค่าซ่อมไม่คุ้มค่า..."
+              class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-[#065f46]/20 focus:border-[#065f46] transition"
+            ></textarea>
+          </div>
+          <div class="flex flex-col gap-2">
+            <button type="button" @click="approveRepair"
+              class="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700 transition-all cursor-pointer">
+              <CheckCircle2 class="w-4 h-4" />
+              อนุมัติส่งซ่อม
+            </button>
+            <button type="button" @click="markAsDamaged"
+              class="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-red-500 text-white text-sm font-bold hover:bg-red-600 transition-all cursor-pointer">
+              <Ban class="w-4 h-4" />
+              ทำเรื่องแทงชำรุด
+            </button>
+            <button type="button" @click="closeEvaluate"
+              class="w-full py-3 rounded-xl border border-slate-200 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition-colors cursor-pointer">
+              ยกเลิก
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </Transition>
+
+  <!-- ====== Modal: บันทึกซ่อมเสร็จ ====== -->
+  <Transition
+    enter-active-class="transition ease-out duration-150"
+    enter-from-class="opacity-0 scale-95"
+    enter-to-class="opacity-100 scale-100"
+    leave-active-class="transition ease-in duration-100"
+    leave-from-class="opacity-100 scale-100"
+    leave-to-class="opacity-0 scale-95"
+  >
+    <div v-if="completeModal.open"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4"
+      @click.self="closeComplete">
+      <div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
+        <!-- Header -->
+        <div class="px-6 py-4 border-b border-slate-100">
+          <div class="flex items-center gap-3">
+            <div class="w-9 h-9 rounded-xl bg-emerald-50 flex items-center justify-center shrink-0">
+              <Check class="w-5 h-5 text-emerald-600" />
+            </div>
+            <div>
+              <h3 class="text-base font-bold text-slate-900">บันทึกซ่อมเสร็จแล้ว</h3>
+              <p class="text-xs text-slate-500 mt-0.5">{{ completeModal.record?.asset?.name }}</p>
+            </div>
+          </div>
+        </div>
+        <!-- Body -->
+        <div class="p-6 space-y-4">
+          <div>
+            <label class="block text-sm font-semibold text-slate-700 mb-1.5">
+              ค่าใช้จ่ายในการซ่อม (บาท) <span class="text-red-500">*</span>
+            </label>
+            <div class="relative">
+              <span class="absolute inset-y-0 left-0 pl-3.5 flex items-center text-slate-400 text-sm">฿</span>
+              <input v-model="completeModal.cost" type="number" min="0" placeholder="0.00"
+                class="w-full pl-8 pr-4 py-2.5 rounded-xl border border-slate-200 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#065f46]/20 focus:border-[#065f46] transition" />
+            </div>
+          </div>
+          <div class="flex gap-3">
+            <button type="button" @click="closeComplete"
+              class="flex-1 py-3 rounded-xl border border-slate-200 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer">
+              ยกเลิก
+            </button>
+            <button type="button" @click="completeRepair"
+              class="flex-1 py-3 rounded-xl bg-gradient-to-r from-[#065f46] to-[#047857] text-white text-sm font-bold hover:shadow-lg transition-all cursor-pointer">
+              บันทึก
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </Transition>
+
 </template>
 
 <style>

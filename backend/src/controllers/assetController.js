@@ -185,3 +185,13 @@ export const uploadImage = async (req, res, next) => {
     next(error);
   }
 };
+
+export const getAssetTimeline = async (req, res, next) => {
+  try {
+    const timeline = await assetService.getAssetTimeline(req.params.id);
+    res.status(200).json({ status: 'success', data: timeline });
+  } catch (error) {
+    next(error);
+  }
+};
+

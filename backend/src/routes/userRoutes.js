@@ -21,7 +21,7 @@ router.post('/me/avatar', upload.single('avatar'), userController.uploadAvatar);
 router.put('/me/password', validateChangePasswordInput, userController.changePassword);
 
 // ----- Admin จัดการผู้ใช้งานคนอื่น -----
-router.get('/', authorize('ADMIN'), userController.listUsers);
+router.get('/', authorize('ADMIN', 'STAFF'), userController.listUsers);
 router.post('/', authorize('ADMIN'), validateCreateUserInput, userController.createUser);
 router.put('/:id', authorize('ADMIN'), validateUpdateUserByAdminInput, userController.updateUserById);
 router.delete('/:id', authorize('ADMIN'), userController.deleteUserById);

@@ -8,6 +8,7 @@ const router = Router();
 router.get('/', assetController.getAssets);
 router.post('/upload', upload.single('image'), assetController.uploadImage);
 router.get('/:id', assetController.getAssetById);
+router.get('/:id/timeline', assetController.getAssetTimeline);
 router.post('/', validateAssetInput, assetController.createAsset);
 router.put('/:id', validateAssetInput, assetController.updateAsset);
 router.delete('/:id', assetController.deleteAsset);

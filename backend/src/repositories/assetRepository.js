@@ -54,3 +54,26 @@ export const findLatestAsset = async () => {
     orderBy: { id: 'desc' }
   });
 };
+
+export const findTimelineData = async (id) => {
+  const assetId = Number(id);
+  const [asset, distributions, borrows, repairs] = await Promise.all([
+    prisma.asset.findUnique({ where: { id: assetId } }),
+    prisma.assetDistribution.findMany({
+      where: { assetId },
+      include: { responsiblePerson: { select: { name: true } } },
+      orderBy: { assignDate: 'asc' }
+    }),
+    prisma.borrowTransaction.findMany({
+      where: { assetId },
+      orderBy: { borrowDate: 'asc' }
+    }),
+    prisma.repairRequest.findMany({
+      where: { assetId },
+      orderBy: { createdAt: 'asc' }
+    })
+  ]);
+
+  return { asset, distributions, borrows, repairs };
+};
+

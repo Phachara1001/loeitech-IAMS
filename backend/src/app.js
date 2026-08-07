@@ -3,12 +3,13 @@ import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import authRoutes from './routes/authRoutes.js';
+import userRoutes from './routes/userRoutes.js';
+import departmentRoutes from './routes/departmentRoutes.js';
+import locationRoutes from './routes/locationRoutes.js';
 import assetRoutes from './routes/assetRoutes.js';
 import itemRoutes from './routes/itemRoutes.js';
 import stockReceiveRoutes from './routes/stockReceiveRoutes.js';
 import requisitionRoutes from './routes/requisitionRoutes.js';
-import borrowRoutes from './routes/borrowRoutes.js';
-import repairRoutes from './routes/repairRoutes.js';
 
 const app = express();
 
@@ -24,12 +25,13 @@ app.get('/health', (req, res) => {
 
 // API Routes
 app.use('/api/auth', authRoutes);              // Login, Register, Forgot/Reset Password
+app.use('/api/users', userRoutes);             // โปรไฟล์ผู้ใช้งานปัจจุบัน + Admin จัดการผู้ใช้งาน
+app.use('/api/departments', departmentRoutes); // หน่วยงาน/ฝ่าย
+app.use('/api/locations', locationRoutes);     // อาคารและห้อง
 app.use('/api/assets', assetRoutes);
 app.use('/api/items', itemRoutes);               // InventoryStock
 app.use('/api/stock-receive', stockReceiveRoutes); // InventoryReceive
 app.use('/api/requisitions', requisitionRoutes);  // NewRequisition
-app.use('/api/borrows', borrowRoutes);             // BorrowReturn
-app.use('/api/repairs', repairRoutes);             // MaintenanceRepair
 
 // Error Handling Middleware
 app.use((err, req, res, next) => {

@@ -12,6 +12,9 @@ model User {
   password             String
   email                String        @unique
   name                 String        @default("")
+  phone                String?
+  position             String?
+  avatarUrl            String?
   role                 String        @default("USER") // e.g., ADMIN, USER
   departmentId         Int?
   department           Department?   @relation(fields: [departmentId], references: [id])
@@ -29,6 +32,7 @@ model User {
 
 model Department {
   id          Int      @id @default(autoincrement())
+  code        String   @unique
   name        String   @unique
   description String?
   users       User[]
@@ -81,8 +85,6 @@ model Asset {
   
   locationId        Int?
   location          Location? @relation(fields: [locationId], references: [id])
-  borrows           BorrowTransaction[]
-  repairs           RepairRequest[]
   
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
@@ -92,12 +94,15 @@ model Asset {
 
 model Location {
   id          Int      @id @default(autoincrement())
+  building    String?  // อาคาร เช่น "อาคาร 1"
   name        String   @unique
+  type        String?  // ประเภทห้อง เช่น "ห้องเรียน"
   description String?
   assets      Asset[]
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
+  @@unique([building, name])
   @@map("locations")
 }
 
@@ -166,49 +171,3 @@ model ActivityLog {
 
   @@map("activity_logs")
 }
-
-// ประวัติการยืม-คืนครุภัณฑ์
-model BorrowTransaction {
-  id                Int       @id @default(autoincrement())
-  borrowCode        String    @unique // รหัสการยืม เช่น 'BRW-2569-0001'
-  assetId           Int
-  asset             Asset     @relation(fields: [assetId], references: [id])
-  borrowerName      String    // ชื่อผู้ยืม
-  borrowerDept      String    // แผนก/หน่วยงานผู้ยืม
-  borrowDate        DateTime  // วันที่ยืม
-  dueDate           DateTime  // กำหนดส่งคืน
-  purpose           String    // วัตถุประสงค์การยืม
-  status            String    @default("PENDING") // PENDING, BORROWED, RETURNED, REJECTED
-  approvedBy        String?   // ผู้อนุมัติการยืม
-  approvedAt        DateTime? // วันอนุมัติยืม
-  returnDate        DateTime? // วันที่ส่งคืนจริง
-  returnedTo        String?   // ผู้รับคืน
-  remark            String?   // หมายเหตุ/เหตุผลปฏิเสธ
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
-
-  @@map("borrow_transactions")
-}
-
-// ใบแจ้งซ่อมครุภัณฑ์พัสดุ
-model RepairRequest {
-  id           Int       @id @default(autoincrement())
-  repairCode   String    @unique // รหัสแจ้งซ่อม เช่น 'REP-2569-0001'
-  assetId      Int
-  asset        Asset     @relation(fields: [assetId], references: [id])
-  reporterName String    // ชื่อผู้แจ้งซ่อม
-  description  String    // รายละเอียดความเสียหาย/อาการชำรุด
-  urgency      String    @default("NORMAL") // NORMAL, URGENT, CRITICAL
-  status       String    @default("PENDING") // PENDING, APPROVED, REPAIRING, COMPLETED, REJECTED
-  approvedBy   String?   // ชื่อผู้อนุมัติ/ผู้ดำเนินการซ่อม
-  approvedAt   DateTime? // วันที่อนุมัติซ่อม
-  repairCost   Float     @default(0.0) // ค่าซ่อมจริง
-  finishDate   DateTime? // วันที่เสร็จสิ้นการซ่อม
-  remark       String?   // หมายเหตุ/เหตุผลปฏิเสธ
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
-
-  @@map("repair_requests")
-}
-
-

@@ -11,7 +11,8 @@ const toast = useToast()
 
 const currentRole = ref(localStorage.getItem('tcaims_role') || 'admin')
 const canManage = computed(() => ['admin', 'staff', 'Admin', 'Staff'].includes(currentRole.value))
-const currentUserName = ref(localStorage.getItem('tcaims_name') || 'ผู้ใช้งานระบบ')
+const userObj = JSON.parse(localStorage.getItem('tcaims_user') || '{}')
+const currentUserName = ref(userObj.name || 'ผู้ใช้งานระบบ')
 
 const assets = ref([])
 const records = ref([])

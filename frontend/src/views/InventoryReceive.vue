@@ -24,9 +24,10 @@ import { useToast } from '../composables/useToast.js'
 const toast = useToast()
 
 // --- User Context & Role Check ---
+const userObj = JSON.parse(localStorage.getItem('tcaims_user') || '{}')
 const currentUser = ref({
-  id: 'USR-001',
-  name: localStorage.getItem('tcaims_name') || 'ผู้ดูแลระบบ',
+  id: userObj.id || 'USR-001',
+  name: userObj.name || 'ผู้ดูแลระบบ',
   role: localStorage.getItem('tcaims_role') || 'Admin'
 })
 

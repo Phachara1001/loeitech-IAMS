@@ -26,9 +26,10 @@ const toast = useToast()
 // ==========================================
 // 1. USER & ROLE CONTEXT
 // ==========================================
+const userObj = JSON.parse(localStorage.getItem('tcaims_user') || '{}')
 const currentUser = ref({
-  id: 'USR-001',
-  name: localStorage.getItem('tcaims_name') || 'ผู้ตรวจสอบพัสดุ',
+  id: userObj.id || 'USR-001',
+  name: userObj.name || 'ผู้ตรวจสอบพัสดุ',
   role: localStorage.getItem('tcaims_role') || 'Admin' // 'Admin' | 'Staff' | 'User'
 })
 

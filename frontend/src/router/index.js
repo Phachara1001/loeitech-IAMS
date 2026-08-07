@@ -99,6 +99,11 @@ const routes = [
         path: 'borrow-return',
         name: 'BorrowReturn',
         component: () => import('../views/BorrowReturn.vue')
+      },
+      {
+        path: 'fiscal-year-settings',
+        name: 'FiscalYearSettings',
+        component: () => import('../views/FiscalYearSettings.vue')
       }
     ]
   }

@@ -1,47 +1,59 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { 
-  User, 
-  Building2, 
-  Mail, 
-  Phone, 
-  ShieldCheck, 
-  KeyRound, 
-  LogOut, 
-  Package, 
-  AlertTriangle, 
-  FileText, 
-  Eye, 
-  EyeOff, 
-  Lock, 
-  CheckCircle2, 
+import { useRouter } from 'vue-router'
+import axios from 'axios'
+import {
+  User,
+  Building2,
+  Mail,
+  Phone,
+  ShieldCheck,
+  KeyRound,
+  LogOut,
+  Package,
+  AlertTriangle,
+  FileText,
+  Eye,
+  EyeOff,
+  Lock,
+  CheckCircle2,
   XCircle,
   Clock,
   Printer,
   UserCheck,
   Camera,
-  X
+  X,
+  Loader2
 } from 'lucide-vue-next'
+import { useToast } from '../composables/useToast'
+import { API_BASE } from '../config/api'
+
+const router = useRouter()
+const toast = useToast()
 
 // ==========================================
-// 1. STATE & DATA (รูปโปรไฟล์เริ่มต้นเป็น null)
+// 1. STATE & DATA (โหลดจาก backend จริงตอน mount)
 // ==========================================
 const currentUser = ref({
-  id: 'ADM-2026-001',
-  name: 'นายสมชาย ใจดี',
-  username: 'admin.somchai',
-  department: 'งานพัสดุและอาคารสถานที่',
-  position: 'นักจัดการงานทั่วไปชำนาญการ',
-  email: 'somchai.admin@tech.ac.th',
-  phone: '081-234-5678',
-  role: 'Admin',
-  avatar: null // ตั้งเป็น null เพื่อให้เริ่มต้นเป็นช่องว่าง
+  id: '',
+  username: '',
+  name: '',
+  position: '',
+  email: '',
+  phone: '',
+  role: '',
+  avatar: null
 })
+
+const isPageLoading = ref(true)
+const isUploadingAvatar = ref(false)
 
 // ตัวแปรอ้างอิงถึง <input type="file">
 const fileInputRef = ref(null)
 
 // รายการครุภัณฑ์ถือครอง
+// TODO: ยังเป็น mock อยู่ เพราะยังไม่มี endpoint ดึง "ครุภัณฑ์ที่รับผิดชอบตาม user" จาก backend
+// พอมี endpoint เช่น GET /api/assets/my-assets ค่อยเปลี่ยนมาดึงจริงตรงนี้
 const myAssets = ref([
   {
     id: 'AST-69-0012',
@@ -80,9 +92,10 @@ const isDetailModalOpen = ref(false)
 const editProfileForm = ref({
   name: '',
   phone: '',
-  department: '',
   position: ''
 })
+const isSavingProfile = ref(false)
+const editProfileError = ref('')
 
 const passwordForm = ref({
   currentPassword: '',
@@ -107,57 +120,84 @@ const normalAssets = computed(() => myAssets.value.filter(a => a.status === 'nor
 const repairAssets = computed(() => myAssets.value.filter(a => a.status === 'repair').length)
 
 // ==========================================
-// 4. LIFECYCLE
+// 4. API HELPERS
 // ==========================================
-onMounted(() => {
-  try {
-    const savedUser = localStorage.getItem('tcaims_user')
-    if (savedUser) {
-      const userObj = JSON.parse(savedUser)
-      if (userObj) {
-        // ถ้าค่า name ที่เก็บไว้เป็นอีเมล (มาจากตอน login) ให้ใช้เป็นอีเมลแทน
-        // ไม่ใช้ทับชื่อจริงที่ควรแสดงในหน้าโปรไฟล์/Topbar
-        if (userObj.name && userObj.name.includes('@')) {
-          currentUser.value.email = userObj.name
-        } else if (userObj.name) {
-          currentUser.value.name = userObj.name
-        }
-        if (userObj.avatar !== undefined) currentUser.value.avatar = userObj.avatar
-        if (userObj.phone) currentUser.value.phone = userObj.phone
-        if (userObj.department) currentUser.value.department = userObj.department
-        if (userObj.position) currentUser.value.position = userObj.position
-      }
-    }
-  } catch (err) {
-    console.warn('LocalStorage Read Warning:', err)
+function authHeaders() {
+  const token = localStorage.getItem('tcaims_auth_token')
+  return { Authorization: `Bearer ${token}` }
+}
+
+function extractErrorMessage(error) {
+  const data = error.response?.data
+  if (data?.errors?.length) return data.errors.join(' / ')
+  if (data?.message) return data.message
+  return 'เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง'
+}
+
+// ถ้า token หมดอายุหรือไม่ถูกต้อง (401) ให้เด้งกลับไปหน้า login ทันที
+function handleUnauthorized(error) {
+  if (error.response?.status === 401) {
+    localStorage.removeItem('tcaims_auth_token')
+    localStorage.removeItem('tcaims_user')
+    localStorage.removeItem('tcaims_role')
+    toast.error('เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่อีกครั้ง')
+    router.push('/login')
+    return true
+  }
+  return false
+}
+
+// แปลงข้อมูลจาก backend ให้เข้ากับโครงสร้างที่หน้านี้ใช้แสดงผล
+function applyUserData(data) {
+  currentUser.value = {
+    id: data.id,
+    username: data.username,
+    name: data.name || data.username,
+    position: data.position || 'ยังไม่ได้กำหนดตำแหน่ง',
+    email: data.email,
+    phone: data.phone || '-',
+    role: data.role,
+    avatar: data.avatarUrl || null
   }
 
-  // เซฟข้อมูลชื่อ-รูปที่ถูกต้องกลับไปที่ localStorage ทันที
-  // เพื่อให้ Topbar เลิกโชว์อีเมลและเปลี่ยนไปโชว์ชื่อจริงโดยไม่ต้องรอกดบันทึกโปรไฟล์
+  // เก็บแคชไว้ให้ส่วนอื่น (เช่น Topbar) แสดงชื่อ/รูปได้เร็วโดยไม่ต้องรอยิง API ใหม่
   persistUserToStorage()
+}
+
+// ==========================================
+// 5. LIFECYCLE
+// ==========================================
+onMounted(async () => {
+  isPageLoading.value = true
+  try {
+    const response = await axios.get(`${API_BASE}/users/me`, { headers: authHeaders() })
+    applyUserData(response.data.data)
+  } catch (error) {
+    if (!handleUnauthorized(error)) {
+      toast.error(extractErrorMessage(error))
+    }
+  } finally {
+    isPageLoading.value = false
+  }
 })
 
-// บันทึกข้อมูลผู้ใช้ลง localStorage และแจ้งเตือนหน้าอื่น ๆ (เช่น Topbar) ให้อัปเดตทันที
+// บันทึกข้อมูลผู้ใช้ล่าสุดลง localStorage เป็นแคช และแจ้งเตือนหน้าอื่น ๆ (เช่น Topbar) ให้อัปเดตทันที
+// หมายเหตุ: ใช้เป็นแคชแสดงผลเร็ว ๆ เท่านั้น ข้อมูลจริงมาจาก backend เสมอ (ดึงใหม่ทุกครั้งที่เข้าหน้านี้)
 function persistUserToStorage() {
   try {
-    const existing = JSON.parse(localStorage.getItem('tcaims_user') || '{}')
-    const updated = {
-      ...existing,
+    localStorage.setItem('tcaims_user', JSON.stringify({
       name: currentUser.value.name,
-      avatar: currentUser.value.avatar,
-      phone: currentUser.value.phone,
-      department: currentUser.value.department,
-      position: currentUser.value.position
-    }
-    localStorage.setItem('tcaims_user', JSON.stringify(updated))
-    window.dispatchEvent(new CustomEvent('profile-updated', { detail: updated }))
+      email: currentUser.value.email,
+      avatar: currentUser.value.avatar
+    }))
+    window.dispatchEvent(new CustomEvent('profile-updated', { detail: currentUser.value }))
   } catch (err) {
     console.warn('LocalStorage Write Warning:', err)
   }
 }
 
 // ==========================================
-// 5. HANDLERS (รวมฟังก์ชันอัปโหลดรูปภาพ)
+// 6. HANDLERS
 // ==========================================
 
 // ฟังก์ชันเปิดตัวเลือกไฟล์เมื่อคลิกที่รูป
@@ -167,17 +207,37 @@ function triggerFileInput() {
   }
 }
 
-// ฟังก์ชันเปลี่ยนรูปภาพเมื่อเลือกไฟล์
-function handleAvatarChange(event) {
+// อัปโหลดรูปโปรไฟล์จริงขึ้น backend (MinIO) แล้วอัปเดตรูปที่แสดงผลด้วย URL จริงที่ได้กลับมา
+async function handleAvatarChange(event) {
   const file = event.target.files[0]
-  if (file) {
-    // อ่านไฟล์ภาพแล้วแปลงเป็น Data URL เพื่อแสดงผลแบบ Live Preview
-    const reader = new FileReader()
-    reader.onload = (e) => {
-      currentUser.value.avatar = e.target.result
-      persistUserToStorage()
+  if (!file) return
+
+  if (!file.type.startsWith('image/')) {
+    toast.error('กรุณาเลือกไฟล์รูปภาพเท่านั้น')
+    return
+  }
+  if (file.size > 3 * 1024 * 1024) {
+    toast.error('ขนาดไฟล์ต้องไม่เกิน 3MB')
+    return
+  }
+
+  const formData = new FormData()
+  formData.append('avatar', file)
+
+  isUploadingAvatar.value = true
+  try {
+    const response = await axios.post(`${API_BASE}/users/me/avatar`, formData, {
+      headers: { ...authHeaders(), 'Content-Type': 'multipart/form-data' }
+    })
+    applyUserData(response.data.data)
+    toast.success('เปลี่ยนรูปโปรไฟล์สำเร็จ')
+  } catch (error) {
+    if (!handleUnauthorized(error)) {
+      toast.error(extractErrorMessage(error))
     }
-    reader.readAsDataURL(file)
+  } finally {
+    isUploadingAvatar.value = false
+    event.target.value = '' // เคลียร์ input เผื่อเลือกไฟล์เดิมซ้ำได้อีกครั้ง
   }
 }
 
@@ -189,29 +249,54 @@ function confirmLogout() {
   try {
     localStorage.removeItem('tcaims_auth_token')
     localStorage.removeItem('tcaims_user')
+    localStorage.removeItem('tcaims_role')
   } catch (e) {}
-  
+
   isLogoutModalOpen.value = false
   window.location.href = '/login'
 }
 
 function openEditProfileModal() {
+  editProfileError.value = ''
   editProfileForm.value = {
     name: currentUser.value.name,
-    phone: currentUser.value.phone,
-    department: currentUser.value.department,
-    position: currentUser.value.position
+    phone: currentUser.value.phone === '-' ? '' : currentUser.value.phone,
+    position: currentUser.value.position === 'ยังไม่ได้กำหนดตำแหน่ง' ? '' : currentUser.value.position
   }
   isEditProfileModalOpen.value = true
 }
 
-function handleSaveProfile() {
-  currentUser.value.name = editProfileForm.value.name
-  currentUser.value.phone = editProfileForm.value.phone
-  currentUser.value.department = editProfileForm.value.department
-  currentUser.value.position = editProfileForm.value.position
-  persistUserToStorage()
-  isEditProfileModalOpen.value = false
+async function handleSaveProfile() {
+  editProfileError.value = ''
+
+  if (!editProfileForm.value.name.trim()) {
+    editProfileError.value = 'กรุณากรอกชื่อ-นามสกุล'
+    return
+  }
+
+  isSavingProfile.value = true
+  try {
+    const response = await axios.put(
+      `${API_BASE}/users/me`,
+      {
+        name: editProfileForm.value.name.trim(),
+        phone: editProfileForm.value.phone.trim(),
+        position: editProfileForm.value.position.trim()
+      },
+      { headers: authHeaders() }
+    )
+    applyUserData(response.data.data)
+    toast.success('บันทึกข้อมูลโปรไฟล์สำเร็จ')
+    isEditProfileModalOpen.value = false
+  } catch (error) {
+    if (!handleUnauthorized(error)) {
+      const msg = extractErrorMessage(error)
+      editProfileError.value = msg
+      toast.error(msg)
+    }
+  } finally {
+    isSavingProfile.value = false
+  }
 }
 
 function openChangePasswordModal() {
@@ -221,7 +306,7 @@ function openChangePasswordModal() {
   isChangePasswordModalOpen.value = true
 }
 
-function handleChangePassword() {
+async function handleChangePassword() {
   passwordError.value = ''
   passwordSuccess.value = ''
 
@@ -230,8 +315,8 @@ function handleChangePassword() {
     return
   }
 
-  if (passwordForm.value.newPassword.length < 6) {
-    passwordError.value = 'รหัสผ่านใหม่ต้องมีความยาวอย่างน้อย 6 ตัวอักษร'
+  if (passwordForm.value.newPassword.length < 8) {
+    passwordError.value = 'รหัสผ่านใหม่ต้องมีความยาวอย่างน้อย 8 ตัวอักษร'
     return
   }
 
@@ -241,14 +326,30 @@ function handleChangePassword() {
   }
 
   isChangingPassword.value = true
-
-  setTimeout(() => {
-    isChangingPassword.value = false
+  try {
+    await axios.put(
+      `${API_BASE}/users/me/password`,
+      {
+        currentPassword: passwordForm.value.currentPassword,
+        newPassword: passwordForm.value.newPassword,
+        confirmPassword: passwordForm.value.confirmPassword
+      },
+      { headers: authHeaders() }
+    )
+    toast.success('เปลี่ยนรหัสผ่านสำเร็จ')
     passwordSuccess.value = 'เปลี่ยนรหัสผ่านสำเร็จเรียบร้อยแล้ว'
     setTimeout(() => {
       isChangePasswordModalOpen.value = false
     }, 800)
-  }, 800)
+  } catch (error) {
+    if (!handleUnauthorized(error)) {
+      const msg = extractErrorMessage(error)
+      passwordError.value = msg
+      toast.error(msg)
+    }
+  } finally {
+    isChangingPassword.value = false
+  }
 }
 
 function openDetailModal(asset) {
@@ -265,6 +366,14 @@ function handlePrintPdf() {
   <div class="min-h-screen bg-[#F4F7F5] font-sarabun p-4 sm:p-6 lg:p-8">
     <div class="w-full space-y-6">
 
+      <!-- ================= Loading State ================= -->
+      <div v-if="isPageLoading" class="flex flex-col items-center justify-center py-24 text-slate-400">
+        <Loader2 class="w-8 h-8 animate-spin mb-3 text-[#1B5E3C]" />
+        <p class="text-sm">กำลังโหลดข้อมูลโปรไฟล์...</p>
+      </div>
+
+      <template v-else>
+
       <!-- ================= 1. HEADER PROFILE ================= -->
       <div class="relative overflow-hidden rounded-2xl bg-[#072415] text-white shadow-xl">
         <!-- Background Mesh Gradient -->
@@ -278,7 +387,12 @@ function handlePrintPdf() {
           <div class="flex flex-col sm:flex-row items-center gap-6 text-center sm:text-left">
             
             <!-- ================= ส่วนอัปโหลด/เปลี่ยนรูปโปรไฟล์ ================= -->
-            <div class="relative group cursor-pointer" @click="triggerFileInput" title="คลิกเพื่อเปลี่ยนรูปโปรไฟล์">
+            <div
+              class="relative group cursor-pointer"
+              :class="{ 'pointer-events-none opacity-70': isUploadingAvatar }"
+              @click="triggerFileInput"
+              title="คลิกเพื่อเปลี่ยนรูปโปรไฟล์"
+            >
               <!-- Glow Effect -->
               <div class="absolute -inset-2 bg-gradient-to-r from-[#1B5E3C] via-[#288252] to-[#0F3D26] rounded-full blur-md opacity-80 animate-spin-slow"></div>
               
@@ -308,8 +422,13 @@ function handlePrintPdf() {
                 <span class="text-[10px] font-medium mt-1 opacity-90">เพิ่มรูปภาพ</span>
               </div>
 
+              <!-- Overlay ตอนกำลังอัปโหลด -->
+              <div v-if="isUploadingAvatar" class="absolute inset-0 rounded-full bg-black/70 flex items-center justify-center z-20">
+                <Loader2 class="w-6 h-6 text-emerald-300 animate-spin" />
+              </div>
+
               <!-- Overlay ตอน Hover ว่า "เปลี่ยนรูป" -->
-              <div class="absolute inset-0 rounded-full bg-black/60 opacity-0 group-hover:opacity-100 transition flex flex-col items-center justify-center text-white text-xs font-semibold backdrop-blur-[2px] z-20">
+              <div v-else class="absolute inset-0 rounded-full bg-black/60 opacity-0 group-hover:opacity-100 transition flex flex-col items-center justify-center text-white text-xs font-semibold backdrop-blur-[2px] z-20">
                 <Camera class="w-5 h-5 mb-0.5 text-emerald-300" />
                 <span>{{ currentUser.avatar ? 'เปลี่ยนรูป' : 'เลือกรูป' }}</span>
               </div>
@@ -326,9 +445,8 @@ function handlePrintPdf() {
               </div>
               <p class="text-emerald-100/90 text-base font-medium flex items-center justify-center sm:justify-start gap-2">
                 <Building2 class="w-4 h-4 text-emerald-300 shrink-0" />
-                {{ currentUser.department }}
+                {{ currentUser.position }}
               </p>
-              <p class="text-emerald-200/70 text-sm mt-0.5">{{ currentUser.position }}</p>
             </div>
           </div>
 
@@ -363,7 +481,7 @@ function handlePrintPdf() {
           </div>
           <div class="flex items-center gap-2">
             <User class="w-4 h-4 text-emerald-300 shrink-0" />
-            <span>รหัสประจำตัว: {{ currentUser.id }}</span>
+            <span>ชื่อผู้ใช้งาน: {{ currentUser.username }}</span>
             
             <button 
               @click="openChangePasswordModal"
@@ -484,6 +602,8 @@ function handlePrintPdf() {
           </table>
         </div>
       </div>
+
+      </template>
 
     </div>
 
@@ -621,6 +741,11 @@ function handlePrintPdf() {
           </button>
         </div>
 
+        <div v-if="editProfileError" class="mb-4 p-3 rounded-xl bg-red-50 border border-red-200 text-red-600 text-sm flex items-center gap-2">
+          <XCircle class="w-4 h-4 shrink-0" />
+          <span>{{ editProfileError }}</span>
+        </div>
+
         <form @submit.prevent="handleSaveProfile" class="space-y-4">
           <div>
             <label class="block text-sm font-semibold text-slate-700 mb-1">ชื่อ-นามสกุล</label>
@@ -635,15 +760,6 @@ function handlePrintPdf() {
             <label class="block text-sm font-semibold text-slate-700 mb-1">เบอร์โทรศัพท์</label>
             <input
               v-model="editProfileForm.phone"
-              type="text"
-              class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#1B5E3C]/20 focus:border-[#1B5E3C]"
-            />
-          </div>
-
-          <div>
-            <label class="block text-sm font-semibold text-slate-700 mb-1">หน่วยงานสังกัด</label>
-            <input
-              v-model="editProfileForm.department"
               type="text"
               class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#1B5E3C]/20 focus:border-[#1B5E3C]"
             />
@@ -668,9 +784,11 @@ function handlePrintPdf() {
             </button>
             <button
               type="submit"
-              class="flex-1 py-2.5 rounded-xl bg-[#072415] hover:bg-[#0F3D26] text-white text-sm font-bold shadow-md transition"
+              :disabled="isSavingProfile"
+              class="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-[#072415] hover:bg-[#0F3D26] text-white text-sm font-bold shadow-md transition disabled:opacity-70"
             >
-              บันทึกการแก้ไข
+              <Loader2 v-if="isSavingProfile" class="w-4 h-4 animate-spin" />
+              <span>{{ isSavingProfile ? 'กำลังบันทึก...' : 'บันทึกการแก้ไข' }}</span>
             </button>
           </div>
         </form>

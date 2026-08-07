@@ -1,13 +1,19 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
+import axios from 'axios'
 import {
   Building2, MapPin, Users, Plus, Pencil, Trash2, X, Check, Loader2,
   AlertTriangle, ShieldAlert, Search, ShieldCheck, UserCog, User as UserIcon
 } from 'lucide-vue-next'
+import { useToast } from '../composables/useToast'
+import { API_BASE } from '../config/api'
 
-// สิทธิ์การเข้าถึง: หน้านี้ใช้ได้เฉพาะ Admin เท่านั้น
-// TODO: เชื่อมกับระบบยืนยันตัวตนจริง เช่น decode role จาก JWT หรือข้อมูลผู้ใช้หลัง login
-const currentRole = ref(localStorage.getItem('tcaims_role') || 'admin') // ตอนนี้ดึงจาก localStorage ไปก่อน (เซ็ตตอน login) ถ้ายังไม่มีค่า ให้ default เป็น 'admin' (สิทธิ์สูงสุด ปลอดภัยไว้ก่อน)
+const router = useRouter()
+const toast = useToast()
+
+// สิทธิ์การเข้าถึง: หน้านี้ใช้ได้เฉพาะ Admin เท่านั้น (เชื่อมกับระบบ login จริงแล้ว)
+const currentRole = ref(localStorage.getItem('tcaims_role') || 'user')
 const isAdmin = computed(() => currentRole.value === 'admin')
 
 const roleOptions = [
@@ -34,30 +40,88 @@ function roleIconColor(value) {
   return 'text-slate-500'
 }
 
+// ==========================================
+// API HELPERS
+// ==========================================
+function authHeaders() {
+  const token = localStorage.getItem('tcaims_auth_token')
+  return { Authorization: `Bearer ${token}` }
+}
+
+function extractErrorMessage(error) {
+  const data = error.response?.data
+  if (data?.errors?.length) return data.errors.join(' / ')
+  if (data?.message) return data.message
+  return 'เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง'
+}
+
+function handleUnauthorized(error) {
+  if (error.response?.status === 401) {
+    localStorage.removeItem('tcaims_auth_token')
+    localStorage.removeItem('tcaims_user')
+    localStorage.removeItem('tcaims_role')
+    toast.error('เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่อีกครั้ง')
+    router.push('/login')
+    return true
+  }
+  if (error.response?.status === 403) {
+    toast.error('คุณไม่มีสิทธิ์ทำรายการนี้')
+    return true
+  }
+  return false
+}
+
 /* ---------------- แท็บ: หน่วยงาน/ฝ่าย ---------------- */
-const departments = ref([
-  { id: 'DPT-001', code: 'DPT-01', name: 'งานพัสดุ' },
-  { id: 'DPT-002', code: 'DPT-02', name: 'แผนกช่างไฟฟ้า' },
-  { id: 'DPT-003', code: 'DPT-03', name: 'แผนกช่างยนต์' },
-  { id: 'DPT-004', code: 'DPT-04', name: 'งานบุคคล' }
-])
+const departments = ref([])
+const isLoadingDepartments = ref(false)
+
+async function fetchDepartments() {
+  isLoadingDepartments.value = true
+  try {
+    const response = await axios.get(`${API_BASE}/departments`, { headers: authHeaders() })
+    departments.value = response.data.data
+  } catch (error) {
+    if (!handleUnauthorized(error)) toast.error(extractErrorMessage(error))
+  } finally {
+    isLoadingDepartments.value = false
+  }
+}
 
 /* ---------------- แท็บ: อาคารและห้องเรียน ---------------- */
 const roomTypes = ['ห้องเรียน', 'ห้องปฏิบัติการ', 'ห้องสำนักงาน', 'ห้องเก็บพัสดุ']
-const locations = ref([
-  { id: 'LOC-001', building: 'อาคาร 1', room: '101', type: 'ห้องเรียน' },
-  { id: 'LOC-002', building: 'อาคาร 1', room: '201', type: 'ห้องปฏิบัติการ' },
-  { id: 'LOC-003', building: 'อาคาร 3', room: 'สำนักงานงานพัสดุ', type: 'ห้องสำนักงาน' },
-  { id: 'LOC-004', building: 'อาคาร 3', room: 'คลังพัสดุกลาง', type: 'ห้องเก็บพัสดุ' }
-])
+const locations = ref([])
+const isLoadingLocations = ref(false)
+
+async function fetchLocations() {
+  isLoadingLocations.value = true
+  try {
+    const response = await axios.get(`${API_BASE}/locations`, { headers: authHeaders() })
+    // backend เก็บชื่อห้องเป็น field "name" แต่ฝั่งนี้ใช้ "room" เพื่อให้เข้ากับ UI เดิม
+    locations.value = response.data.data.map((loc) => ({ ...loc, room: loc.name }))
+  } catch (error) {
+    if (!handleUnauthorized(error)) toast.error(extractErrorMessage(error))
+  } finally {
+    isLoadingLocations.value = false
+  }
+}
 
 /* ---------------- แท็บ: ผู้ใช้งานระบบ ---------------- */
-const users = ref([
-  { id: 'USR-001', name: 'Admin User', email: 'admin@loeitc.ac.th', role: 'admin' },
-  { id: 'USR-002', name: 'สมชาย ใจดี', email: 'somchai@loeitc.ac.th', role: 'staff' },
-  { id: 'USR-003', name: 'สมหญิง รักเรียน', email: 'somying@loeitc.ac.th', role: 'staff' },
-  { id: 'USR-004', name: 'ครูประจำแผนก', email: 'teacher01@loeitc.ac.th', role: 'user' }
-])
+const users = ref([])
+const isLoadingUsers = ref(false)
+
+async function fetchUsers() {
+  isLoadingUsers.value = true
+  try {
+    const response = await axios.get(`${API_BASE}/users`, { headers: authHeaders() })
+    // backend เก็บ role เป็นตัวพิมพ์ใหญ่ (ADMIN/STAFF/USER) แปลงเป็นพิมพ์เล็กให้ตรงกับ UI เดิม
+    users.value = response.data.data.map((u) => ({ ...u, role: String(u.role).toLowerCase() }))
+  } catch (error) {
+    if (!handleUnauthorized(error)) toast.error(extractErrorMessage(error))
+  } finally {
+    isLoadingUsers.value = false
+  }
+}
+
 const userSearch = ref('')
 const filteredUsers = computed(() =>
   users.value.filter(
@@ -67,10 +131,26 @@ const filteredUsers = computed(() =>
   )
 )
 
-function updateUserRole(user, newRole) {
-  // TODO: เชื่อมต่อ API เปลี่ยนสิทธิ์ผู้ใช้งานจริงในภายหลัง
-  user.role = newRole
+async function updateUserRole(user, newRole) {
+  const previousRole = user.role
+  user.role = newRole // อัปเดตหน้าจอทันที (optimistic) แล้วค่อยยืนยันกับ backend
+
+  try {
+    await axios.put(`${API_BASE}/users/${user.id}`, { role: newRole }, { headers: authHeaders() })
+    toast.success(`เปลี่ยนสิทธิ์ของ ${user.name} เป็น "${roleLabel(newRole)}" สำเร็จ`)
+  } catch (error) {
+    user.role = previousRole // ย้อนกลับถ้า backend ปฏิเสธ
+    if (!handleUnauthorized(error)) toast.error(extractErrorMessage(error))
+  }
 }
+
+/* ---------------- โหลดข้อมูลทั้งหมดตอนเข้าหน้า ---------------- */
+onMounted(() => {
+  if (!isAdmin.value) return
+  fetchDepartments()
+  fetchLocations()
+  fetchUsers()
+})
 
 /* ---------------- การจัดการแท็บ ---------------- */
 const tabs = [
@@ -132,7 +212,7 @@ function validateForm() {
   return ''
 }
 
-function saveForm() {
+async function saveForm() {
   const error = validateForm()
   if (error) {
     formError.value = error
@@ -142,26 +222,53 @@ function saveForm() {
   isSaving.value = true
   formError.value = ''
 
-  // TODO: เชื่อมต่อ API บันทึกข้อมูลจริงในภายหลัง
-  setTimeout(() => {
-    const targetList = activeTab.value === 'departments' ? departments : activeTab.value === 'locations' ? locations : users
-    const prefix = activeTab.value === 'departments' ? 'DPT' : activeTab.value === 'locations' ? 'LOC' : 'USR'
-
-    if (isEditMode.value) {
-      const index = targetList.value.findIndex((i) => i.id === form.value.id)
-      if (index !== -1) targetList.value[index] = { ...form.value }
+  try {
+    if (activeTab.value === 'departments') {
+      const payload = { code: form.value.code.trim(), name: form.value.name.trim() }
+      if (isEditMode.value) {
+        await axios.put(`${API_BASE}/departments/${form.value.id}`, payload, { headers: authHeaders() })
+      } else {
+        await axios.post(`${API_BASE}/departments`, payload, { headers: authHeaders() })
+      }
+      await fetchDepartments()
+    } else if (activeTab.value === 'locations') {
+      // ฝั่งนี้ใช้ "room" แต่ backend เก็บเป็น "name"
+      const payload = { building: form.value.building.trim(), name: form.value.room.trim(), type: form.value.type }
+      if (isEditMode.value) {
+        await axios.put(`${API_BASE}/locations/${form.value.id}`, payload, { headers: authHeaders() })
+      } else {
+        await axios.post(`${API_BASE}/locations`, payload, { headers: authHeaders() })
+      }
+      await fetchLocations()
     } else {
-      const nextNumber = targetList.value.length + 1
-      targetList.value.push({ ...form.value, id: `${prefix}-${String(nextNumber).padStart(3, '0')}` })
+      const payload = { name: form.value.name.trim(), email: form.value.email.trim(), role: form.value.role }
+      if (isEditMode.value) {
+        await axios.put(`${API_BASE}/users/${form.value.id}`, payload, { headers: authHeaders() })
+      } else {
+        await axios.post(`${API_BASE}/users`, payload, { headers: authHeaders() })
+      }
+      await fetchUsers()
     }
 
-    isSaving.value = false
+    toast.success(isEditMode.value ? 'แก้ไขข้อมูลสำเร็จ' : 'เพิ่มข้อมูลสำเร็จ')
+    if (!isEditMode.value && activeTab.value === 'users') {
+      toast.info('ระบบได้ส่งอีเมลเชิญตั้งรหัสผ่านไปให้ผู้ใช้งานใหม่แล้ว')
+    }
     isFormOpen.value = false
-  }, 500)
+  } catch (error) {
+    if (!handleUnauthorized(error)) {
+      const msg = extractErrorMessage(error)
+      formError.value = msg
+      toast.error(msg)
+    }
+  } finally {
+    isSaving.value = false
+  }
 }
 
 /* ---------------- ลบรายการ ---------------- */
 const itemToDelete = ref(null)
+const isDeleting = ref(false)
 
 function confirmDelete(item) {
   itemToDelete.value = item
@@ -169,10 +276,27 @@ function confirmDelete(item) {
 function cancelDelete() {
   itemToDelete.value = null
 }
-function deleteItem() {
-  const targetList = activeTab.value === 'departments' ? departments : activeTab.value === 'locations' ? locations : users
-  targetList.value = targetList.value.filter((i) => i.id !== itemToDelete.value.id)
-  itemToDelete.value = null
+
+async function deleteItem() {
+  isDeleting.value = true
+  try {
+    if (activeTab.value === 'departments') {
+      await axios.delete(`${API_BASE}/departments/${itemToDelete.value.id}`, { headers: authHeaders() })
+      await fetchDepartments()
+    } else if (activeTab.value === 'locations') {
+      await axios.delete(`${API_BASE}/locations/${itemToDelete.value.id}`, { headers: authHeaders() })
+      await fetchLocations()
+    } else {
+      await axios.delete(`${API_BASE}/users/${itemToDelete.value.id}`, { headers: authHeaders() })
+      await fetchUsers()
+    }
+    toast.success('ลบข้อมูลสำเร็จ')
+    itemToDelete.value = null
+  } catch (error) {
+    if (!handleUnauthorized(error)) toast.error(extractErrorMessage(error))
+  } finally {
+    isDeleting.value = false
+  }
 }
 
 const deleteItemLabel = computed(() => {
@@ -263,6 +387,7 @@ const deleteItemLabel = computed(() => {
       <div v-if="activeTab === 'departments'" class="bg-white rounded-2xl border border-emerald-100 shadow-sm overflow-hidden">
         <div class="flex items-center justify-between p-4 border-b border-emerald-50 bg-emerald-50/20">
           <p class="text-sm text-slate-500">ทั้งหมด <span class="font-bold text-[#065f46]">{{ departments.length }}</span> หน่วยงาน/ฝ่าย</p>
+          <Loader2 v-if="isLoadingDepartments" class="w-4 h-4 text-[#065f46] animate-spin" />
         </div>
 
         <div class="overflow-x-auto">
@@ -301,6 +426,7 @@ const deleteItemLabel = computed(() => {
       <div v-else-if="activeTab === 'locations'" class="bg-white rounded-2xl border border-emerald-100 shadow-sm overflow-hidden">
         <div class="flex items-center justify-between p-4 border-b border-emerald-50 bg-emerald-50/20">
           <p class="text-sm text-slate-500">ทั้งหมด <span class="font-bold text-[#065f46]">{{ locations.length }}</span> รายการ</p>
+          <Loader2 v-if="isLoadingLocations" class="w-4 h-4 text-[#065f46] animate-spin" />
         </div>
 
         <div class="overflow-x-auto">
@@ -343,6 +469,7 @@ const deleteItemLabel = computed(() => {
       <div v-else class="bg-white rounded-2xl border border-emerald-100 shadow-sm overflow-hidden">
         <div class="flex items-center justify-between p-4 border-b border-emerald-50 bg-emerald-50/20">
           <p class="text-sm text-slate-500">ทั้งหมด <span class="font-bold text-[#065f46]">{{ filteredUsers.length }}</span> ผู้ใช้งาน</p>
+          <Loader2 v-if="isLoadingUsers" class="w-4 h-4 text-[#065f46] animate-spin" />
         </div>
 
         <div class="overflow-x-auto">
@@ -581,8 +708,14 @@ const deleteItemLabel = computed(() => {
             <button type="button" @click="cancelDelete" class="flex-1 py-2.5 rounded-lg border border-slate-200 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors">
               ยกเลิก
             </button>
-            <button type="button" @click="deleteItem" class="flex-1 py-2.5 rounded-lg bg-red-600 text-sm font-semibold text-white shadow-md hover:bg-red-700 hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 transition-all">
-              ลบรายการ
+            <button
+              type="button"
+              :disabled="isDeleting"
+              @click="deleteItem"
+              class="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg bg-red-600 text-sm font-semibold text-white shadow-md hover:bg-red-700 hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 transition-all disabled:opacity-70 disabled:translate-y-0"
+            >
+              <Loader2 v-if="isDeleting" class="w-4 h-4 animate-spin" />
+              <span>{{ isDeleting ? 'กำลังลบ...' : 'ลบรายการ' }}</span>
             </button>
           </div>
           </div>

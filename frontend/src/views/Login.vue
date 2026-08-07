@@ -47,7 +47,11 @@ async function handleSubmit() {
     const { user, token } = response.data.data
 
     localStorage.setItem('tcaims_auth_token', token)
-    localStorage.setItem('tcaims_user', JSON.stringify({ name: user.name || user.username, avatar: null }))
+    localStorage.setItem('tcaims_user', JSON.stringify({
+      name: user.name || user.username,
+      email: user.email,
+      avatar: user.avatarUrl || null
+    }))
     // role จาก backend เป็นตัวพิมพ์ใหญ่ (ADMIN/STAFF/USER) แปลงเป็นพิมพ์เล็กให้ตรงกับที่หน้าอื่นเช็คสิทธิ์ไว้
     localStorage.setItem('tcaims_role', String(user.role || 'user').toLowerCase())
 

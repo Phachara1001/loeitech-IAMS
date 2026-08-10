@@ -1,4 +1,5 @@
 import * as locationService from '../services/locationService.js';
+import { logActivity } from '../utils/activityLogger.js';
 
 /**
  * @swagger
@@ -58,6 +59,16 @@ export const getLocations = async (req, res, next) => {
 export const createLocation = async (req, res, next) => {
   try {
     const location = await locationService.createLocation(req.body);
+
+    await logActivity({
+      req,
+      action: 'INSERT',
+      entityType: 'LOCATION',
+      entityId: location.id,
+      newValue: location,
+      details: `เพิ่มอาคาร/ห้อง "${location.building || ''} ${location.name}"`
+    });
+
     res.status(201).json({ status: 'success', data: location, message: 'เพิ่มอาคาร/ห้องสำเร็จ' });
   } catch (error) {
     next(error);
@@ -84,7 +95,19 @@ export const createLocation = async (req, res, next) => {
  */
 export const updateLocation = async (req, res, next) => {
   try {
+    const before = await locationService.getLocationById(req.params.id);
     const location = await locationService.updateLocation(req.params.id, req.body);
+
+    await logActivity({
+      req,
+      action: 'UPDATE',
+      entityType: 'LOCATION',
+      entityId: location.id,
+      oldValue: before,
+      newValue: location,
+      details: `แก้ไขอาคาร/ห้อง "${location.building || ''} ${location.name}"`
+    });
+
     res.status(200).json({ status: 'success', data: location, message: 'แก้ไขข้อมูลสำเร็จ' });
   } catch (error) {
     next(error);
@@ -111,7 +134,18 @@ export const updateLocation = async (req, res, next) => {
  */
 export const deleteLocation = async (req, res, next) => {
   try {
+    const before = await locationService.getLocationById(req.params.id);
     await locationService.deleteLocation(req.params.id);
+
+    await logActivity({
+      req,
+      action: 'DELETE',
+      entityType: 'LOCATION',
+      entityId: before.id,
+      oldValue: before,
+      details: `ลบอาคาร/ห้อง "${before.building || ''} ${before.name}"`
+    });
+
     res.status(200).json({ status: 'success', message: 'ลบข้อมูลสำเร็จ' });
   } catch (error) {
     next(error);

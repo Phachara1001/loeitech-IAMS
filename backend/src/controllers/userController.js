@@ -1,4 +1,5 @@
 import * as userService from '../services/userService.js';
+import { logActivity } from '../utils/activityLogger.js';
 
 /**
  * @swagger
@@ -192,6 +193,16 @@ export const listUsers = async (req, res, next) => {
 export const createUser = async (req, res, next) => {
   try {
     const user = await userService.createUserByAdmin(req.body);
+
+    await logActivity({
+      req,
+      action: 'INSERT',
+      entityType: 'USER',
+      entityId: user.id,
+      newValue: { name: user.name, email: user.email, username: user.username, role: user.role },
+      details: `เพิ่มผู้ใช้งาน "${user.name}" (${user.email})`
+    });
+
     res.status(201).json({
       status: 'success',
       data: user,
@@ -222,7 +233,19 @@ export const createUser = async (req, res, next) => {
  */
 export const updateUserById = async (req, res, next) => {
   try {
+    const before = await userService.getProfile(req.params.id);
     const user = await userService.updateUserByAdmin(req.params.id, req.body);
+
+    await logActivity({
+      req,
+      action: 'UPDATE',
+      entityType: 'USER',
+      entityId: user.id,
+      oldValue: { name: before.name, email: before.email, role: before.role },
+      newValue: { name: user.name, email: user.email, role: user.role },
+      details: `แก้ไขผู้ใช้งาน "${user.name}"`
+    });
+
     res.status(200).json({ status: 'success', data: user, message: 'แก้ไขข้อมูลผู้ใช้งานสำเร็จ' });
   } catch (error) {
     next(error);
@@ -249,7 +272,18 @@ export const updateUserById = async (req, res, next) => {
  */
 export const deleteUserById = async (req, res, next) => {
   try {
+    const before = await userService.getProfile(req.params.id);
     await userService.deleteUserByAdmin(req.params.id);
+
+    await logActivity({
+      req,
+      action: 'DELETE',
+      entityType: 'USER',
+      entityId: before.id,
+      oldValue: { name: before.name, email: before.email, role: before.role },
+      details: `ลบผู้ใช้งาน "${before.name}" (${before.email})`
+    });
+
     res.status(200).json({ status: 'success', message: 'ลบผู้ใช้งานสำเร็จ' });
   } catch (error) {
     next(error);

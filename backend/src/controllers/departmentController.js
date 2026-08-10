@@ -1,4 +1,5 @@
 import * as departmentService from '../services/departmentService.js';
+import { logActivity } from '../utils/activityLogger.js';
 
 /**
  * @swagger
@@ -56,6 +57,16 @@ export const getDepartments = async (req, res, next) => {
 export const createDepartment = async (req, res, next) => {
   try {
     const department = await departmentService.createDepartment(req.body);
+
+    await logActivity({
+      req,
+      action: 'INSERT',
+      entityType: 'DEPARTMENT',
+      entityId: department.id,
+      newValue: department,
+      details: `เพิ่มหน่วยงาน/ฝ่าย "${department.name}"`
+    });
+
     res.status(201).json({ status: 'success', data: department, message: 'เพิ่มหน่วยงาน/ฝ่ายสำเร็จ' });
   } catch (error) {
     next(error);
@@ -82,7 +93,19 @@ export const createDepartment = async (req, res, next) => {
  */
 export const updateDepartment = async (req, res, next) => {
   try {
+    const before = await departmentService.getDepartmentById(req.params.id);
     const department = await departmentService.updateDepartment(req.params.id, req.body);
+
+    await logActivity({
+      req,
+      action: 'UPDATE',
+      entityType: 'DEPARTMENT',
+      entityId: department.id,
+      oldValue: before,
+      newValue: department,
+      details: `แก้ไขหน่วยงาน/ฝ่าย "${department.name}"`
+    });
+
     res.status(200).json({ status: 'success', data: department, message: 'แก้ไขข้อมูลสำเร็จ' });
   } catch (error) {
     next(error);
@@ -109,7 +132,18 @@ export const updateDepartment = async (req, res, next) => {
  */
 export const deleteDepartment = async (req, res, next) => {
   try {
+    const before = await departmentService.getDepartmentById(req.params.id);
     await departmentService.deleteDepartment(req.params.id);
+
+    await logActivity({
+      req,
+      action: 'DELETE',
+      entityType: 'DEPARTMENT',
+      entityId: before.id,
+      oldValue: before,
+      details: `ลบหน่วยงาน/ฝ่าย "${before.name}"`
+    });
+
     res.status(200).json({ status: 'success', message: 'ลบข้อมูลสำเร็จ' });
   } catch (error) {
     next(error);

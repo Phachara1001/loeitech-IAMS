@@ -120,7 +120,7 @@ model AssetDistribution {
 model Location {
   id          Int      @id @default(autoincrement())
   building    String?  // อาคาร เช่น "อาคาร 1"
-  name        String   @unique
+  name        String   // ห้อง/พื้นที่ เช่น "101", "คลังพัสดุกลาง"
   type        String?  // ประเภทห้อง เช่น "ห้องเรียน"
   description String?
   assets      Asset[]
@@ -188,10 +188,13 @@ model ActivityLog {
   id          Int      @id @default(autoincrement())
   userId      Int?
   user        User?    @relation(fields: [userId], references: [id])
-  action      String   // CREATE, UPDATE, DELETE, LOGIN
-  entityType  String   // USER, ASSET, ITEM, etc.
+  action      String   // INSERT, UPDATE, DELETE, LOGIN
+  entityType  String   // USER, ASSET, ITEM, DEPARTMENT, LOCATION, etc.
   entityId    String?
-  details     String?  // JSON string or description
+  details     String?  // คำอธิบายสั้น ๆ ของรายการ
+  ipAddress   String?  // IP ของผู้ทำรายการ
+  oldValue    Json?    // ค่าก่อนแก้ไข (สำหรับ UPDATE/DELETE)
+  newValue    Json?    // ค่าหลังแก้ไข (สำหรับ INSERT/UPDATE)
   createdAt   DateTime @default(now())
 
   @@map("activity_logs")

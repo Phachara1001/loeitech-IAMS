@@ -7,6 +7,7 @@ import userRoutes from './routes/userRoutes.js';
 import departmentRoutes from './routes/departmentRoutes.js';
 import locationRoutes from './routes/locationRoutes.js';
 import dashboardRoutes from './routes/dashboardRoutes.js';
+import activityLogRoutes from './routes/activityLogRoutes.js';
 import assetRoutes from './routes/assetRoutes.js';
 import itemRoutes from './routes/itemRoutes.js';
 import stockReceiveRoutes from './routes/stockReceiveRoutes.js';
@@ -33,6 +34,7 @@ app.use('/api/users', userRoutes);             // โปรไฟล์ผู้
 app.use('/api/departments', departmentRoutes); // หน่วยงาน/ฝ่าย
 app.use('/api/locations', locationRoutes);     // อาคารและห้อง
 app.use('/api/dashboard', dashboardRoutes);    // ภาพรวมระบบ (Dashboard)
+app.use('/api/activity-logs', activityLogRoutes); // ประวัติการใช้งานระบบ (Admin เท่านั้น)
 app.use('/api/assets', assetRoutes);
 app.use('/api/items', itemRoutes);               // InventoryStock
 app.use('/api/stock-receive', stockReceiveRoutes); // InventoryReceive

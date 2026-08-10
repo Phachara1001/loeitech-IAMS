@@ -80,3 +80,25 @@ export const getItemTransactions = async (id) => {
   await getItemById(id); // ตรวจสอบว่ามีอยู่ก่อน
   return await itemRepository.findTransactionsByItemId(id);
 };
+
+/**
+ * บันทึกผลตรวจนับ Inventory Check (ADJUSTMENT)
+ * อัปเดต quantity และสร้าง StockTransaction ประเภท ADJUSTMENT
+ */
+export const adjustItemQuantity = async (id, { actualQty, remark, operatorName }) => {
+  const item = await getItemById(id);
+  const diff = Number(actualQty) - item.quantity;
+
+  // อัปเดต quantity ใน Item
+  const updated = await itemRepository.update(id, { quantity: Number(actualQty) });
+
+  // บันทึก StockTransaction ประเภท ADJUSTMENT
+  await itemRepository.createAdjustmentTransaction({
+    itemId: Number(id),
+    quantity: diff,
+    remark: remark || `ตรวจนับ: ระบบ=${item.quantity}, นับจริง=${actualQty}, ผลต่าง=${diff > 0 ? '+' : ''}${diff}`,
+    operatorName: operatorName || 'ระบบ'
+  });
+
+  return updated;
+};

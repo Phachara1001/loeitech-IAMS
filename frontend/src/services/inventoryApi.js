@@ -28,6 +28,10 @@ export const deleteItem = (id) =>
 export const getItemTransactions = (id) =>
   api.get(`/api/items/${id}/transactions`).then((r) => r.data.data)
 
+/** บันทึกผลตรวจนับ Inventory Check (ADJUSTMENT) */
+export const adjustItemQty = (id, data) =>
+  api.patch(`/api/items/${id}/adjust`, data).then((r) => r.data)
+
 // ==========================================
 // Stock Receive (InventoryReceive)
 // ==========================================

@@ -1,62 +1,114 @@
 <script setup>
-import { ref } from 'vue'
+import { ref, computed, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
+import axios from 'axios'
 import {
   Boxes,
   AlertTriangle,
   CheckCircle2,
   Clock,
-  ArrowRight
+  ArrowRight,
+  Loader2
 } from 'lucide-vue-next'
 
 import { Bar } from 'vue-chartjs'
 import { Chart as ChartJS, Title, Tooltip, Legend, BarElement, CategoryScale, LinearScale } from 'chart.js'
+import { useToast } from '../composables/useToast'
+import { API_BASE } from '../config/api'
 
 ChartJS.register(Title, Tooltip, Legend, BarElement, CategoryScale, LinearScale)
 
-const stats = [
-  {
-    title: 'จำนวนพัสดุทั้งหมด',
-    value: '2,540',
-    change: 'เพิ่มขึ้น 12% จากเดือนที่แล้ว',
-    icon: Boxes,
-    color: 'text-blue-700',
-    bg: 'bg-blue-50'
-  },
-  {
-    title: 'พัสดุสิ้นเปลืองใกล้หมดคลัง',
-    value: '24',
-    change: 'ต้องการการสั่งซื้อเพิ่มเติม',
-    icon: AlertTriangle,
-    color: 'text-amber-700',
-    bg: 'bg-amber-50'
-  },
-  {
-    title: 'ครุภัณฑ์สถานะใช้งานปกติ',
-    value: '892',
-    change: 'ครุภัณฑ์พร้อมใช้งาน',
-    icon: CheckCircle2,
-    color: 'text-emerald-700',
-    bg: 'bg-emerald-50'
-  },
-  {
-    title: 'คำขอเบิกที่รอดำเนินการ',
-    value: '18',
-    change: 'รอการอนุมัติ 8 รายการ',
-    icon: Clock,
-    color: 'text-amber-700',
-    bg: 'bg-amber-50'
-  }
-]
+const router = useRouter()
+const toast = useToast()
 
-const recentActivities = ref([
-  { id: 1, action: 'เพิ่มครุภัณฑ์ใหม่', item: 'คอมพิวเตอร์ All-in-One Dell', user: 'สมชาย ใจดี', time: '10 นาทีที่แล้ว', status: 'success' },
-  { id: 2, action: 'อนุมัติเบิกจ่ายพัสดุ', item: 'กระดาษ A4 (5 รีม)', user: 'แอดมิน ระบบ', time: '1 ชั่วโมงที่แล้ว', status: 'info' },
-  { id: 3, action: 'แจ้งซ่อมครุภัณฑ์', item: 'โปรเจคเตอร์ Epson EB-X05', user: 'สมศักดิ์ ช่างซ่อม', time: '3 ชั่วโมงที่แล้ว', status: 'warning' },
-  { id: 4, action: 'จำหน่ายครุภัณฑ์', item: 'เก้าอี้สำนักงานชำรุด 5 ตัว', user: 'แอดมิน ระบบ', time: '1 วันที่แล้ว', status: 'danger' },
-  { id: 5, action: 'รับเข้าวัสดุสิ้นเปลือง', item: 'หมึกพิมพ์ HP 85A', user: 'สมชาย ใจดี', time: '2 วันที่แล้ว', status: 'success' },
-  { id: 6, action: 'ยื่นคำขอเบิกพัสดุ', item: 'แฟ้มเอกสาร (10 ชิ้น)', user: 'วิภา รักเรียน', time: '2 วันที่แล้ว', status: 'warning' },
-  { id: 7, action: 'ย้ายสถานที่ติดตั้ง', item: 'แอร์ 24,000 BTU', user: 'สมศักดิ์ ช่างซ่อม', time: '3 วันที่แล้ว', status: 'info' },
-])
+const isLoading = ref(true)
+const overview = ref(null) // ข้อมูลดิบทั้งหมดจาก backend
+
+function authHeaders() {
+  const token = localStorage.getItem('tcaims_auth_token')
+  return { Authorization: `Bearer ${token}` }
+}
+
+function extractErrorMessage(error) {
+  const data = error.response?.data
+  if (data?.errors?.length) return data.errors.join(' / ')
+  if (data?.message) return data.message
+  return 'เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง'
+}
+
+function handleUnauthorized(error) {
+  if (error.response?.status === 401) {
+    localStorage.removeItem('tcaims_auth_token')
+    localStorage.removeItem('tcaims_user')
+    localStorage.removeItem('tcaims_role')
+    toast.error('เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่อีกครั้ง')
+    router.push('/login')
+    return true
+  }
+  return false
+}
+
+async function fetchOverview() {
+  isLoading.value = true
+  try {
+    const response = await axios.get(`${API_BASE}/dashboard/overview`, { headers: authHeaders() })
+    overview.value = response.data.data
+  } catch (error) {
+    if (!handleUnauthorized(error)) toast.error(extractErrorMessage(error))
+  } finally {
+    isLoading.value = false
+  }
+}
+
+onMounted(fetchOverview)
+
+// ==========================================
+// การ์ดสรุป 4 ใบ (คำนวณจาก overview.stats ที่ดึงมาจริง)
+// หมายเหตุ: เอาข้อความเทรนด์/เปอร์เซ็นต์ที่เคยเป็นตัวเลขสมมุติออก
+// เพราะ backend ยังไม่มีการคำนวณเทียบย้อนหลัง ใส่ไว้จะเป็นข้อมูลเท็จ
+// ==========================================
+const stats = computed(() => {
+  const s = overview.value?.stats
+  return [
+    {
+      title: 'ครุภัณฑ์ทั้งหมดในระบบ',
+      value: s ? s.totalAssets.toLocaleString() : '-',
+      change: 'รวมทุกสถานะ',
+      icon: Boxes,
+      color: 'text-blue-700',
+      bg: 'bg-blue-50'
+    },
+    {
+      title: 'พัสดุสิ้นเปลืองใกล้หมดคลัง',
+      value: s ? s.lowStockItems.toLocaleString() : '-',
+      change: 'ต้องการการสั่งซื้อเพิ่มเติม',
+      icon: AlertTriangle,
+      color: 'text-amber-700',
+      bg: 'bg-amber-50'
+    },
+    {
+      title: 'ครุภัณฑ์สถานะใช้งานปกติ',
+      value: s ? s.activeAssets.toLocaleString() : '-',
+      change: 'ครุภัณฑ์พร้อมใช้งาน',
+      icon: CheckCircle2,
+      color: 'text-emerald-700',
+      bg: 'bg-emerald-50'
+    },
+    {
+      title: 'คำขอเบิกที่รอดำเนินการ',
+      value: s ? s.pendingRequisitions.toLocaleString() : '-',
+      change: 'รอการอนุมัติ',
+      icon: Clock,
+      color: 'text-amber-700',
+      bg: 'bg-amber-50'
+    }
+  ]
+})
+
+// ==========================================
+// ตารางกิจกรรมล่าสุด
+// ==========================================
+const recentActivities = computed(() => overview.value?.recentActivities || [])
 
 const getStatusColor = (status) => {
   switch (status) {
@@ -68,17 +120,39 @@ const getStatusColor = (status) => {
   }
 }
 
-const chartData = {
-  labels: ['ต.ค.', 'พ.ย.', 'ธ.ค.', 'ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.'],
-  datasets: [
-    {
-      label: 'ปริมาณการเบิกจ่าย (ครั้ง)',
-      backgroundColor: '#047857', // Emerald 700
-      borderRadius: 4,
-      data: [45, 52, 38, 60, 42, 55, 38, 41, 65, 70, 0, 0] // Mock data representing current fiscal year
-    }
-  ]
+// แปลงเวลาจริง (ISO date) เป็นข้อความแบบ "x นาทีที่แล้ว" ภาษาไทย
+function formatRelativeTime(dateStr) {
+  if (!dateStr) return '-'
+  const diffMs = Date.now() - new Date(dateStr).getTime()
+  const diffMin = Math.floor(diffMs / 60000)
+
+  if (diffMin < 1) return 'เมื่อสักครู่'
+  if (diffMin < 60) return `${diffMin} นาทีที่แล้ว`
+  const diffHour = Math.floor(diffMin / 60)
+  if (diffHour < 24) return `${diffHour} ชั่วโมงที่แล้ว`
+  const diffDay = Math.floor(diffHour / 24)
+  return `${diffDay} วันที่แล้ว`
 }
+
+// ==========================================
+// กราฟแท่ง: จำนวนคำขอเบิกรายเดือน (ปีงบประมาณปัจจุบัน ดึงจาก backend จริง)
+// ==========================================
+const fiscalYearBE = computed(() => overview.value?.monthlyRequisitions?.fiscalYearBE || '')
+
+const chartData = computed(() => {
+  const monthly = overview.value?.monthlyRequisitions?.data || []
+  return {
+    labels: monthly.map((m) => m.month),
+    datasets: [
+      {
+        label: 'จำนวนคำขอเบิก (ครั้ง)',
+        backgroundColor: '#047857', // Emerald 700
+        borderRadius: 4,
+        data: monthly.map((m) => m.count)
+      }
+    ]
+  }
+})
 
 const chartOptions = {
   responsive: true,
@@ -95,7 +169,7 @@ const chartOptions = {
   scales: {
     y: {
       beginAtZero: true,
-      ticks: { font: { family: 'Sarabun' } },
+      ticks: { font: { family: 'Sarabun' }, precision: 0 },
       grid: { borderDash: [4, 4] }
     },
     x: {
@@ -147,13 +221,11 @@ const chartOptions = {
             <div class="w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center ring-1 ring-emerald-100">
               <Boxes class="w-4 h-4 text-[#065f46]" />
             </div>
-            <h3 class="font-bold text-slate-800 text-lg">สถิติการเบิกจ่ายพัสดุ (ปีงบประมาณ 2569)</h3>
+            <h3 class="font-bold text-slate-800 text-lg">
+              สถิติการเบิกจ่ายพัสดุ<span v-if="fiscalYearBE"> (ปีงบประมาณ {{ fiscalYearBE }})</span>
+            </h3>
           </div>
-          <select
-            class="text-sm border border-slate-200 rounded-lg py-1.5 pl-3 pr-8 text-slate-600 focus:outline-none focus:ring-2 focus:ring-[#065f46]/20 focus:border-[#065f46]">
-            <option>พัสดุสิ้นเปลือง</option>
-            <option>ครุภัณฑ์</option>
-          </select>
+          <Loader2 v-if="isLoading" class="w-4 h-4 text-[#065f46] animate-spin" />
         </div>
         <div class="p-6 h-80">
           <Bar :data="chartData" :options="chartOptions" />
@@ -236,7 +308,10 @@ const chartOptions = {
               </td>
               <td class="px-6 py-4 text-slate-600">{{ activity.item }}</td>
               <td class="px-6 py-4 text-slate-600">{{ activity.user }}</td>
-              <td class="px-6 py-4 text-slate-500">{{ activity.time }}</td>
+              <td class="px-6 py-4 text-slate-500">{{ formatRelativeTime(activity.createdAt) }}</td>
+            </tr>
+            <tr v-if="!isLoading && recentActivities.length === 0">
+              <td colspan="4" class="px-6 py-12 text-center text-slate-400">ยังไม่มีกิจกรรมในระบบ</td>
             </tr>
           </tbody>
         </table>

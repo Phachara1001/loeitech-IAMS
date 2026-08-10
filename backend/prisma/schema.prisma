@@ -19,6 +19,7 @@ model User {
   departmentId         Int?
   department           Department?   @relation(fields: [departmentId], references: [id])
   activities           ActivityLog[]
+  distributions        AssetDistribution[]
 
   // สำหรับฟีเจอร์ลืมรหัสผ่าน: เก็บรหัสยืนยัน 6 หลักและเวลาหมดอายุ
   resetPasswordCode    String?
@@ -86,10 +87,34 @@ model Asset {
   locationId        Int?
   location          Location? @relation(fields: [locationId], references: [id])
   
+  distributions     AssetDistribution[]
+  borrows           BorrowTransaction[]
+  repairs           RepairRequest[]
+  
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
   @@map("assets")
+}
+
+model AssetDistribution {
+  id                  Int       @id @default(autoincrement())
+  assetId             Int
+  asset               Asset     @relation(fields: [assetId], references: [id])
+  department          String
+  building            String
+  room                String
+  responsiblePersonId Int
+  responsiblePerson   User      @relation(fields: [responsiblePersonId], references: [id])
+  assignDate          DateTime  @default(now())
+  returnDate          DateTime?
+  isCurrent           Boolean   @default(true)
+  note                String?
+
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  @@map("asset_distributions")
 }
 
 model Location {
@@ -173,4 +198,48 @@ model ActivityLog {
   createdAt   DateTime @default(now())
 
   @@map("activity_logs")
+}
+
+// ประวัติการยืม-คืนครุภัณฑ์
+model BorrowTransaction {
+  id                Int       @id @default(autoincrement())
+  borrowCode        String    @unique // รหัสการยืม เช่น 'BRW-2569-0001'
+  assetId           Int
+  asset             Asset     @relation(fields: [assetId], references: [id])
+  borrowerName      String    // ชื่อผู้ยืม
+  borrowerDept      String    // แผนก/หน่วยงานผู้ยืม
+  borrowDate        DateTime  // วันที่ยืม
+  dueDate           DateTime  // กำหนดส่งคืน
+  purpose           String    // วัตถุประสงค์การยืม
+  status            String    @default("PENDING") // PENDING, BORROWED, RETURNED, REJECTED
+  approvedBy        String?   // ผู้อนุมัติการยืม
+  approvedAt        DateTime? // วันอนุมัติยืม
+  returnDate        DateTime? // วันที่ส่งคืนจริง
+  returnedTo        String?   // ผู้รับคืน
+  remark            String?   // หมายเหตุ/เหตุผลปฏิเสธ
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@map("borrow_transactions")
+}
+
+// ใบแจ้งซ่อมครุภัณฑ์พัสดุ
+model RepairRequest {
+  id           Int       @id @default(autoincrement())
+  repairCode   String    @unique // รหัสแจ้งซ่อม เช่น 'REP-2569-0001'
+  assetId      Int
+  asset        Asset     @relation(fields: [assetId], references: [id])
+  reporterName String    // ชื่อผู้แจ้งซ่อม
+  description  String    // รายละเอียดความเสียหาย/อาการชำรุด
+  urgency      String    @default("NORMAL") // NORMAL, URGENT, CRITICAL
+  status       String    @default("PENDING") // PENDING, APPROVED, REPAIRING, COMPLETED, REJECTED
+  approvedBy   String?   // ชื่อผู้อนุมัติ/ผู้ดำเนินการซ่อม
+  approvedAt   DateTime? // วันที่อนุมัติซ่อม
+  repairCost   Float     @default(0.0) // ค่าซ่อมจริง
+  finishDate   DateTime? // วันที่เสร็จสิ้นการซ่อม
+  remark       String?   // หมายเหตุ/เหตุผลปฏิเสธ
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@map("repair_requests")
 }

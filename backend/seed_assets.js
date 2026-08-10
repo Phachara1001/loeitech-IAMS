@@ -95,6 +95,51 @@ async function main() {
   }
 
   console.log('การเพิ่มข้อมูลครุภัณฑ์เริ่มต้นเสร็จเรียบร้อยแล้ว!');
+
+  // เติมข้อมูลการจัดสรรครุภัณฑ์จำลอง
+  const user = await prisma.user.findFirst();
+  if (!user) {
+    console.log('กรุณารัน npm run seed ก่อนเพื่อสร้างบัญชีผู้ใช้อย่างน้อย 1 บัญชี');
+    return;
+  }
+
+  const assetsInDb = await prisma.asset.findMany();
+  if (assetsInDb.length > 0) {
+    const distCount = await prisma.assetDistribution.count();
+    if (distCount === 0) {
+      console.log('กำลังสร้างข้อมูลการจัดสรรครุภัณฑ์จำลอง...');
+      
+      const sampleDistributions = [
+        {
+          assetId: assetsInDb[0].id,
+          department: 'แผนกเทคโนโลยีสารสนเทศ',
+          building: 'อาคารวิทยบริการ (อาคาร 3)',
+          room: 'ห้อง 304 (Computer Lab 1)',
+          responsiblePersonId: user.id,
+          assignDate: new Date('2026-07-01'),
+          isCurrent: true,
+          note: 'จัดสรรเพื่อการใช้งานห้องแล็บคอมพิวเตอร์หลัก'
+        },
+        {
+          assetId: assetsInDb[1].id,
+          department: 'งานบริหารทั่วไป',
+          building: 'อาคาร 3 สำนักงาน',
+          room: 'ห้องพัสดุ',
+          responsiblePersonId: user.id,
+          assignDate: new Date('2026-07-05'),
+          isCurrent: true,
+          note: 'จัดสรรเพื่อระบายอากาศสำนักงานงานพัสดุ'
+        }
+      ];
+
+      for (const dist of sampleDistributions) {
+        await prisma.assetDistribution.create({ data: dist });
+        console.log(`จัดสรรครุภัณฑ์ ID ${dist.assetId} ไปยัง ${dist.department} สำเร็จ`);
+      }
+    } else {
+      console.log('มีข้อมูลการจัดสรรครุภัณฑ์ในระบบอยู่แล้ว');
+    }
+  }
 }
 
 main()

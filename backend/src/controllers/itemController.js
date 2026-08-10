@@ -184,3 +184,46 @@ export const getItemTransactions = async (req, res, next) => {
     next(error);
   }
 };
+
+/**
+ * @swagger
+ * /api/items/{id}/adjust:
+ *   patch:
+ *     summary: บันทึกผลตรวจนับ Inventory Check (ADJUSTMENT)
+ *     tags: [Items]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [actualQty]
+ *             properties:
+ *               actualQty:
+ *                 type: integer
+ *               remark:
+ *                 type: string
+ *               operatorName:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: บันทึกสำเร็จ
+ */
+export const adjustItem = async (req, res, next) => {
+  try {
+    const { actualQty, remark, operatorName } = req.body;
+    if (actualQty === undefined || actualQty === null || isNaN(Number(actualQty))) {
+      return res.status(400).json({ status: 'error', message: 'กรุณาระบุ actualQty (จำนวนที่นับได้จริง)' });
+    }
+    const updated = await itemService.adjustItemQuantity(req.params.id, { actualQty, remark, operatorName });
+    res.status(200).json({ status: 'success', data: updated, message: 'บันทึกผลตรวจนับสำเร็จ' });
+  } catch (error) {
+    next(error);
+  }
+};

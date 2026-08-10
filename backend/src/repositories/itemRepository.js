@@ -75,3 +75,21 @@ export const findTransactionsByItemId = async (itemId) => {
     orderBy: { createdAt: 'desc' }
   });
 };
+
+/**
+ * บันทึก StockTransaction ประเภท ADJUSTMENT (ผลตรวจนับ)
+ */
+export const createAdjustmentTransaction = async ({ itemId, quantity, remark, operatorName }) => {
+  return await prisma.stockTransaction.create({
+    data: {
+      itemId: Number(itemId),
+      transactionType: 'ADJUSTMENT',
+      quantity: Number(quantity),
+      unitPrice: 0,
+      totalPrice: 0,
+      remarks: remark || null,
+      operatorName: operatorName || null,
+      receivedDate: new Date()
+    }
+  });
+};

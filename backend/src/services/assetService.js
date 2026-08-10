@@ -91,3 +91,90 @@ export const uploadImageToMinio = async (file) => {
   const host = process.env.MINIO_ENDPOINT === 'minio' ? 'localhost' : (process.env.MINIO_ENDPOINT || 'localhost');
   return `http://${host}:${port}/${bucketName}/${fileName}`;
 };
+
+export const getAssetTimeline = async (id) => {
+  const data = await assetRepository.findTimelineData(id);
+  if (!data.asset) {
+    throw new Error('Asset not found');
+  }
+
+  const timeline = [];
+
+  // 1. ตรวจรับครุภัณฑ์
+  timeline.push({
+    id: `rec-${data.asset.id}`,
+    type: 'RECEIVE',
+    title: 'ตรวจรับครุภัณฑ์เข้าสารสนเทศ',
+    date: data.asset.acquiredDate,
+    operator: 'งานพัสดุกลาง',
+    details: `ตรวจรับครุภัณฑ์ใหม่ด้วยวิธี: ${data.asset.acquisitionMethod || '-'} / แหล่งเงิน: ${data.asset.budgetType || '-'} / ราคา: ${data.asset.unitPrice?.toLocaleString() || '0'} บาท`,
+    location: data.asset.department || 'ไม่ระบุหน่วยงาน',
+    responsiblePerson: data.asset.department || 'ไม่ระบุ',
+    cost: 0
+  });
+
+  // 2. ประวัติการจัดสรรโยกย้าย
+  data.distributions.forEach((d) => {
+    timeline.push({
+      id: `dist-${d.id}`,
+      type: 'MOVE',
+      title: `โอนย้ายสถานที่ / จัดสรร (${d.department})`,
+      date: d.assignDate,
+      operator: d.responsiblePerson?.name || 'ผู้ดูแลระบบ',
+      details: d.note || 'จัดสรรลงหน่วยงานเพื่อเข้าประจำการการใช้งาน',
+      location: `${d.building || ''} ${d.room || ''}`.trim() || 'ไม่ระบุสถานที่',
+      responsiblePerson: d.responsiblePerson?.name || 'ไม่ระบุ',
+      cost: 0
+    });
+  });
+
+  // 3. ประวัติการแจ้งซ่อม
+  data.repairs.forEach((r) => {
+    timeline.push({
+      id: `rep-${r.id}`,
+      type: 'REPAIR',
+      title: `ส่งซ่อมบำรุง (${r.repairCode})`,
+      date: r.createdAt,
+      operator: r.reporterName,
+      details: `อาการชำรุด: ${r.description} (สถานะ: ${r.status === 'COMPLETED' ? 'ซ่อมสำเร็จ' : r.status === 'REPAIRING' ? 'กำลังดำเนินการซ่อม' : 'รอประเมิน'})`,
+      location: 'ศูนย์ซ่อมบำรุงวิทยาลัย',
+      responsiblePerson: r.approvedBy || 'ช่างซ่อมบำรุง',
+      cost: r.repairCost || 0
+    });
+  });
+
+  // 4. ประวัติการยืม-คืน
+  data.borrows.forEach((b) => {
+    timeline.push({
+      id: `borrow-${b.id}`,
+      type: 'BORROW',
+      title: `ขอยืมใช้งาน (${b.borrowCode})`,
+      date: b.borrowDate,
+      operator: b.borrowerName,
+      details: `วัตถุประสงค์: ${b.purpose} (สถานะยืม: ${b.status})`,
+      location: b.borrowerDept || 'ไม่ระบุหน่วยงาน',
+      responsiblePerson: b.approvedBy || 'เจ้าหน้าที่พัสดุ',
+      cost: 0
+    });
+
+    if (b.returnDate) {
+      timeline.push({
+        id: `return-${b.id}`,
+        type: 'RETURN',
+        title: `รับคืนครุภัณฑ์ (${b.borrowCode})`,
+        date: b.returnDate,
+        operator: b.returnedTo || 'เจ้าหน้าที่พัสดุ',
+        details: b.remark || 'ส่งคืนสภาพปกติเรียบร้อย',
+        location: b.borrowerDept || 'ไม่ระบุหน่วยงาน',
+        responsiblePerson: b.returnedTo || 'เจ้าหน้าที่พัสดุ',
+        cost: 0
+      });
+    }
+  });
+
+  // เรียงลำดับจากล่าสุดไปหาเก่าสุด
+  timeline.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+  return timeline;
+};
+

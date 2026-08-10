@@ -28,6 +28,10 @@ export const deleteItem = (id) =>
 export const getItemTransactions = (id) =>
   api.get(`/api/items/${id}/transactions`).then((r) => r.data.data)
 
+/** บันทึกผลตรวจนับ Inventory Check (ADJUSTMENT) */
+export const adjustItemQty = (id, data) =>
+  api.patch(`/api/items/${id}/adjust`, data).then((r) => r.data)
+
 // ==========================================
 // Stock Receive (InventoryReceive)
 // ==========================================
@@ -113,6 +117,34 @@ export const createRepair = (data) =>
 /** อัปเดตสถานะการแจ้งซ่อม (อนุมัติ, กำลังซ่อม, ซ่อมสำเร็จ) */
 export const updateRepairStatus = (id, data) =>
   api.put(`/api/repairs/${id}/status`, data).then((r) => r.data)
+
+// ==========================================
+// Asset Distributions
+// ==========================================
+
+/** ดึงข้อมูลรายการจัดสรรครุภัณฑ์ทั้งหมด */
+export const getAssetDistributions = () =>
+  api.get('/api/asset-distributions').then((r) => r.data.data)
+
+/** จัดสรร / โยกย้ายครุภัณฑ์ใหม่ */
+export const createAssetDistribution = (data) =>
+  api.post('/api/asset-distributions', data).then((r) => r.data.data)
+
+// ==========================================
+// Asset Timeline
+// ==========================================
+
+/** ดึงประวัติไทม์ไลน์ความเคลื่อนไหวของครุภัณฑ์รายชิ้น */
+export const getAssetTimeline = (id) =>
+  api.get(`/api/assets/${id}/timeline`).then((r) => r.data.data)
+
+// ==========================================
+// Users List (for Selection)
+// ==========================================
+
+/** ดึงรายชื่อบุคลากรทั้งหมด */
+export const getUsers = () =>
+  api.get('/api/users').then((r) => r.data.data)
 
 
 

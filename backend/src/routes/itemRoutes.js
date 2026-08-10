@@ -19,6 +19,9 @@ router.post('/', validateItemInput, itemController.createItem);
 // PUT /api/items/:id
 router.put('/:id', validateItemInput, itemController.updateItem);
 
+// PATCH /api/items/:id/adjust  — บันทึกผลตรวจนับ (Inventory Check ADJUSTMENT)
+router.patch('/:id/adjust', itemController.adjustItem);
+
 // DELETE /api/items/:id
 router.delete('/:id', itemController.deleteItem);
 

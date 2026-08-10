@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import {
   Building2,
   Search,
@@ -15,20 +15,26 @@ import {
   X,
   Check
 } from 'lucide-vue-next'
+import * as inventoryApi from '../services/inventoryApi.js'
+import { useToast } from '../composables/useToast.js'
+
+const toast = useToast()
 
 // ==========================================
 // 1. USER & ROLE CONTEXT
 // ==========================================
+const userObj = JSON.parse(localStorage.getItem('tcaims_user') || '{}')
+const currentRoleStr = (localStorage.getItem('tcaims_role') || 'user').toLowerCase()
 const currentUser = ref({
-  id: 'USR-001',
-  name: 'นายสมชาย ใจดี',
-  department: 'แผนกเทคโนโลยีสารสนเทศ',
-  role: 'Staff' // 'Admin' | 'Staff' | 'User'
+  id: userObj.id || 'USR-001',
+  name: userObj.name || 'ผู้ใช้งานระบบ',
+  department: userObj.department?.name || 'แผนกเทคโนโลยีสารสนเทศ',
+  role: currentRoleStr === 'admin' ? 'Admin' : currentRoleStr === 'staff' ? 'Staff' : 'User'
 })
 
 // --- Helper: Format DATE เป็นภาษาไทย ---
 const formatThaiDate = (dateString) => {
-  if (!dateString) return ''
+  if (!dateString) return '-'
   const date = new Date(dateString)
   if (isNaN(date.getTime())) return dateString
 
@@ -42,11 +48,10 @@ const formatThaiDate = (dateString) => {
 // ==========================================
 // 2. MASTER ASSETS & LOCATIONS (ฐานข้อมูลครุภัณฑ์)
 // ==========================================
-const masterAssets = ref([
-  { id: 'AST-2026-001', code: '7440-001-0001/69', name: 'เครื่องคอมพิวเตอร์ประมวลผล High-End', brandModel: 'Dell OptiPlex 7010' },
-  { id: 'AST-2026-002', code: '7440-001-0002/69', name: 'เครื่องพิมพ์เลเซอร์มัลติฟังก์ชัน', brandModel: 'HP LaserJet Pro M428fdw' },
-  { id: 'AST-2026-003', code: '7440-002-0005/69', name: 'เครื่องโปรเจกเตอร์ 4000 Lumens', brandModel: 'Epson EB-FH52' }
-])
+const masterAssets = ref([])
+const distributionLogs = ref([])
+const personnelList = ref([])
+const isLoading = ref(false)
 
 const departments = [
   'แผนกเทคโนโลยีสารสนเทศ',
@@ -56,63 +61,45 @@ const departments = [
   'แผนกช่างยนต์'
 ]
 
-const personnelList = [
-  { id: 'USR-001', name: 'นายสมชาย ใจดี', dept: 'แผนกเทคโนโลยีสารสนเทศ' },
-  { id: 'USR-002', name: 'นางสาววิภาดา พัสดุ', dept: 'งานพัสดุกลาง' },
-  { id: 'USR-003', name: 'ดร.วิชัย สอนดี', dept: 'ฝ่ายวิชาการ' },
-  { id: 'USR-004', name: 'นายอนันต์ ช่างเครื่อง', dept: 'แผนกช่างยนต์' }
-]
+async function fetchData() {
+  isLoading.value = true
+  try {
+    const [assetsData, distsData, usersData] = await Promise.all([
+      inventoryApi.getAssets(),
+      inventoryApi.getAssetDistributions(),
+      inventoryApi.getUsers()
+    ])
+    masterAssets.value = assetsData
+    
+    distributionLogs.value = distsData.map(d => ({
+      id: d.id.toString(),
+      assetId: d.assetId,
+      assetCode: d.asset?.seq || '-',
+      assetName: d.asset?.name || '-',
+      department: d.department,
+      building: d.building,
+      room: d.room,
+      responsiblePersonId: d.responsiblePersonId.toString(),
+      responsiblePersonName: d.responsiblePerson?.name || 'ไม่ระบุ',
+      assignDate: d.assignDate,
+      returnDate: d.returnDate,
+      is_current: d.isCurrent,
+      note: d.note
+    }))
 
-// ==========================================
-// 3. ASSET DISTRIBUTION TRANSACTIONS (พ.3108 หน้า 4)
-// ==========================================
-const distributionLogs = ref([
-  {
-    id: 'DIST-001',
-    assetId: 'AST-2026-001',
-    assetCode: '7440-001-0001/69',
-    assetName: 'เครื่องคอมพิวเตอร์ประมวลผล High-End',
-    department: 'งานการเงินและบัญชี',
-    building: 'อาคารอำนวยการ (อาคาร 1)',
-    room: 'ห้อง 121 (ห้องบัญชี)',
-    responsiblePersonId: 'USR-002',
-    responsiblePersonName: 'นางสาววิภาดา พัสดุ',
-    assignDate: '2026-01-10',
-    returnDate: '2026-06-30',
-    is_current: false, // ถูกโอนย้ายออกไปแล้ว
-    note: 'จัดสรรเพื่อใช้งานระบบบัญชีใหม่'
-  },
-  {
-    id: 'DIST-002',
-    assetId: 'AST-2026-001',
-    assetCode: '7440-001-0001/69',
-    assetName: 'เครื่องคอมพิวเตอร์ประมวลผล High-End',
-    department: 'แผนกเทคโนโลยีสารสนเทศ',
-    building: 'อาคารวิทยบริการ (อาคาร 3)',
-    room: 'ห้อง 304 (Computer Lab 1)',
-    responsiblePersonId: 'USR-001',
-    responsiblePersonName: 'นายสมชาย ใจดี',
-    assignDate: '2026-07-01',
-    returnDate: null,
-    is_current: true, // ครอบครอง ณ ปัจจุบัน
-    note: 'โยกย้ายมาใช้ในการเรียนการสอนภาคปฏิบัติ'
-  },
-  {
-    id: 'DIST-003',
-    assetId: 'AST-2026-002',
-    assetCode: '7440-001-0002/69',
-    assetName: 'เครื่องพิมพ์เลเซอร์มัลติฟังก์ชัน',
-    department: 'ฝ่ายวิชาการ',
-    building: 'อาคารอำนวยการ (อาคาร 1)',
-    room: 'ห้อง 102 (ห้องงานวิชาการ)',
-    responsiblePersonId: 'USR-003',
-    responsiblePersonName: 'ดร.วิชัย สอนดี',
-    assignDate: '2026-02-15',
-    returnDate: null,
-    is_current: true,
-    note: 'จัดซื้อใหม่ประจำปีงบประมาณ 2569'
+    personnelList.value = usersData.map(u => ({
+      id: u.id.toString(),
+      name: u.name || u.username,
+      dept: u.department?.name || 'ไม่ระบุหน่วยงาน'
+    }))
+  } catch (err) {
+    toast.error('ไม่สามารถโหลดข้อมูลจัดสรรครุภัณฑ์ได้: ' + err.message)
+  } finally {
+    isLoading.value = false
   }
-])
+}
+
+onMounted(fetchData)
 
 // ==========================================
 // 4. FILTER & RBAC LOGIC
@@ -154,50 +141,37 @@ const form = ref({
   note: ''
 })
 
-const handleAssignAsset = () => {
+const handleAssignAsset = async () => {
   if (currentUser.value.role === 'User') return
 
-  const selectedAsset = masterAssets.value.find(a => a.id === form.value.assetId)
-  const selectedPerson = personnelList.find(p => p.id === form.value.responsiblePersonId)
+  const selectedAsset = masterAssets.value.find(a => a.id === Number(form.value.assetId))
+  const selectedPerson = personnelList.value.find(p => p.id === form.value.responsiblePersonId)
 
   if (!selectedAsset || !selectedPerson) {
-    alert('กรุณากรอกข้อมูลให้ครบถ้วน')
+    toast.warning('กรุณากรอกข้อมูลให้ครบถ้วน')
     return
   }
 
-  const todayStr = new Date().toISOString().split('T')[0]
-
-  // 🔄 AUTO-RELINQUISH: ยกเลิกสิทธิ์การครอบครองเดิม (เปลี่ยน is_current เป็น false และลงวันที่ส่งคืน)
-  distributionLogs.value.forEach(log => {
-    if (log.assetId === form.value.assetId && log.is_current) {
-      log.is_current = false
-      log.returnDate = todayStr
+  try {
+    const payload = {
+      assetId: selectedAsset.id,
+      department: form.value.department,
+      building: form.value.building,
+      room: form.value.room,
+      responsiblePersonId: Number(selectedPerson.id),
+      note: form.value.note || 'จัดสรรลงหน่วยงาน'
     }
-  })
 
-  // 🆕 บันทึกการครอบครองใหม่
-  const newDistId = `DIST-00${distributionLogs.value.length + 1}`
-  distributionLogs.value.unshift({
-    id: newDistId,
-    assetId: selectedAsset.id,
-    assetCode: selectedAsset.code,
-    assetName: selectedAsset.name,
-    department: form.value.department,
-    building: form.value.building,
-    room: form.value.room,
-    responsiblePersonId: selectedPerson.id,
-    responsiblePersonName: selectedPerson.name,
-    assignDate: todayStr,
-    returnDate: null,
-    is_current: true,
-    note: form.value.note || 'จัดสรรลงหน่วยงาน'
-  })
-
-  alert(`จัดสรรครุภัณฑ์ ${selectedAsset.code} ไปยัง ${form.value.department} เรียบร้อยแล้ว!`)
-  
-  // Reset Form & Close Modal
-  isModalOpen.value = false
-  form.value = { assetId: '', department: '', building: '', room: '', responsiblePersonId: '', note: '' }
+    await inventoryApi.createAssetDistribution(payload)
+    toast.success(`จัดสรรครุภัณฑ์ ${selectedAsset.seq || '-'} ไปยัง ${form.value.department} เรียบร้อยแล้ว!`)
+    
+    // Reset Form & Close Modal
+    isModalOpen.value = false
+    form.value = { assetId: '', department: '', building: '', room: '', responsiblePersonId: '', note: '' }
+    await fetchData()
+  } catch (err) {
+    toast.error('ไม่สามารถจัดสรรครุภัณฑ์ได้: ' + err.message)
+  }
 }
 </script>
 
@@ -408,7 +382,7 @@ const handleAssignAsset = () => {
             <select v-model="form.assetId" required class="w-full p-3 border-2 border-slate-300 rounded-xl font-bold bg-slate-50 focus:border-emerald-600 focus:outline-none">
               <option value="" disabled>-- เลือกครุภัณฑ์ --</option>
               <option v-for="asset in masterAssets" :key="asset.id" :value="asset.id">
-                [{{ asset.code }}] {{ asset.name }}
+                [{{ asset.seq || '-' }}] {{ asset.name }}
               </option>
             </select>
           </div>

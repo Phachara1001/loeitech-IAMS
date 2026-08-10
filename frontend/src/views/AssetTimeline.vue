@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import {
   Search,
   Filter,
@@ -19,15 +19,20 @@ import {
   Banknote,
   ArrowRightLeft,
   Sparkles,
-  Check
+  Check,
+  Loader2
 } from 'lucide-vue-next'
+import * as inventoryApi from '../services/inventoryApi.js'
+import { useToast } from '../composables/useToast.js'
+
+const toast = useToast()
 
 // --- View State ---
 const currentView = ref('LIST')
 
 // --- Helper: Format DATETIME เป็นภาษาไทย ---
 const formatThaiDateTime = (dateString) => {
-  if (!dateString) return ''
+  if (!dateString) return '-'
   const date = new Date(dateString)
   if (isNaN(date.getTime())) return dateString
 
@@ -41,72 +46,47 @@ const formatThaiDateTime = (dateString) => {
   })
 }
 
-// --- Mock User Context ---
+// --- User Context ---
+const userObj = JSON.parse(localStorage.getItem('tcaims_user') || '{}')
+const currentRoleStr = (localStorage.getItem('tcaims_role') || 'user').toLowerCase()
 const currentUser = ref({
-  id: 101,
-  name: 'นายสมชาย ใจดี',
-  role: 'Admin'
+  id: userObj.id || 101,
+  name: userObj.name || 'ผู้ใช้งานระบบ',
+  role: currentRoleStr === 'admin' ? 'Admin' : currentRoleStr === 'staff' ? 'Staff' : 'User'
 })
 
 // --- Master Asset List Database ---
-const assets = ref([
-  {
-    id: 'AST-2024-001',
-    seq: '561-001',
-    name: 'เครื่องคอมพิวเตอร์ประมวลผลสูง (Workstation)',
-    code: '7420-001-0045',
-    serial: 'SN-99884210',
-    category: 'ครุภัณฑ์คอมพิวเตอร์',
-    ownerId: 101,
-    ownerName: 'นายสมชาย ใจดี',
-    department: 'เทคโนโลยีสารสนเทศ',
-    currentLocation: 'ห้องปฏิบัติการคอมพิวเตอร์ 402',
-    status: 'Active',
-    image: null
-  },
-  {
-    id: 'AST-2024-002',
-    seq: '561-002',
-    name: 'โปรเจคเตอร์ความละเอียดสูง 4K',
-    code: '7410-005-0021',
-    serial: 'PJ-4K-55201',
-    category: 'ครุภัณฑ์โสตทัศนูปกรณ์',
-    ownerId: 202,
-    ownerName: 'นางสาววิภาดา พัสดุ',
-    department: 'โสตทัศนูปกรณ์',
-    currentLocation: 'ห้องประชุมชั้น 3',
-    status: 'Repaired',
-    image: null
-  },
-  {
-    id: 'AST-2024-003',
-    seq: '561-003',
-    name: 'เครื่องกลึงยันศูนย์',
-    code: '3320-015-0012',
-    serial: 'LATHE-2023-01',
-    category: 'ครุภัณฑ์โรงงาน',
-    ownerId: 101,
-    ownerName: 'นายสมชาย ใจดี',
-    department: 'ช่างกลโรงงาน',
-    currentLocation: 'โรงฝึกงานช่างกล',
-    status: 'Active',
-    image: 'https://placehold.co/400x300/e2e8f0/475569?text=LATHE'
-  },
-  {
-    id: 'AST-2024-004',
-    seq: '561-004',
-    name: 'เครื่องพิมพ์ 3 มิติ (3D Printer)',
-    code: '7420-025-0003',
-    serial: '3DP-CREALITY-01',
-    category: 'ครุภัณฑ์คอมพิวเตอร์',
-    ownerId: 202,
-    ownerName: 'นางสาววิภาดา พัสดุ',
-    department: 'ช่างกลโรงงาน',
-    currentLocation: 'ห้องนวัตกรรม ชั้น 2',
-    status: 'Broken',
-    image: null
+const assets = ref([])
+const isLoading = ref(false)
+const isTimelineLoading = ref(false)
+
+async function fetchAssets() {
+  isLoading.value = true
+  try {
+    const data = await inventoryApi.getAssets()
+    // Map backend schema to format expected by view
+    assets.value = data.map(a => ({
+      id: a.id,
+      seq: a.seq,
+      name: a.name,
+      code: a.referenceCode || '-',
+      serial: a.serialNumber || '-',
+      category: a.category,
+      ownerId: a.department,
+      ownerName: a.department || 'ไม่ระบุ',
+      department: a.department || 'ไม่ระบุ',
+      currentLocation: a.location?.name || 'ไม่ระบุสถานที่',
+      status: a.status,
+      image: a.image
+    }))
+  } catch (err) {
+    toast.error('ไม่สามารถโหลดข้อมูลครุภัณฑ์ได้: ' + err.message)
+  } finally {
+    isLoading.value = false
   }
-])
+}
+
+onMounted(fetchAssets)
 
 // --- Search & Filter State ---
 const searchQuery = ref('')
@@ -114,14 +94,16 @@ const statusFilter = ref('')
 
 const filteredAssets = computed(() => {
   return assets.value.filter(asset => {
-    if (currentUser.value.role === 'User' && asset.ownerId !== currentUser.value.id) {
-      return false
+    if (currentUser.value.role === 'User' && asset.department !== userObj.department?.name) {
+      if (userObj.department?.name) {
+        return false
+      }
     }
 
-    const matchesSearch = asset.name.includes(searchQuery.value) ||
-      asset.seq.includes(searchQuery.value) ||
-      asset.code.includes(searchQuery.value) ||
-      asset.serial.includes(searchQuery.value)
+    const matchesSearch = asset.name.toLowerCase().includes(searchQuery.value.toLowerCase()) ||
+      asset.seq.toLowerCase().includes(searchQuery.value.toLowerCase()) ||
+      asset.code.toLowerCase().includes(searchQuery.value.toLowerCase()) ||
+      asset.serial.toLowerCase().includes(searchQuery.value.toLowerCase())
 
     const matchesStatus = statusFilter.value === '' || asset.status === statusFilter.value
 
@@ -129,61 +111,30 @@ const filteredAssets = computed(() => {
   })
 })
 
-const selectedAssetId = ref('AST-2024-001')
+const selectedAssetId = ref(null)
+const timelineLogs = ref([])
 
 const currentAsset = computed(() => {
   return assets.value.find(a => a.id === selectedAssetId.value) || null
 })
 
-const viewAssetTimeline = (asset) => {
+const viewAssetTimeline = async (asset) => {
   selectedAssetId.value = asset.id
   currentView.value = 'TIMELINE'
-}
-
-// --- Mock Timeline Logs Database ---
-const timelineLogs = ref([
-  {
-    id: 1,
-    assetId: 'AST-2024-001',
-    type: 'RECEIVE',
-    title: 'ตรวจรับครุภัณฑ์เข้าวิทยาลัย',
-    date: '2023-05-10 09:30',
-    operator: 'งานพัสดุกลาง',
-    details: 'ตรวจรับครุภัณฑ์ใหม่ตามสัญญาจ้างเลขที่ ตร.66/2566 สภาพสมบูรณ์พร้อมใช้งาน',
-    location: 'คลังพัสดุกลาง',
-    responsiblePerson: 'นายสมชาย ใจดี',
-    cost: 0
-  },
-  {
-    id: 2,
-    assetId: 'AST-2024-001',
-    type: 'MOVE',
-    title: 'โอนย้ายสถานที่และผู้ดูแล',
-    date: '2023-06-01 13:15',
-    operator: 'นายสมชาย ใจดี',
-    details: 'ย้ายจากคลังพัสดุเข้าประจำการเพื่อใช้ในการเรียนการสอน',
-    location: 'ห้องปฏิบัติการคอมพิวเตอร์ 402',
-    responsiblePerson: 'นายสมชาย ใจดี',
-    cost: 0
-  },
-  {
-    id: 3,
-    assetId: 'AST-2024-001',
-    type: 'REPAIR',
-    title: 'ส่งซ่อมบำรุง (เปลี่ยน Power Supply)',
-    date: '2024-02-14 10:00',
-    operator: 'ศูนย์ซ่อมบำรุงวิทยาลัย',
-    details: 'อาการชำรุด: เปิดเครื่องไม่ติด พาวเวอร์ซัพพลายไหม้ ดำเนินการเปลี่ยนอะไหล่แท้',
-    location: 'ห้องปฏิบัติการคอมพิวเตอร์ 402',
-    responsiblePerson: 'นายสมชาย ใจดี',
-    cost: 2500
+  
+  isTimelineLoading.value = true
+  try {
+    const data = await inventoryApi.getAssetTimeline(asset.id)
+    timelineLogs.value = data
+  } catch (err) {
+    toast.error('ไม่สามารถดึงข้อมูลไทม์ไลน์ได้: ' + err.message)
+  } finally {
+    isTimelineLoading.value = false
   }
-])
+}
 
 const activeTimeline = computed(() => {
   return timelineLogs.value
-    .filter(log => log.assetId === selectedAssetId.value)
-    .sort((a, b) => new Date(b.date) - new Date(a.date))
 })
 
 const repairStats = computed(() => {
@@ -451,119 +402,127 @@ const handleAddLog = () => {
         </div>
       </div>
 
-      <!-- Asset Summary Banner -->
-      <div v-if="currentAsset" class="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-sm space-y-6">
-        <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-100 pb-4">
-          <div>
-            <div class="flex items-center gap-2 mb-1">
-              <span class="text-sm font-bold text-slate-400 font-mono">ID: {{ currentAsset.id }}</span>
-              <span :class="['px-2.5 py-0.5 text-xs font-extrabold rounded-full border', getStatusBadge(currentAsset.status)]">
-                {{ getStatusText(currentAsset.status) }}
-              </span>
-            </div>
-            <h2 class="text-2xl md:text-3xl font-extrabold text-slate-900">{{ currentAsset.name }}</h2>
-          </div>
-          <div class="text-slate-500 font-medium text-sm">
-            หมวดหมู่: <strong class="text-slate-800">{{ currentAsset.category }}</strong>
-          </div>
-        </div>
-
-        <!-- Summary Grid Cards -->
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div class="bg-slate-50 p-4 rounded-xl border border-slate-200/60">
-            <span class="text-slate-500 font-medium text-sm block">รหัสซีเรียล / Serial Number</span>
-            <span class="font-mono font-bold text-slate-900 text-lg md:text-xl">{{ currentAsset.serial }}</span>
-          </div>
-          <div class="bg-slate-50 p-4 rounded-xl border border-slate-200/60">
-            <span class="text-slate-500 font-medium text-sm block">สถานที่ติดตั้งปัจจุบัน</span>
-            <span class="font-bold text-slate-900 text-lg flex items-center gap-1.5 mt-0.5">
-              <MapPin class="w-5 h-5 text-rose-500 shrink-0" />
-              {{ currentAsset.currentLocation }}
-            </span>
-          </div>
-          <div class="bg-slate-50 p-4 rounded-xl border border-slate-200/60">
-            <span class="text-slate-500 font-medium text-sm block">ผู้ดูแลรับผิดชอบ</span>
-            <span class="font-bold text-slate-900 text-lg flex items-center gap-1.5 mt-0.5">
-              <UserCheck class="w-5 h-5 text-blue-500 shrink-0" />
-              {{ currentAsset.ownerName }}
-            </span>
-          </div>
-          <div class="bg-emerald-50/60 p-4 rounded-xl border border-emerald-100">
-            <span class="text-emerald-800 font-medium text-sm block">ยอดซ่อมบำรุงสะสมรวม</span>
-            <span class="font-extrabold text-emerald-800 text-2xl">฿{{ repairStats.totalCost.toLocaleString() }} บาท</span>
-          </div>
-        </div>
+      <!-- Loading Indicator -->
+      <div v-if="isTimelineLoading" class="bg-white p-16 rounded-2xl border border-slate-200 shadow-sm text-center text-slate-400">
+        <Loader2 class="w-12 h-12 mx-auto mb-3 animate-spin text-emerald-800" />
+        <p class="text-lg font-medium">กำลังโหลดประวัติกิจกรรมและไทม์ไลน์ครุภัณฑ์...</p>
       </div>
 
-      <!-- Timeline Logs List -->
-      <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm p-6 md:p-8">
-        <h3 class="text-xl font-extrabold text-slate-900 mb-8 flex items-center gap-2.5">
-          <Calendar class="w-6 h-6 text-emerald-800" />
-          ประวัติและลำดับเหตุการณ์ย้อนหลัง (Timeline)
-        </h3>
-
-        <div v-if="activeTimeline.length > 0" class="relative border-l-4 border-slate-200 ml-4 md:ml-8 space-y-8">
-          
-          <div v-for="item in activeTimeline" :key="item.id" class="relative pl-8 md:pl-10">
-            <!-- Timeline Icon -->
-            <div :class="['absolute -left-[22px] top-0 w-10 h-10 rounded-full border-2 bg-white flex items-center justify-center shadow-sm', getTypeBadge(item.type).class]">
-              <component :is="getTypeBadge(item.type).icon" class="w-5 h-5" />
-            </div>
-
-            <!-- Event Card -->
-            <div class="bg-slate-50/80 border border-slate-200/80 rounded-2xl p-6 hover:border-slate-300 transition-all space-y-4">
-              
-              <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200/60 pb-3">
-                <div class="flex items-center gap-3 flex-wrap">
-                  <span :class="['px-3 py-1 rounded-lg text-sm font-bold border', getTypeBadge(item.type).class]">
-                    {{ getTypeBadge(item.type).label }}
-                  </span>
-                  <h4 class="font-extrabold text-slate-900 text-lg md:text-xl">{{ item.title }}</h4>
-                </div>
-                <!-- Thai Formatted DATETIME -->
-                <span class="text-base font-bold text-slate-500 flex items-center gap-1.5">
-                  <Calendar class="w-4 h-4 text-slate-400" />
-                  {{ formatThaiDateTime(item.date) }}
+      <template v-else>
+        <!-- Asset Summary Banner -->
+        <div v-if="currentAsset" class="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-sm space-y-6">
+          <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-100 pb-4">
+            <div>
+              <div class="flex items-center gap-2 mb-1">
+                <span class="text-sm font-bold text-slate-400 font-mono">ID: {{ currentAsset.id }}</span>
+                <span :class="['px-2.5 py-0.5 text-xs font-extrabold rounded-full border', getStatusBadge(currentAsset.status)]">
+                  {{ getStatusText(currentAsset.status) }}
                 </span>
               </div>
-
-              <p class="text-slate-800 text-base md:text-lg leading-relaxed font-medium">
-                {{ item.details }}
-              </p>
-
-              <div class="grid grid-cols-1 md:grid-cols-3 gap-3 text-base pt-2 bg-white p-4 rounded-xl border border-slate-200/60">
-                <div class="flex items-center gap-1.5">
-                  <MapPin class="w-4 h-4 text-slate-400 shrink-0" />
-                  <span>สถานที่: <strong class="text-slate-900">{{ item.location }}</strong></span>
-                </div>
-                <div class="flex items-center gap-1.5">
-                  <UserCheck class="w-4 h-4 text-slate-400 shrink-0" />
-                  <span>ผู้ดูแล: <strong class="text-slate-900">{{ item.responsiblePerson }}</strong></span>
-                </div>
-                <div class="flex items-center gap-1.5">
-                  <Banknote class="w-4 h-4 text-slate-400 shrink-0" />
-                  <span>ค่าใช้จ่าย: 
-                    <strong :class="item.cost > 0 ? 'text-rose-600 font-extrabold' : 'text-slate-800'">
-                      {{ item.cost > 0 ? '฿' + item.cost.toLocaleString() + ' บาท' : 'ไม่มี' }}
-                    </strong>
-                  </span>
-                </div>
-              </div>
-
-              <div class="text-sm text-slate-400 text-right italic font-medium">
-                บันทึกข้อมูลโดย: {{ item.operator }}
-              </div>
-
+              <h2 class="text-2xl md:text-3xl font-extrabold text-slate-900">{{ currentAsset.name }}</h2>
+            </div>
+            <div class="text-slate-500 font-medium text-sm">
+              หมวดหมู่: <strong class="text-slate-800">{{ currentAsset.category }}</strong>
             </div>
           </div>
 
+          <!-- Summary Grid Cards -->
+          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div class="bg-slate-50 p-4 rounded-xl border border-slate-200/60">
+              <span class="text-slate-500 font-medium text-sm block">รหัสซีเรียล / Serial Number</span>
+              <span class="font-mono font-bold text-slate-900 text-lg md:text-xl">{{ currentAsset.serial }}</span>
+            </div>
+            <div class="bg-slate-50 p-4 rounded-xl border border-slate-200/60">
+              <span class="text-slate-500 font-medium text-sm block">สถานที่ติดตั้งปัจจุบัน</span>
+              <span class="font-bold text-slate-900 text-lg flex items-center gap-1.5 mt-0.5">
+                <MapPin class="w-5 h-5 text-rose-500 shrink-0" />
+                {{ currentAsset.currentLocation }}
+              </span>
+            </div>
+            <div class="bg-slate-50 p-4 rounded-xl border border-slate-200/60">
+              <span class="text-slate-500 font-medium text-sm block">ผู้ดูแลรับผิดชอบ</span>
+              <span class="font-bold text-slate-900 text-lg flex items-center gap-1.5 mt-0.5">
+                <UserCheck class="w-5 h-5 text-blue-500 shrink-0" />
+                {{ currentAsset.ownerName }}
+              </span>
+            </div>
+            <div class="bg-emerald-50/60 p-4 rounded-xl border border-emerald-100">
+              <span class="text-emerald-800 font-medium text-sm block">ยอดซ่อมบำรุงสะสมรวม</span>
+              <span class="font-extrabold text-emerald-800 text-2xl">฿{{ repairStats.totalCost.toLocaleString() }} บาท</span>
+            </div>
+          </div>
         </div>
 
-        <div v-else class="py-12 text-center text-slate-400">
-          <History class="w-12 h-12 mx-auto mb-3 opacity-30" />
-          <p class="text-lg font-medium">ไม่พบประวัติกิจกรรมของครุภัณฑ์ชิ้นนี้</p>
+        <!-- Timeline Logs List -->
+        <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm p-6 md:p-8">
+          <h3 class="text-xl font-extrabold text-slate-900 mb-8 flex items-center gap-2.5">
+            <Calendar class="w-6 h-6 text-emerald-800" />
+            ประวัติและลำดับเหตุการณ์ย้อนหลัง (Timeline)
+          </h3>
+
+          <div v-if="activeTimeline.length > 0" class="relative border-l-4 border-slate-200 ml-4 md:ml-8 space-y-8">
+            
+            <div v-for="item in activeTimeline" :key="item.id" class="relative pl-8 md:pl-10">
+              <!-- Timeline Icon -->
+              <div :class="['absolute -left-[22px] top-0 w-10 h-10 rounded-full border-2 bg-white flex items-center justify-center shadow-sm', getTypeBadge(item.type).class]">
+                <component :is="getTypeBadge(item.type).icon" class="w-5 h-5" />
+              </div>
+
+              <!-- Event Card -->
+              <div class="bg-slate-50/80 border border-slate-200/80 rounded-2xl p-6 hover:border-slate-300 transition-all space-y-4">
+                
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200/60 pb-3">
+                  <div class="flex items-center gap-3 flex-wrap">
+                    <span :class="['px-3 py-1 rounded-lg text-sm font-bold border', getTypeBadge(item.type).class]">
+                      {{ getTypeBadge(item.type).label }}
+                    </span>
+                    <h4 class="font-extrabold text-slate-900 text-lg md:text-xl">{{ item.title }}</h4>
+                  </div>
+                  <!-- Thai Formatted DATETIME -->
+                  <span class="text-base font-bold text-slate-500 flex items-center gap-1.5">
+                    <Calendar class="w-4 h-4 text-slate-400" />
+                    {{ formatThaiDateTime(item.date) }}
+                  </span>
+                </div>
+
+                <p class="text-slate-800 text-base md:text-lg leading-relaxed font-medium">
+                  {{ item.details }}
+                </p>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-3 text-base pt-2 bg-white p-4 rounded-xl border border-slate-200/60">
+                  <div class="flex items-center gap-1.5">
+                    <MapPin class="w-4 h-4 text-slate-400 shrink-0" />
+                    <span>สถานที่: <strong class="text-slate-900">{{ item.location }}</strong></span>
+                  </div>
+                  <div class="flex items-center gap-1.5">
+                    <UserCheck class="w-4 h-4 text-slate-400 shrink-0" />
+                    <span>ผู้ดูแล: <strong class="text-slate-900">{{ item.responsiblePerson }}</strong></span>
+                  </div>
+                  <div class="flex items-center gap-1.5">
+                    <Banknote class="w-4 h-4 text-slate-400 shrink-0" />
+                    <span>ค่าใช้จ่าย: 
+                      <strong :class="item.cost > 0 ? 'text-rose-600 font-extrabold' : 'text-slate-800'">
+                        {{ item.cost > 0 ? '฿' + item.cost.toLocaleString() + ' บาท' : 'ไม่มี' }}
+                      </strong>
+                    </span>
+                  </div>
+                </div>
+
+                <div class="text-sm text-slate-400 text-right italic font-medium">
+                  บันทึกข้อมูลโดย: {{ item.operator }}
+                </div>
+
+              </div>
+            </div>
+
+          </div>
+
+          <div v-else class="py-12 text-center text-slate-400">
+            <History class="w-12 h-12 mx-auto mb-3 opacity-30" />
+            <p class="text-lg font-medium">ไม่พบประวัติกิจกรรมของครุภัณฑ์ชิ้นนี้</p>
+          </div>
         </div>
-      </div>
+      </template>
 
     </div>
 

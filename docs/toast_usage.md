@@ -69,7 +69,7 @@ const handleSaveData = async () => {
     // 2. ถ้าสำเร็จ ให้แสดง Toast success
     toast.success('บันทึกข้อมูลสำเร็จ!')
     
-  } catch (error) {
+  } catch (error) {z
     // 3. ถ้าผิดพลาด ให้แสดง Toast error
     toast.error('เกิดข้อผิดพลาด: ' + (error.response?.data?.message || error.message))
     

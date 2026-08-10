@@ -12,7 +12,8 @@ const toast = useToast()
 // สิทธิ์การเข้าถึง: ทุก role แจ้งซ่อมได้ (Admin, Staff, User) แต่การประเมิน/อนุมัติทำได้เฉพาะ Admin, Staff
 const currentRole = ref(localStorage.getItem('tcaims_role') || 'admin')
 const canManage = computed(() => ['admin', 'staff', 'Admin', 'Staff'].includes(currentRole.value))
-const currentUserName = ref(localStorage.getItem('tcaims_name') || 'ผู้ใช้ทั่วไป')
+const userObj = JSON.parse(localStorage.getItem('tcaims_user') || '{}')
+const currentUserName = ref(userObj.name || 'ผู้ใช้ทั่วไป')
 
 const tabs = [
   { key: 'new', label: 'แจ้งซ่อมใหม่', icon: Plus, color: 'text-[#065f46]', chip: 'bg-emerald-50 ring-emerald-100' },

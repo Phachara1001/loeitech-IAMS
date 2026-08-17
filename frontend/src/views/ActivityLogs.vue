@@ -119,6 +119,7 @@ const getActionBadgeClass = (action) => {
 const ENTITY_TYPE_OPTIONS = [
   { value: 'ASSET', label: 'ครุภัณฑ์' },
   { value: 'ITEM', label: 'พัสดุสิ้นเปลือง' },
+  { value: 'REQUISITION', label: 'คำขอเบิกพัสดุ' },
   { value: 'DEPARTMENT', label: 'หน่วยงาน/ฝ่าย' },
   { value: 'LOCATION', label: 'อาคาร/ห้อง' },
   { value: 'USER', label: 'ผู้ใช้งาน' }

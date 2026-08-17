@@ -1,4 +1,5 @@
 import * as assetService from '../services/assetService.js';
+import { logActivity } from '../utils/activityLogger.js';
 
 /**
  * @swagger
@@ -90,6 +91,16 @@ export const getAssetById = async (req, res, next) => {
 export const createAsset = async (req, res, next) => {
   try {
     const newAsset = await assetService.createAsset(req.body);
+
+    await logActivity({
+      req,
+      action: 'INSERT',
+      entityType: 'ASSET',
+      entityId: newAsset.id,
+      newValue: newAsset,
+      details: `เพิ่มครุภัณฑ์ "${newAsset.name}" (${newAsset.seq})`
+    });
+
     res.status(201).json({ status: 'success', data: newAsset, message: 'บันทึกครุภัณฑ์สำเร็จ' });
   } catch (error) {
     next(error);
@@ -120,7 +131,19 @@ export const createAsset = async (req, res, next) => {
  */
 export const updateAsset = async (req, res, next) => {
   try {
+    const before = await assetService.getAssetById(req.params.id);
     const updatedAsset = await assetService.updateAsset(req.params.id, req.body);
+
+    await logActivity({
+      req,
+      action: 'UPDATE',
+      entityType: 'ASSET',
+      entityId: updatedAsset.id,
+      oldValue: before,
+      newValue: updatedAsset,
+      details: `แก้ไขครุภัณฑ์ "${updatedAsset.name}" (${updatedAsset.seq})`
+    });
+
     res.status(200).json({ status: 'success', data: updatedAsset, message: 'อัปเดตข้อมูลสำเร็จ' });
   } catch (error) {
     next(error);
@@ -145,7 +168,18 @@ export const updateAsset = async (req, res, next) => {
  */
 export const deleteAsset = async (req, res, next) => {
   try {
+    const before = await assetService.getAssetById(req.params.id);
     await assetService.deleteAsset(req.params.id);
+
+    await logActivity({
+      req,
+      action: 'DELETE',
+      entityType: 'ASSET',
+      entityId: before.id,
+      oldValue: before,
+      details: `ลบครุภัณฑ์ "${before.name}" (${before.seq})`
+    });
+
     res.status(200).json({ status: 'success', message: 'ลบข้อมูลสำเร็จ' });
   } catch (error) {
     next(error);
@@ -185,13 +219,3 @@ export const uploadImage = async (req, res, next) => {
     next(error);
   }
 };
-
-export const getAssetTimeline = async (req, res, next) => {
-  try {
-    const timeline = await assetService.getAssetTimeline(req.params.id);
-    res.status(200).json({ status: 'success', data: timeline });
-  } catch (error) {
-    next(error);
-  }
-};
-

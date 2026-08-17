@@ -1,4 +1,5 @@
 import * as itemService from '../services/itemService.js';
+import { logActivity } from '../utils/activityLogger.js';
 
 /**
  * @swagger
@@ -98,6 +99,16 @@ export const getItemById = async (req, res, next) => {
 export const createItem = async (req, res, next) => {
   try {
     const newItem = await itemService.createItem(req.body);
+
+    await logActivity({
+      req,
+      action: 'INSERT',
+      entityType: 'ITEM',
+      entityId: newItem.id,
+      newValue: newItem,
+      details: `เพิ่มวัสดุสิ้นเปลือง "${newItem.name}" (${newItem.sku})`
+    });
+
     res.status(201).json({ status: 'success', data: newItem, message: 'เพิ่มวัสดุสำเร็จ' });
   } catch (error) {
     next(error);
@@ -128,7 +139,19 @@ export const createItem = async (req, res, next) => {
  */
 export const updateItem = async (req, res, next) => {
   try {
+    const before = await itemService.getItemById(req.params.id);
     const updated = await itemService.updateItem(req.params.id, req.body);
+
+    await logActivity({
+      req,
+      action: 'UPDATE',
+      entityType: 'ITEM',
+      entityId: updated.id,
+      oldValue: before,
+      newValue: updated,
+      details: `แก้ไขวัสดุสิ้นเปลือง "${updated.name}" (${updated.sku})`
+    });
+
     res.status(200).json({ status: 'success', data: updated, message: 'อัปเดตข้อมูลสำเร็จ' });
   } catch (error) {
     next(error);
@@ -153,7 +176,18 @@ export const updateItem = async (req, res, next) => {
  */
 export const deleteItem = async (req, res, next) => {
   try {
+    const before = await itemService.getItemById(req.params.id);
     await itemService.deleteItem(req.params.id);
+
+    await logActivity({
+      req,
+      action: 'DELETE',
+      entityType: 'ITEM',
+      entityId: before.id,
+      oldValue: before,
+      details: `ลบวัสดุสิ้นเปลือง "${before.name}" (${before.sku})`
+    });
+
     res.status(200).json({ status: 'success', message: 'ลบวัสดุสำเร็จ' });
   } catch (error) {
     next(error);
@@ -172,57 +206,19 @@ export const deleteItem = async (req, res, next) => {
  *         required: true
  *         schema:
  *           type: integer
+ *       - in: query
+ *         name: year
+ *         schema:
+ *           type: integer
+ *         description: กรองเฉพาะปีที่ระบุ (ค.ศ.)
  *     responses:
  *       200:
  *         description: สำเร็จ
  */
 export const getItemTransactions = async (req, res, next) => {
   try {
-    const txs = await itemService.getItemTransactions(req.params.id);
+    const txs = await itemService.getItemTransactions(req.params.id, { year: req.query.year });
     res.status(200).json({ status: 'success', data: txs });
-  } catch (error) {
-    next(error);
-  }
-};
-
-/**
- * @swagger
- * /api/items/{id}/adjust:
- *   patch:
- *     summary: บันทึกผลตรวจนับ Inventory Check (ADJUSTMENT)
- *     tags: [Items]
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: integer
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required: [actualQty]
- *             properties:
- *               actualQty:
- *                 type: integer
- *               remark:
- *                 type: string
- *               operatorName:
- *                 type: string
- *     responses:
- *       200:
- *         description: บันทึกสำเร็จ
- */
-export const adjustItem = async (req, res, next) => {
-  try {
-    const { actualQty, remark, operatorName } = req.body;
-    if (actualQty === undefined || actualQty === null || isNaN(Number(actualQty))) {
-      return res.status(400).json({ status: 'error', message: 'กรุณาระบุ actualQty (จำนวนที่นับได้จริง)' });
-    }
-    const updated = await itemService.adjustItemQuantity(req.params.id, { actualQty, remark, operatorName });
-    res.status(200).json({ status: 'success', data: updated, message: 'บันทึกผลตรวจนับสำเร็จ' });
   } catch (error) {
     next(error);
   }

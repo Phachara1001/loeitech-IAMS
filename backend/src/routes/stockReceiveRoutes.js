@@ -1,8 +1,11 @@
 import { Router } from 'express';
 import * as stockReceiveController from '../controllers/stockReceiveController.js';
 import { validateStockReceiveInput } from '../validations/stockReceiveValidation.js';
+import { authenticate } from '../middleware/auth.js';
 
 const router = Router();
+
+router.use(authenticate);
 
 // GET /api/stock-receive?limit=10  — ประวัติรับเข้าล่าสุด
 router.get('/', stockReceiveController.getRecentReceives);

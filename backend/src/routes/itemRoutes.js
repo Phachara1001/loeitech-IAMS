@@ -1,8 +1,11 @@
 import { Router } from 'express';
 import * as itemController from '../controllers/itemController.js';
 import { validateItemInput } from '../validations/itemValidation.js';
+import { authenticate } from '../middleware/auth.js';
 
 const router = Router();
+
+router.use(authenticate);
 
 // GET /api/items?search=...&category=...
 router.get('/', itemController.getItems);
@@ -20,7 +23,7 @@ router.post('/', validateItemInput, itemController.createItem);
 router.put('/:id', validateItemInput, itemController.updateItem);
 
 // PATCH /api/items/:id/adjust  — บันทึกผลตรวจนับ (Inventory Check ADJUSTMENT)
-router.patch('/:id/adjust', itemController.adjustItem);
+//router.patch('/:id/adjust', itemController.adjustItem);
 
 // DELETE /api/items/:id
 router.delete('/:id', itemController.deleteItem);

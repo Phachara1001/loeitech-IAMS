@@ -7,6 +7,7 @@ export const findAll = async ({ search = '', category = '' } = {}) => {
   return await prisma.item.findMany({
     where: {
       AND: [
+        { isDeleted: false },
         category ? { category } : {},
         search
           ? {
@@ -23,11 +24,11 @@ export const findAll = async ({ search = '', category = '' } = {}) => {
 };
 
 /**
- * ดึงวัสดุตาม ID
+ * ดึงวัสดุตาม ID (ไม่รวมรายการที่ถูกลบแบบ Soft Delete ไปแล้ว)
  */
 export const findById = async (id) => {
-  return await prisma.item.findUnique({
-    where: { id: Number(id) }
+  return await prisma.item.findFirst({
+    where: { id: Number(id), isDeleted: false }
   });
 };
 
@@ -49,11 +50,13 @@ export const update = async (id, data) => {
 };
 
 /**
- * ลบวัสดุ
+ * Soft Delete วัสดุ — ซ่อนออกจากรายการแทนการลบจริง เพื่อไม่ให้กระทบ
+ * ประวัติ stock transaction ที่อาจผูกอยู่ (ป้องกัน foreign key constraint error)
  */
-export const remove = async (id) => {
-  return await prisma.item.delete({
-    where: { id: Number(id) }
+export const softDelete = async (id) => {
+  return await prisma.item.update({
+    where: { id: Number(id) },
+    data: { isDeleted: true, deletedAt: new Date() }
   });
 };
 
@@ -68,10 +71,24 @@ export const findLatestItem = async () => {
 
 /**
  * ดึงประวัติ stock transaction ของวัสดุรายการหนึ่ง (Running Balance)
+ * รองรับกรองตามปี (ค.ศ.) ของ receivedDate ที่ database เลย แทนที่จะดึงทั้งหมดมากรองฝั่ง frontend
+ * @param {number|string} itemId
+ * @param {object} [options]
+ * @param {number|string} [options.year] - ปี ค.ศ. เช่น 2026 (ไม่ส่งมา = ดึงทุกปี)
  */
-export const findTransactionsByItemId = async (itemId) => {
+export const findTransactionsByItemId = async (itemId, { year } = {}) => {
+  const where = { itemId: Number(itemId) };
+
+  if (year) {
+    const yearNum = Number(year);
+    where.receivedDate = {
+      gte: new Date(yearNum, 0, 1),
+      lt: new Date(yearNum + 1, 0, 1)
+    };
+  }
+
   return await prisma.stockTransaction.findMany({
-    where: { itemId: Number(itemId) },
+    where,
     orderBy: { createdAt: 'desc' }
   });
 };

@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import {
   History,
   Search,
@@ -9,17 +9,13 @@ import {
   ArrowUpDown,
   TrendingDown,
   TrendingUp,
-  Minus
+  Minus,
+  Loader2
 } from 'lucide-vue-next'
+import api from '../services/api'
+import { useToast } from '../composables/useToast'
 
-// ==========================================
-// 1. USER & ROLE CONTEXT (Admin / Staff)
-// ==========================================
-const currentUser = ref({
-  id: 'STF-001',
-  name: 'นางสาววิภาดา พัสดุ',
-  role: 'Staff' // 'Admin' | 'Staff'
-})
+const toast = useToast()
 
 // --- Helper: Format DATE เป็นภาษาไทย ---
 const formatThaiDate = (dateString) => {
@@ -35,46 +31,93 @@ const formatThaiDate = (dateString) => {
 }
 
 // ==========================================
-// 2. MASTER INVENTORY DATA
+// 2. รายการพัสดุ (สำหรับ dropdown) — โหลดจาก backend จริง ไม่มีข้อมูลสมมุติอีกต่อไป
 // ==========================================
-const inventoryItems = ref([
-  { id: 'SKU-001', code: 'PAS-01-001', name: 'กระดาษ A4 80 GSM (รีม)', category: 'วัสดุสำนักงาน', unit: 'รีม', minStock: 20 },
-  { id: 'SKU-002', code: 'PAS-01-002', name: 'ปากกาลูกลื่น น้ำเงิน 0.5mm', category: 'วัสดุสำนักงาน', unit: 'ด้าม', minStock: 50 },
-  { id: 'SKU-003', code: 'PAS-02-005', name: 'หมึกพิมพ์ HP Laser Toner 85A', category: 'วัสดุคอมพิวเตอร์', unit: 'กล่อง', minStock: 3 }
-])
+const inventoryItems = ref([])
+const isLoadingItems = ref(true)
+const itemsLoadError = ref('')
 
-const selectedSkuId = ref('SKU-001')
+const selectedSkuId = ref('')
 
 const selectedItem = computed(() => {
-  return inventoryItems.value.find(i => i.id === selectedSkuId.value) || inventoryItems.value[0]
+  return inventoryItems.value.find(i => i.id === selectedSkuId.value) || null
 })
 
+async function loadItems() {
+  isLoadingItems.value = true
+  itemsLoadError.value = ''
+  try {
+    const { data } = await api.get('/api/items')
+    // แปลงข้อมูลดิบจาก backend ให้ตรงกับ shape ที่หน้านี้ใช้แสดงผล
+    inventoryItems.value = (data.data || data).map((it) => ({
+      id: it.id,
+      code: it.sku || it.code,
+      name: it.name,
+      category: it.category,
+      unit: it.unit,
+      minStock: it.minThreshold ?? it.minStock ?? 0
+    }))
+    if (inventoryItems.value.length > 0 && !selectedSkuId.value) {
+      selectedSkuId.value = inventoryItems.value[0].id
+    }
+  } catch (err) {
+    itemsLoadError.value = 'ไม่สามารถโหลดรายการพัสดุได้ กรุณาลองใหม่อีกครั้ง'
+    toast.error(err.message || 'โหลดรายการพัสดุไม่สำเร็จ')
+  } finally {
+    isLoadingItems.value = false
+  }
+}
+
 // ==========================================
-// 3. MOCK TRANSACTIONS DATABASE (พ.3102-8)
+// 3. ประวัติการเคลื่อนไหว (รายการรับ-จ่าย) ของรายการที่เลือก — โหลดจาก backend จริง
 // ==========================================
-const rawTransactions = ref([
-  { id: 1, skuId: 'SKU-001', date: '2026-01-05', docNo: 'INV-69/001', type: 'IN', qty: 200, note: 'ตรวจรับเข้าคลัง จากสัญญาซื้อขายเลขที่ 12/2569', operator: 'งานพัสดุกลาง' },
-  { id: 2, skuId: 'SKU-001', date: '2026-01-15', docNo: 'REQ-2026-001', type: 'OUT', qty: 15, note: 'เบิกใช้ งานสารบรรณกลาง', operator: 'นายสมชาย ใจดี' },
-  { id: 3, skuId: 'SKU-001', date: '2026-02-02', docNo: 'REQ-2026-008', type: 'OUT', qty: 20, note: 'เบิกใช้ การสอบกลางภาคเรียนที่ 2', operator: 'ฝ่ายวิชาการ' },
-  { id: 4, skuId: 'SKU-001', date: '2026-03-10', docNo: 'REQ-2026-015', type: 'OUT', qty: 30, note: 'เบิกใช้ โครงการอบรมวิชาชีพ', operator: 'แผนกช่างยนต์' },
-  { id: 5, skuId: 'SKU-001', date: '2026-04-05', docNo: 'INV-69/042', type: 'IN', qty: 100, note: 'จัดซื้อเพิ่มประจำไตรมาส 2', operator: 'งานพัสดุกลาง' },
-  { id: 6, skuId: 'SKU-001', date: '2026-05-12', docNo: 'REQ-2026-022', type: 'OUT', qty: 25, note: 'เบิกใช้ งานประเมินสถานศึกษา', operator: 'งานประกันคุณภาพ' },
-  { id: 7, skuId: 'SKU-001', date: '2026-06-20', docNo: 'REQ-2026-035', type: 'OUT', qty: 40, note: 'เบิกใช้ พิมพ์เอกสารการลงทะเบียน', operator: 'งานทะเบียน' },
-  { id: 8, skuId: 'SKU-001', date: '2026-07-08', docNo: 'REQ-2026-041', type: 'OUT', qty: 18, note: 'เบิกใช้ งานประชุมสภาวิทยาลัย', operator: 'สำนักงานผู้อำนวยการ' },
-  { id: 9, skuId: 'SKU-002', date: '2026-01-05', docNo: 'INV-69/001', type: 'IN', qty: 500, note: 'ยกยอดมาจากปีงบประมาณก่อน', operator: 'งานพัสดุกลาง' },
-  { id: 10, skuId: 'SKU-002', date: '2026-02-10', docNo: 'REQ-2026-010', type: 'OUT', qty: 50, note: 'แจกครูประจำชั้นภาคเรียนใหม่', operator: 'ฝ่ายปกครอง' }
-])
+const rawTransactions = ref([])
+const isLoadingTransactions = ref(false)
+const transactionsLoadError = ref('')
+
+async function loadTransactions() {
+  if (!selectedSkuId.value) {
+    rawTransactions.value = []
+    return
+  }
+
+  isLoadingTransactions.value = true
+  transactionsLoadError.value = ''
+  try {
+    const { data } = await api.get(`/api/items/${selectedSkuId.value}/transactions`, {
+      params: selectedYear.value ? { year: selectedYear.value } : {}
+    })
+    const list = data.data || data.transactions || data
+    // แปลงข้อมูลดิบจาก backend (model StockTransaction จริง) ให้ตรงกับ shape ที่หน้านี้ใช้คำนวณ running balance
+    // หมายเหตุ: StockTransaction ไม่มีฟิลด์เลขที่เอกสารอ้างอิง (docNo) เลย จึงยังโชว์ "-" ไปก่อน
+    rawTransactions.value = list.map((t) => ({
+      id: t.id,
+      skuId: t.itemId ?? selectedSkuId.value,
+      date: t.receivedDate,
+      docNo: t.referenceNo || t.docNo || '-',
+      type: t.transactionType,
+      qty: t.quantity ?? 0,
+      note: t.remarks || '',
+      operator: t.operatorName || 'ไม่ระบุ'
+    }))
+  } catch (err) {
+    transactionsLoadError.value = 'ไม่สามารถโหลดประวัติการเคลื่อนไหวได้ กรุณาลองใหม่อีกครั้ง'
+    toast.error(err.message || 'โหลดประวัติการเคลื่อนไหวไม่สำเร็จ')
+  } finally {
+    isLoadingTransactions.value = false
+  }
+}
 
 // ==========================================
 // 4. TRANSACTION LOGIC & BALANCE CALCULATION
 // ==========================================
 const searchQuery = ref('')
-const selectedYear = ref('2026')
+const currentYearBE = new Date().getFullYear() + 543
+const selectedYear = ref(String(currentYearBE - 543)) // ปี ค.ศ. ที่ใช้ query backend
 
 const calculatedTransactions = computed(() => {
-  const items = rawTransactions.value
-    .filter(t => t.skuId === selectedSkuId.value && t.date.startsWith(selectedYear.value))
-    .sort((a, b) => new Date(a.date) - new Date(b.date))
+  // rawTransactions ตอนนี้ backend กรองให้ตรงรายการ+ปีที่เลือกแล้ว เหลือแค่เรียงลำดับ + คำนวณยอดคงเหลือสะสม
+  const items = [...rawTransactions.value].sort((a, b) => new Date(a.date) - new Date(b.date))
 
   let runningBalance = 0
 
@@ -92,6 +135,7 @@ const calculatedTransactions = computed(() => {
       balance: runningBalance
     }
   }).filter(t => {
+    if (!searchQuery.value) return true
     return t.docNo.toLowerCase().includes(searchQuery.value.toLowerCase()) ||
       t.note.includes(searchQuery.value) ||
       t.operator.includes(searchQuery.value)
@@ -126,10 +170,10 @@ const monthlyUsageSummary = computed(() => {
   monthsTH.forEach(m => summary[m.num] = 0)
 
   rawTransactions.value
-    .filter(t => t.skuId === selectedSkuId.value && t.type === 'OUT' && t.date.startsWith(selectedYear.value))
+    .filter(t => t.type === 'OUT')
     .forEach(t => {
-      const monthNum = t.date.split('-')[1]
-      if (summary[monthNum] !== undefined) {
+      const monthNum = (t.date || '').split('-')[1]
+      if (monthNum && summary[monthNum] !== undefined) {
         summary[monthNum] += t.qty
       }
     })
@@ -139,6 +183,19 @@ const monthlyUsageSummary = computed(() => {
 
 const totalYearlyOut = computed(() => {
   return Object.values(monthlyUsageSummary.value).reduce((a, b) => a + b, 0)
+})
+
+// ==========================================
+// 6. LIFECYCLE — โหลดรายการพัสดุก่อน แล้วค่อยโหลดประวัติของรายการที่เลือก
+// โหลดประวัติใหม่ทุกครั้งที่เปลี่ยนรายการพัสดุหรือปีที่ดู
+// ==========================================
+onMounted(async () => {
+  await loadItems()
+  await loadTransactions()
+})
+
+watch([selectedSkuId, selectedYear], () => {
+  loadTransactions()
 })
 </script>
 
@@ -160,32 +217,42 @@ const totalYearlyOut = computed(() => {
             <History class="w-8 h-8" />
           </div>
           <div>
-            <h1 class="text-2xl sm:text-3xl font-bold text-white">ประวัติการเคลื่อนไหวพัสดุ</h1>
-            <p class="text-emerald-100/80 text-sm sm:text-base mt-1">บัญชีคุมพัสดุสิ้นเปลือง แสดงประวัติรับ-จ่าย และสรุปความต้องการเบิกใช้รายเดือน</p>
+            <h1 class="text-xl sm:text-2xl font-bold text-white">ประวัติการเคลื่อนไหวพัสดุ</h1>
+            <p class="text-emerald-100/80 text-xs sm:text-sm mt-1">บัญชีคุมพัสดุสิ้นเปลือง แสดงประวัติรับ-จ่าย และสรุปความต้องการเบิกใช้รายเดือน</p>
           </div>
         </div>
 
-        <!-- Role Switcher (Admin / Staff Only) -->
-        <div class="flex items-center gap-2 bg-black/20 border border-white/10 p-2 rounded-xl backdrop-blur-md shrink-0">
-          <span class="text-xs sm:text-sm text-emerald-100/80 font-medium px-2">สิทธิ์ผู้ใช้:</span>
-          <button 
-            @click="currentUser.role = 'Admin'" 
-            :class="['px-3.5 py-1.5 text-xs sm:text-sm rounded-lg font-semibold transition backdrop-blur-md cursor-pointer', currentUser.role === 'Admin' ? 'bg-emerald-500 text-white shadow-sm' : 'text-emerald-100/70 hover:bg-white/10']"
-          >
-            Admin
-          </button>
-          <button 
-            @click="currentUser.role = 'Staff'" 
-            :class="['px-3.5 py-1.5 text-xs sm:text-sm rounded-lg font-semibold transition backdrop-blur-md cursor-pointer', currentUser.role === 'Staff' ? 'bg-emerald-500 text-white shadow-sm' : 'text-emerald-100/70 hover:bg-white/10']"
-          >
-            Staff
-          </button>
-        </div>
       </div>
     </div>
 
+    <!-- กำลังโหลดรายการพัสดุ -->
+    <div v-if="isLoadingItems" class="w-full flex flex-col items-center justify-center py-24 text-slate-400">
+      <Loader2 class="w-8 h-8 animate-spin mb-3 text-emerald-700" />
+      <p class="text-sm">กำลังโหลดรายการพัสดุ...</p>
+    </div>
+
+    <!-- โหลดรายการพัสดุไม่สำเร็จ -->
+    <div v-else-if="itemsLoadError" class="w-full flex flex-col items-center justify-center py-24 text-center">
+      <div class="w-14 h-14 rounded-full bg-red-50 text-red-500 flex items-center justify-center mb-4">
+        <AlertTriangle class="w-7 h-7" />
+      </div>
+      <p class="text-slate-700 font-semibold">{{ itemsLoadError }}</p>
+      <button
+        @click="loadItems"
+        class="mt-4 px-4 py-2 rounded-xl bg-emerald-800 hover:bg-emerald-900 text-white text-sm font-semibold transition"
+      >
+        ลองใหม่อีกครั้ง
+      </button>
+    </div>
+
+    <!-- ยังไม่มีรายการพัสดุในระบบ -->
+    <div v-else-if="inventoryItems.length === 0" class="w-full flex flex-col items-center justify-center py-24 text-center text-slate-400">
+      <ShieldAlert class="w-10 h-10 mb-3 opacity-50" />
+      <p class="text-sm">ยังไม่มีรายการพัสดุในระบบให้ดูประวัติ</p>
+    </div>
+
     <!-- MAIN CONTENT FOR ADMIN & STAFF -->
-    <div class="space-y-6">
+    <div v-else class="space-y-6">
 
       <!-- Item Selection & Summary Card -->
       <div class="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-sm space-y-6">
@@ -195,7 +262,7 @@ const totalYearlyOut = computed(() => {
             <label class="block text-xs font-bold text-slate-400 mb-1">เลือกรายการพัสดุเพื่อดูบัญชีคุม:</label>
             <select 
               v-model="selectedSkuId" 
-              class="w-full text-base md:text-lg font-extrabold text-slate-900 bg-slate-50 border-2 border-slate-200 rounded-xl p-3 focus:border-emerald-600 focus:outline-none cursor-pointer"
+              class="w-full text-sm md:text-base font-bold text-slate-900 bg-slate-50 border-2 border-slate-200 rounded-xl p-3 focus:border-emerald-600 focus:outline-none cursor-pointer"
             >
               <option v-for="item in inventoryItems" :key="item.id" :value="item.id">
                 [{{ item.code }}] {{ item.name }} (หมวด: {{ item.category }})
@@ -205,22 +272,22 @@ const totalYearlyOut = computed(() => {
         </div>
 
         <!-- Stock Indicator Stats -->
-        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div v-if="selectedItem" class="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div class="bg-slate-50 p-4 rounded-xl border border-slate-200/60">
             <span class="text-xs text-slate-400 font-bold block">รหัสพัสดุ</span>
-            <span class="font-mono font-bold text-slate-900 text-lg">{{ selectedItem.code }}</span>
+            <span class="font-mono font-bold text-slate-900 text-base">{{ selectedItem.code }}</span>
           </div>
           <div class="bg-slate-50 p-4 rounded-xl border border-slate-200/60">
             <span class="text-xs text-slate-400 font-bold block">หน่วยนับ</span>
-            <span class="font-bold text-slate-900 text-lg">{{ selectedItem.unit }}</span>
+            <span class="font-bold text-slate-900 text-base">{{ selectedItem.unit }}</span>
           </div>
           <div class="bg-slate-50 p-4 rounded-xl border border-slate-200/60">
             <span class="text-xs text-slate-400 font-bold block">จุดสั่งซื้อเพิ่ม (Min Stock)</span>
-            <span class="font-bold text-slate-900 text-lg">{{ selectedItem.minStock }} {{ selectedItem.unit }}</span>
+            <span class="font-bold text-slate-900 text-base">{{ selectedItem.minStock }} {{ selectedItem.unit }}</span>
           </div>
           <div class="p-4 rounded-xl border" :class="currentStockBalance <= selectedItem.minStock ? 'bg-rose-50 border-rose-200 text-rose-800' : 'bg-emerald-50/60 border-emerald-100 text-emerald-800'">
             <span class="text-xs font-bold block opacity-80">ยอดคงคลังปัจจุบัน (Balance)</span>
-            <span class="font-extrabold text-2xl flex items-center gap-2">
+            <span class="font-extrabold text-xl flex items-center gap-2">
               {{ currentStockBalance }} {{ selectedItem.unit }}
               <AlertTriangle v-if="currentStockBalance <= selectedItem.minStock" class="w-5 h-5 text-rose-600 shrink-0" />
             </span>
@@ -232,8 +299,8 @@ const totalYearlyOut = computed(() => {
       <!-- MONTHLY USAGE SUMMARY TABLE (ม.ค. - ธ.ค.) -->
       <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm p-6 space-y-4">
         <div class="flex items-center justify-between">
-          <h3 class="text-lg font-extrabold text-slate-900 flex items-center gap-2">
-            <Calendar class="w-5 h-5 text-emerald-800" />
+          <h3 class="text-base font-extrabold text-slate-900 flex items-center gap-2">
+            <Calendar class="w-4.5 h-4.5 text-emerald-800" />
             ตารางสรุปยอดความต้องการเบิกใช้รายเดือน (ม.ค. - ธ.ค. {{ Number(selectedYear) + 543 }})
           </h3>
           <span class="text-xs font-bold text-slate-400">หน่วย: {{ selectedItem.unit }}</span>
@@ -259,7 +326,7 @@ const totalYearlyOut = computed(() => {
                     <Minus class="w-3 h-3 text-slate-300" />
                   </span>
                 </td>
-                <td class="border border-slate-200 p-3 bg-emerald-50 font-extrabold text-emerald-900 text-base">
+                <td class="border border-slate-200 p-3 bg-emerald-50 font-extrabold text-emerald-900 text-sm">
                   {{ totalYearlyOut }}
                 </td>
               </tr>
@@ -273,59 +340,88 @@ const totalYearlyOut = computed(() => {
         
         <!-- Search Bar Header -->
         <div class="p-4 border-b border-slate-200 bg-slate-50/50 flex flex-col sm:flex-row justify-between items-center gap-4">
-          <div class="font-extrabold text-slate-900 text-base flex items-center gap-2">
-            <ArrowUpDown class="w-5 h-5 text-emerald-800" />
+          <div class="font-extrabold text-slate-900 text-sm flex items-center gap-2">
+            <ArrowUpDown class="w-4.5 h-4.5 text-emerald-800" />
             รายงานการรับ - จ่ายพัสดุ (เรียงตาม วัน เดือน ปี)
           </div>
 
-          <div class="relative w-full sm:w-80">
-            <Search class="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input 
-              v-model="searchQuery" 
-              type="text" 
-              placeholder="ค้นหาเลขที่เอกสาร, หมายเหตุ..."
-              class="pl-10 pr-4 py-2 w-full bg-white border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-slate-900 font-medium" 
-            />
+          <div class="flex items-center gap-3 w-full sm:w-auto">
+            <div class="relative w-28">
+              <input
+                v-model="selectedYear"
+                type="number"
+                placeholder="ปี ค.ศ."
+                class="pl-3 pr-3 py-2 w-full bg-white border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-slate-900 font-medium"
+              />
+            </div>
+            <div class="relative flex-1 sm:w-80">
+              <Search class="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input 
+                v-model="searchQuery" 
+                type="text" 
+                placeholder="ค้นหาเลขที่เอกสาร, หมายเหตุ..."
+                class="pl-10 pr-4 py-2 w-full bg-white border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-slate-900 font-medium" 
+              />
+            </div>
           </div>
         </div>
 
+        <!-- กำลังโหลดประวัติการเคลื่อนไหว -->
+        <div v-if="isLoadingTransactions" class="py-16 flex flex-col items-center justify-center text-slate-400">
+          <Loader2 class="w-6 h-6 animate-spin mb-2 text-emerald-700" />
+          <p class="text-sm">กำลังโหลดประวัติการเคลื่อนไหว...</p>
+        </div>
+
+        <!-- โหลดประวัติไม่สำเร็จ -->
+        <div v-else-if="transactionsLoadError" class="py-16 flex flex-col items-center justify-center text-center">
+          <AlertTriangle class="w-8 h-8 text-red-400 mb-2" />
+          <p class="text-sm text-slate-600 font-medium mb-3">{{ transactionsLoadError }}</p>
+          <button @click="loadTransactions" class="px-4 py-2 rounded-xl bg-emerald-800 hover:bg-emerald-900 text-white text-sm font-semibold transition">
+            ลองใหม่อีกครั้ง
+          </button>
+        </div>
+
         <!-- Table View -->
-        <div class="overflow-x-auto">
-          <table class="w-full text-left text-sm whitespace-nowrap">
-            <thead class="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold">
+        <div v-else class="overflow-x-auto">
+          <table class="w-full text-left text-sm whitespace-nowrap border-separate border-spacing-0">
+            <thead class="bg-gradient-to-b from-slate-50 to-slate-100/70 text-slate-600 font-bold sticky top-0 z-10">
               <tr>
-                <th class="px-6 py-4 text-center border-r border-slate-200/60">วัน เดือน ปี</th>
-                <th class="px-6 py-4 border-r border-slate-200/60">เลขที่เอกสารอ้างอิง</th>
-                <th class="px-6 py-4 border-r border-slate-200/60">รายการ / ผู้ขอเบิก / หมายเหตุ</th>
-                <th class="px-6 py-4 text-center border-r border-slate-200/60 text-emerald-800 bg-emerald-50/40">รับเข้า (+)</th>
-                <th class="px-6 py-4 text-center border-r border-slate-200/60 text-rose-700 bg-rose-50/40">จ่ายออก (-)</th>
-                <th class="px-6 py-4 text-center border-r border-slate-200/60 bg-slate-100 font-extrabold text-slate-900">คงเหลือ (Balance)</th>
-                <th class="px-6 py-4 text-center">ผู้บันทึกรายการ</th>
+                <th class="px-6 py-3.5 text-center border-b-2 border-slate-200 text-xs uppercase tracking-wide">วัน เดือน ปี</th>
+                <th class="px-6 py-3.5 border-b-2 border-slate-200 text-xs uppercase tracking-wide">เลขที่เอกสารอ้างอิง</th>
+                <th class="px-6 py-3.5 border-b-2 border-slate-200 text-xs uppercase tracking-wide">รายการ / ผู้ขอเบิก / หมายเหตุ</th>
+                <th class="px-6 py-3.5 text-center border-b-2 border-slate-200 text-xs uppercase tracking-wide text-emerald-800 bg-emerald-50/40">รับเข้า (+)</th>
+                <th class="px-6 py-3.5 text-center border-b-2 border-slate-200 text-xs uppercase tracking-wide text-rose-700 bg-rose-50/40">จ่ายออก (-)</th>
+                <th class="px-6 py-3.5 text-center border-b-2 border-slate-200 text-xs uppercase tracking-wide bg-slate-100 font-extrabold text-slate-900">คงเหลือ (Balance)</th>
+                <th class="px-6 py-3.5 text-center border-b-2 border-slate-200 text-xs uppercase tracking-wide">ผู้บันทึกรายการ</th>
               </tr>
             </thead>
-            <tbody class="divide-y divide-slate-200 font-medium">
-              <tr v-for="t in calculatedTransactions" :key="t.id" class="hover:bg-slate-50/80 transition-colors">
+            <tbody class="font-medium">
+              <tr
+                v-for="t in calculatedTransactions"
+                :key="t.id"
+                class="group relative bg-white odd:bg-slate-50/40 border-b border-slate-100 transition-all duration-200 ease-out hover:bg-white hover:shadow-[0_10px_28px_-10px_rgba(6,95,70,0.35)] hover:-translate-y-0.5 hover:relative hover:z-20"
+              >
                 
                 <!-- วัน เดือน ปี -->
-                <td class="px-6 py-4 text-center font-bold text-slate-700 border-r border-slate-200/60">
+                <td class="px-6 py-4 text-center font-bold text-slate-700 border-l-4 border-transparent group-hover:border-emerald-500 transition-colors">
                   <div class="flex items-center justify-center gap-1.5">
-                    <Calendar class="w-3.5 h-3.5 text-slate-400" />
+                    <Calendar class="w-3.5 h-3.5 text-slate-400 group-hover:text-emerald-600 transition-colors" />
                     <span>{{ formatThaiDate(t.date) }}</span>
                   </div>
                 </td>
 
                 <!-- เลขที่เอกสารอ้างอิง -->
-                <td class="px-6 py-4 font-mono font-extrabold text-slate-900 border-r border-slate-200/60">
+                <td class="px-6 py-4 font-mono font-extrabold text-slate-900">
                   {{ t.docNo }}
                 </td>
 
                 <!-- รายการ / หมายเหตุ -->
-                <td class="px-6 py-4 border-r border-slate-200/60 max-w-xs truncate">
+                <td class="px-6 py-4 max-w-xs truncate">
                   <span class="text-slate-800 font-semibold">{{ t.note }}</span>
                 </td>
 
                 <!-- รับเข้า -->
-                <td class="px-6 py-4 text-center font-bold text-emerald-800 bg-emerald-50/20 border-r border-slate-200/60">
+                <td class="px-6 py-4 text-center font-bold text-emerald-800 bg-emerald-50/20 group-hover:bg-emerald-50/50 transition-colors">
                   <span v-if="t.inQty > 0" class="inline-flex items-center gap-1">
                     <TrendingUp class="w-4 h-4 text-emerald-600" />
                     +{{ t.inQty }}
@@ -336,7 +432,7 @@ const totalYearlyOut = computed(() => {
                 </td>
 
                 <!-- จ่ายออก -->
-                <td class="px-6 py-4 text-center font-bold text-rose-700 bg-rose-50/20 border-r border-slate-200/60">
+                <td class="px-6 py-4 text-center font-bold text-rose-700 bg-rose-50/20 group-hover:bg-rose-50/50 transition-colors">
                   <span v-if="t.outQty > 0" class="inline-flex items-center gap-1">
                     <TrendingDown class="w-4 h-4 text-rose-500" />
                     -{{ t.outQty }}
@@ -347,7 +443,7 @@ const totalYearlyOut = computed(() => {
                 </td>
 
                 <!-- ยอดคงเหลือสะสม (Balance Qty) -->
-                <td class="px-6 py-4 text-center font-mono font-extrabold text-slate-900 text-base bg-slate-50 border-r border-slate-200/60">
+                <td class="px-6 py-4 text-center font-mono font-extrabold text-slate-900 text-sm bg-slate-50 group-hover:bg-slate-100 transition-colors">
                   {{ t.balance }} {{ selectedItem.unit }}
                 </td>
 

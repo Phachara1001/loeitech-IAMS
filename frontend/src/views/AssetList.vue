@@ -17,9 +17,34 @@ import {
 } from 'lucide-vue-next'
 import BaseModal from '../components/BaseModal.vue'
 import { useToast } from '../composables/useToast'
+import { API_BASE } from '../config/api'
 
 const router = useRouter()
 const toast = useToast()
+
+function authHeaders() {
+  const token = localStorage.getItem('tcaims_auth_token')
+  return { Authorization: `Bearer ${token}` }
+}
+
+function extractErrorMessage(error) {
+  const data = error.response?.data
+  if (data?.errors?.length) return data.errors.join(' / ')
+  if (data?.message) return data.message
+  return 'เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง'
+}
+
+function handleUnauthorized(error) {
+  if (error.response?.status === 401) {
+    localStorage.removeItem('tcaims_auth_token')
+    localStorage.removeItem('tcaims_user')
+    localStorage.removeItem('tcaims_role')
+    toast.error('เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่อีกครั้ง')
+    router.push('/login')
+    return true
+  }
+  return false
+}
 
 const assets = ref([])
 const isLoading = ref(true)
@@ -27,11 +52,11 @@ const isLoading = ref(true)
 const fetchAssets = async () => {
   isLoading.value = true
   try {
-    const response = await axios.get('http://localhost:3000/api/assets')
+    const response = await axios.get(`${API_BASE}/assets`, { headers: authHeaders() })
     assets.value = response.data.data || []
   } catch (error) {
     console.error('Error fetching assets:', error)
-    alert('ไม่สามารถดึงข้อมูลครุภัณฑ์ได้')
+    if (!handleUnauthorized(error)) toast.error(extractErrorMessage(error))
   } finally {
     isLoading.value = false
   }
@@ -117,13 +142,13 @@ const saveStatus = async () => {
       const { id, createdAt, updatedAt, ...updateData } = selectedAsset.value
       updateData.status = tempStatus.value
 
-      await axios.put(`http://localhost:3000/api/assets/${selectedAsset.value.id}`, updateData)
+      await axios.put(`${API_BASE}/assets/${selectedAsset.value.id}`, updateData, { headers: authHeaders() })
       selectedAsset.value.status = tempStatus.value
       showStatusModal.value = false
       toast.success('เปลี่ยนสถานะครุภัณฑ์สำเร็จ')
     } catch (error) {
       console.error('Error updating status:', error)
-      toast.error('เกิดข้อผิดพลาดในการเปลี่ยนสถานะ')
+      if (!handleUnauthorized(error)) toast.error(extractErrorMessage(error))
     }
   }
 }
@@ -148,8 +173,8 @@ const handleImageUpload = async (event) => {
     uploadData.append('image', file)
 
     // Upload to MinIO
-    const uploadResponse = await axios.post('http://localhost:3000/api/assets/upload', uploadData, {
-      headers: { 'Content-Type': 'multipart/form-data' }
+    const uploadResponse = await axios.post(`${API_BASE}/assets/upload`, uploadData, {
+      headers: { ...authHeaders(), 'Content-Type': 'multipart/form-data' }
     })
     
     const imageUrl = uploadResponse.data.data.imageUrl
@@ -159,7 +184,7 @@ const handleImageUpload = async (event) => {
     updateData.image = imageUrl
 
     // Update the asset in database
-    await axios.put(`http://localhost:3000/api/assets/${selectedAsset.value.id}`, updateData)
+    await axios.put(`${API_BASE}/assets/${selectedAsset.value.id}`, updateData, { headers: authHeaders() })
     
     // Update local state
     selectedAsset.value.image = imageUrl
@@ -169,7 +194,7 @@ const handleImageUpload = async (event) => {
     toast.success('เปลี่ยนรูปภาพสำเร็จ')
   } catch (error) {
     console.error('Error uploading image:', error)
-    toast.error('เกิดข้อผิดพลาดในการอัปโหลดรูปภาพ')
+    if (!handleUnauthorized(error)) toast.error(extractErrorMessage(error))
   } finally {
     isUploadingImage.value = false
     // Reset file input
@@ -195,7 +220,7 @@ const openEditModal = (asset) => {
 const saveEdit = async () => {
   try {
     const { id, createdAt, updatedAt, ...updateData } = tempAsset.value
-    await axios.put(`http://localhost:3000/api/assets/${selectedAsset.value.id}`, updateData)
+    await axios.put(`${API_BASE}/assets/${selectedAsset.value.id}`, updateData, { headers: authHeaders() })
 
     // Refresh list
     await fetchAssets()
@@ -203,7 +228,7 @@ const saveEdit = async () => {
     toast.success('แก้ไขข้อมูลครุภัณฑ์สำเร็จ')
   } catch (error) {
     console.error('Error updating asset:', error)
-    toast.error('เกิดข้อผิดพลาดในการแก้ไขข้อมูล')
+    if (!handleUnauthorized(error)) toast.error(extractErrorMessage(error))
   }
 }
 
@@ -214,13 +239,13 @@ const openDeleteModal = (asset) => {
 
 const confirmDelete = async () => {
   try {
-    await axios.delete(`http://localhost:3000/api/assets/${selectedAsset.value.id}`)
+    await axios.delete(`${API_BASE}/assets/${selectedAsset.value.id}`, { headers: authHeaders() })
     assets.value = assets.value.filter(a => a.id !== selectedAsset.value.id)
     showDeleteModal.value = false
     toast.success('ลบข้อมูลครุภัณฑ์สำเร็จ')
   } catch (error) {
     console.error('Error deleting asset:', error)
-    toast.error('เกิดข้อผิดพลาดในการลบข้อมูล')
+    if (!handleUnauthorized(error)) toast.error(extractErrorMessage(error))
   }
 }
 </script>

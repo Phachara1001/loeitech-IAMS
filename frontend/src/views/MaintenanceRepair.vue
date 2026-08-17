@@ -52,9 +52,31 @@ const activeRepairs = computed(() => {
   return repairRequests.value.filter(r => r.status === 'PENDING' || r.status === 'APPROVED' || r.status === 'REPAIRING')
 })
 
+// ตัวกรองเดือนและปีสำหรับประวัติ
+const filterMonth = ref('all')
+const filterYear = ref('all')
+
+const availableYears = computed(() => {
+  const years = new Set(repairRequests.value
+    .map(r => new Date(r.finishDate || r.updatedAt || r.createdAt).getFullYear())
+    .filter(y => !isNaN(y)))
+  const arr = Array.from(years)
+  const currentYear = new Date().getFullYear()
+  if (!arr.includes(currentYear)) arr.push(currentYear)
+  return arr.sort((a, b) => b - a)
+})
+
 // ประวัติซ่อมเสร็จสิ้นแล้ว หรือถูกปฏิเสธ (COMPLETED, REJECTED)
 const repairHistory = computed(() => {
-  return repairRequests.value.filter(r => r.status === 'COMPLETED' || r.status === 'REJECTED')
+  return repairRequests.value.filter(r => {
+    if (r.status !== 'COMPLETED' && r.status !== 'REJECTED') return false
+    
+    const d = new Date(r.finishDate || r.updatedAt || r.createdAt)
+    if (filterYear.value !== 'all' && d.getFullYear() !== Number(filterYear.value)) return false
+    if (filterMonth.value !== 'all' && d.getMonth() + 1 !== Number(filterMonth.value)) return false
+    
+    return true
+  })
 })
 
 // คำนวณยอดรวมค่าใช้จ่ายการซ่อมแซมทั้งหมด
@@ -349,84 +371,179 @@ async function completeRepair() {
     </div>
 
     <!-- ===== แท็บ: แจ้งซ่อมใหม่ (ทุก role) ===== -->
-    <div v-if="activeTab === 'new'" class="flex justify-center">
-    <div class="bg-white rounded-2xl border border-[#047857] shadow-sm hover:shadow-md transition-shadow p-6 w-full max-w-xl">
-      <div class="space-y-4">
-        <div>
-          <label class="block text-sm font-medium text-slate-700 mb-1.5">ครุภัณฑ์ที่ต้องการแจ้งซ่อม</label>
-          <!-- ปุ่มเปิด Modal เลือกครุภัณฑ์ -->
-          <button type="button" @click="openAssetSelector"
-            class="w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 transition-all cursor-pointer"
-            :class="selectedAsset ? 'border-[#047857] bg-emerald-50/50' : 'border-slate-200 bg-white hover:border-slate-300'">
-            <div v-if="selectedAsset" class="text-left min-w-0">
-              <p class="text-sm font-bold text-[#065f46] truncate">{{ selectedAsset.name }}</p>
-              <p class="text-xs text-slate-500">เลขครุภัณฑ์: {{ selectedAsset.seq || '-' }}</p>
+    <div v-if="activeTab === 'new'" class="w-full py-4">
+      <div class="relative">
+        <!-- Vertical Line (Timeline) -->
+        <div class="absolute left-[27px] top-8 bottom-12 w-0.5 bg-slate-200"></div>
+
+        <div class="space-y-10">
+          
+          <!-- Step 1: Asset -->
+          <div class="relative flex gap-6">
+            <!-- Timeline Node -->
+            <div class="relative z-10 shrink-0 w-14 h-14 bg-white rounded-full flex items-center justify-center border-4 border-slate-50 shadow-sm mt-1">
+              <div :class="['w-10 h-10 rounded-full flex items-center justify-center text-white font-bold transition-all duration-300 shadow-md',
+                selectedAsset ? 'bg-emerald-500 shadow-emerald-500/30' : 'bg-slate-800 shadow-slate-800/30']">
+                <Check v-if="selectedAsset" class="w-5 h-5" />
+                <span v-else>1</span>
+              </div>
             </div>
-            <span v-else class="text-sm text-slate-400">-- คลิกเพื่อค้นหาและเลือกครุภัณฑ์ --</span>
-            <span class="ml-3 shrink-0 px-3 py-1 rounded-lg bg-slate-100 text-slate-600 text-xs font-semibold">{{ selectedAsset ? 'เปลี่ยน' : 'ค้นหา' }}</span>
-          </button>
-        </div>
-
-        <div>
-          <label class="block text-sm font-medium text-slate-700 mb-1.5">ระดับความเร่งด่วน</label>
-          <div class="grid grid-cols-3 gap-2">
-            <button v-for="opt in [
-              { v: 'NORMAL',   l: 'ปกติ',      active: 'bg-slate-700 border-slate-700 text-white' },
-              { v: 'URGENT',   l: 'ด่วน',       active: 'bg-orange-500 border-orange-500 text-white' },
-              { v: 'CRITICAL', l: 'ด่วนที่สุด', active: 'bg-red-500 border-red-500 text-white' }
-            ]" :key="opt.v" type="button" @click="form.urgency = opt.v"
-              :class="[
-                'py-2.5 rounded-xl text-sm font-semibold border-2 transition-all cursor-pointer',
-                form.urgency === opt.v ? opt.active : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'
-              ]">
-              {{ opt.l }}
-            </button>
-          </div>
-        </div>
-
-        <div>
-          <label class="block text-sm font-medium text-slate-700 mb-1.5">อาการชำรุด</label>
-          <textarea
-            v-model="form.detail"
-            rows="4"
-            placeholder="อธิบายอาการชำรุดที่พบ เช่น เปิดไม่ติด, มีเสียงดังผิดปกติ..."
-            class="w-full px-3.5 py-2.5 rounded-lg border border-slate-200 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-[#065f46]/20 focus:border-[#065f46] transition"
-          ></textarea>
-        </div>
-
-        <div>
-          <label class="block text-sm font-medium text-slate-700 mb-1.5">แนบรูปภาพอาการชำรุด (ถ้ามี)</label>
-          <div class="flex items-center gap-4">
-            <div class="w-24 h-24 rounded-xl border-2 border-dashed border-emerald-200 flex items-center justify-center overflow-hidden bg-emerald-50/30 shrink-0">
-              <img v-if="form.photoPreview" :src="form.photoPreview" alt="ตัวอย่างรูปอาการชำรุด" class="w-full h-full object-cover" />
-              <ImageIcon v-else class="w-8 h-8 text-emerald-200" />
+            <!-- Content -->
+            <div class="flex-1">
+              <h3 class="text-lg font-bold text-slate-800 mb-1">เลือกครุภัณฑ์</h3>
+              <p class="text-sm text-slate-500 mb-4">ค้นหาและเลือกครุภัณฑ์ที่ต้องการแจ้งซ่อม</p>
+              
+              <button type="button" @click="openAssetSelector"
+                :class="['w-full flex items-center gap-4 px-5 py-4 rounded-2xl border-2 transition-all cursor-pointer text-left',
+                  selectedAsset ? 'border-emerald-400 bg-emerald-50/60 hover:bg-emerald-50' : 'border-dashed border-slate-300 hover:border-slate-400 bg-white hover:bg-slate-50']">
+                <div :class="['w-12 h-12 rounded-xl flex items-center justify-center shrink-0 transition-all shadow-sm',
+                  selectedAsset ? 'bg-white' : 'bg-slate-100']">
+                  <Wrench :class="['w-6 h-6', selectedAsset ? 'text-emerald-500' : 'text-slate-400']" />
+                </div>
+                <div class="flex-1 min-w-0">
+                  <p v-if="selectedAsset" class="text-base font-bold text-slate-800 truncate">{{ selectedAsset.name }}</p>
+                  <p v-if="selectedAsset" class="text-sm text-slate-500 mt-1 font-mono bg-slate-100 inline-block px-2 py-0.5 rounded-md">{{ selectedAsset.seq || '-' }}</p>
+                  <p v-else class="text-sm font-medium text-slate-500">คลิกเพื่อค้นหาและเลือกจากรายการ...</p>
+                </div>
+                <span :class="['shrink-0 px-4 py-2 rounded-xl text-sm font-bold transition-all',
+                  selectedAsset ? 'bg-white border border-emerald-100 text-emerald-700 shadow-sm' : 'bg-slate-800 text-white shadow-md hover:bg-slate-700']">
+                  {{ selectedAsset ? 'เปลี่ยนครุภัณฑ์' : 'ค้นหาครุภัณฑ์' }}
+                </span>
+              </button>
             </div>
-            <button type="button" @click="triggerFileInput" class="flex items-center gap-2 px-4 py-2.5 rounded-xl border-2 border-[#065f46] text-[#065f46] text-sm font-semibold hover:bg-emerald-50 hover:shadow-md transition-all">
-              <Camera class="w-4 h-4" />
-              เลือกรูปภาพ
-            </button>
-            <input ref="fileInputRef" type="file" accept="image/*" class="hidden" @change="handlePhotoChange" />
           </div>
-        </div>
 
-        <div v-if="formError" class="flex items-start gap-2 rounded-lg bg-red-50 border border-red-100 px-3 py-2.5">
-          <AlertTriangle class="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
-          <p class="text-sm text-red-600">{{ formError }}</p>
-        </div>
+          <!-- Step 2: Urgency -->
+          <div class="relative flex gap-6">
+            <div class="relative z-10 shrink-0 w-14 h-14 bg-white rounded-full flex items-center justify-center border-4 border-slate-50 shadow-sm mt-1">
+              <div :class="['w-10 h-10 rounded-full flex items-center justify-center text-white font-bold transition-all duration-300 shadow-md',
+                form.urgency ? 'bg-emerald-500 shadow-emerald-500/30' : 'bg-slate-800 shadow-slate-800/30']">
+                <Check v-if="form.urgency" class="w-5 h-5" />
+                <span v-else>2</span>
+              </div>
+            </div>
+            <div class="flex-1">
+              <h3 class="text-lg font-bold text-slate-800 mb-1">ระดับความเร่งด่วน</h3>
+              <p class="text-sm text-slate-500 mb-4">กำหนดระยะเวลาดำเนินการซ่อมที่ต้องการ</p>
 
-        <button
-          type="button"
-          :disabled="isSubmitting"
-          @click="submitRepairRequest"
-          class="w-full flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#065f46] to-[#047857] text-white py-3 text-sm font-bold shadow-md hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 transition-all disabled:opacity-70 disabled:translate-y-0"
-        >
-          <Loader2 v-if="isSubmitting" class="w-4 h-4 animate-spin" />
-          <Wrench v-else class="w-4 h-4" />
-          {{ isSubmitting ? 'กำลังส่งคำขอ...' : 'ส่งคำขอแจ้งซ่อม' }}
-        </button>
+              <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <button v-for="opt in [
+                  { v: 'NORMAL',   icon: '🟢', label: 'ปกติ',      desc: 'ภายใน 7 วัน', color: 'slate-800' },
+                  { v: 'URGENT',   icon: '🟡', label: 'ด่วน',       desc: 'ภายใน 2 วัน', color: 'orange-500' },
+                  { v: 'CRITICAL', icon: '🔴', label: 'ด่วนที่สุด', desc: 'ภายในวันนี้', color: 'red-500' }
+                ]" :key="opt.v" type="button" @click="form.urgency = opt.v"
+                  :class="['relative flex items-center p-4 rounded-2xl border-2 transition-all duration-200 cursor-pointer overflow-hidden group',
+                    form.urgency === opt.v
+                      ? `border-${opt.color} bg-${opt.color}/5 shadow-md`
+                      : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50']">
+                  
+                  <div :class="['absolute inset-y-0 left-0 w-1.5 transition-colors duration-300', form.urgency === opt.v ? `bg-${opt.color}` : 'bg-transparent']"></div>
+
+                  <div class="pl-2 flex-1 text-left">
+                    <div class="flex items-center gap-2 mb-1">
+                      <span class="text-lg">{{ opt.icon }}</span>
+                      <span :class="['font-bold', form.urgency === opt.v ? `text-${opt.color}` : 'text-slate-700']">{{ opt.label }}</span>
+                    </div>
+                    <span :class="['text-xs font-medium', form.urgency === opt.v ? `text-${opt.color}/70` : 'text-slate-400']">{{ opt.desc }}</span>
+                  </div>
+
+                  <div :class="['w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors',
+                    form.urgency === opt.v ? `border-${opt.color} bg-${opt.color}` : 'border-slate-300']">
+                    <Check v-if="form.urgency === opt.v" class="w-3.5 h-3.5 text-white" />
+                  </div>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Step 3: Details & Photo -->
+          <div class="relative flex gap-6">
+            <div class="relative z-10 shrink-0 w-14 h-14 bg-white rounded-full flex items-center justify-center border-4 border-slate-50 shadow-sm mt-1">
+              <div :class="['w-10 h-10 rounded-full flex items-center justify-center text-white font-bold transition-all duration-300 shadow-md',
+                form.detail ? 'bg-emerald-500 shadow-emerald-500/30' : 'bg-slate-800 shadow-slate-800/30']">
+                <Check v-if="form.detail" class="w-5 h-5" />
+                <span v-else>3</span>
+              </div>
+            </div>
+            <div class="flex-1">
+              <h3 class="text-lg font-bold text-slate-800 mb-1">รายละเอียดและรูปภาพ</h3>
+              <p class="text-sm text-slate-500 mb-4">ระบุอาการชำรุดอย่างละเอียดเพื่อประกอบการพิจารณา</p>
+
+              <div class="bg-white p-1 rounded-2xl border border-slate-200 shadow-sm flex flex-col sm:flex-row gap-0.5 overflow-hidden">
+                
+                <!-- Textarea -->
+                <div class="flex-1 p-4 bg-white rounded-xl">
+                  <textarea v-model="form.detail" rows="5"
+                    placeholder="อธิบายอาการชำรุดที่พบ...&#10;เช่น เปิดไม่ติด, หน้าจอแตก, มีเสียงดังผิดปกติ"
+                    class="w-full h-full bg-transparent text-sm text-slate-800 resize-none focus:outline-none placeholder:text-slate-300 leading-relaxed font-medium"
+                  ></textarea>
+                </div>
+
+                <!-- Divider -->
+                <div class="hidden sm:block w-[1px] bg-slate-100 my-4"></div>
+                <div class="sm:hidden h-[1px] bg-slate-100 mx-4"></div>
+
+                <!-- Photo Upload -->
+                <div class="sm:w-48 p-4 bg-slate-50 shrink-0 rounded-xl flex flex-col">
+                  <div class="flex items-center justify-between mb-3">
+                    <span class="text-xs font-bold text-slate-500 uppercase tracking-wider">แนบรูปภาพ</span>
+                  </div>
+                  
+                  <div class="flex-1 flex flex-col justify-center">
+                    <div v-if="form.photoPreview" class="relative rounded-xl overflow-hidden aspect-square w-full group cursor-pointer shadow-sm border border-slate-200" @click="triggerFileInput">
+                      <img :src="form.photoPreview" alt="ตัวอย่างรูปอาการชำรุด" class="w-full h-full object-cover" />
+                      <div class="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-1 backdrop-blur-sm">
+                        <Camera class="w-5 h-5 text-white" />
+                        <span class="text-white text-xs font-bold">เปลี่ยนรูปภาพ</span>
+                      </div>
+                    </div>
+                    <button v-else type="button" @click="triggerFileInput"
+                      class="w-full aspect-square rounded-xl border-2 border-dashed border-slate-300 hover:border-emerald-400 hover:bg-emerald-50/50 transition-all cursor-pointer group flex flex-col items-center justify-center gap-2">
+                      <div class="w-10 h-10 rounded-full bg-white shadow-sm flex items-center justify-center group-hover:scale-110 transition-transform">
+                        <Camera class="w-4 h-4 text-slate-400 group-hover:text-emerald-500" />
+                      </div>
+                      <span class="text-xs font-semibold text-slate-400 group-hover:text-emerald-600">อัปโหลดรูปภาพ</span>
+                    </button>
+                    <input ref="fileInputRef" type="file" accept="image/*" class="hidden" @change="handlePhotoChange" />
+                  </div>
+                </div>
+
+              </div>
+            </div>
+          </div>
+
+          <!-- Final Submit -->
+          <div class="relative flex gap-6 pt-4">
+            <div class="w-14 shrink-0"></div> <!-- Spacer for timeline -->
+            <div class="flex-1">
+              
+              <div v-if="formError" class="mb-4 flex items-center gap-3 rounded-2xl bg-red-50 border border-red-100 p-4">
+                <div class="w-8 h-8 rounded-full bg-red-100 flex items-center justify-center shrink-0">
+                  <AlertTriangle class="w-4 h-4 text-red-600" />
+                </div>
+                <p class="text-sm text-red-700 font-bold">{{ formError }}</p>
+              </div>
+
+              <button type="button" :disabled="isSubmitting" @click="submitRepairRequest"
+                class="w-full sm:w-auto flex items-center justify-center gap-3 rounded-full bg-slate-900 text-white px-8 py-4 text-base font-bold shadow-xl shadow-slate-900/20 hover:shadow-2xl hover:shadow-slate-900/30 hover:-translate-y-1 active:translate-y-0 transition-all disabled:opacity-50 disabled:translate-y-0 cursor-pointer group">
+                <Loader2 v-if="isSubmitting" class="w-5 h-5 animate-spin" />
+                <Wrench v-else class="w-5 h-5 group-hover:rotate-12 transition-transform" />
+                {{ isSubmitting ? 'กำลังส่งคำขอ...' : 'ส่งคำขอแจ้งซ่อม' }}
+                <div v-if="!isSubmitting" class="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center ml-2">
+                  <Check class="w-3.5 h-3.5 text-white" />
+                </div>
+              </button>
+
+            </div>
+          </div>
+
+        </div>
       </div>
     </div>
-    </div>
+
+
+
+
 
     <!-- ===== แท็บ: รายการแจ้งซ่อม ===== -->
     <div v-else-if="activeTab === 'list'" class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
@@ -499,13 +616,39 @@ async function completeRepair() {
 
     <!-- ===== แท็บ: ประวัติการซ่อม/ค่าใช้จ่าย ===== -->
     <div v-else class="space-y-6">
-      <div class="bg-white rounded-2xl border border-emerald-100 shadow-sm hover:shadow-md transition-shadow p-4 flex items-center gap-3 max-w-xs">
-        <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-50 to-emerald-100 text-[#065f46] flex items-center justify-center ring-1 ring-emerald-100">
-          <DollarSign class="w-5 h-5" />
+      <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <!-- ยอดรวม -->
+        <div class="bg-white rounded-2xl border border-emerald-100 shadow-sm hover:shadow-md transition-shadow p-4 flex items-center gap-3 min-w-[260px]">
+          <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-50 to-emerald-100 text-[#065f46] flex items-center justify-center ring-1 ring-emerald-100">
+            <DollarSign class="w-5 h-5" />
+          </div>
+          <div>
+            <p class="text-xl font-bold text-slate-900">{{ totalRepairCost.toLocaleString() }} บาท</p>
+            <p class="text-sm text-slate-500">ค่าใช้จ่ายซ่อมบำรุงสะสม</p>
+          </div>
         </div>
-        <div>
-          <p class="text-xl font-bold text-slate-900">{{ totalRepairCost.toLocaleString() }} บาท</p>
-          <p class="text-sm text-slate-500">ค่าใช้จ่ายซ่อมบำรุงสะสม</p>
+
+        <!-- ตัวกรอง เดือน/ปี -->
+        <div class="flex items-center gap-2 bg-white p-2 rounded-2xl border border-slate-200 shadow-sm">
+          <select v-model="filterMonth" class="px-4 py-2 rounded-xl border-none text-sm font-bold text-slate-700 bg-slate-50 hover:bg-slate-100 focus:outline-none cursor-pointer transition-colors">
+            <option value="all">ทุกเดือน</option>
+            <option value="1">มกราคม</option>
+            <option value="2">กุมภาพันธ์</option>
+            <option value="3">มีนาคม</option>
+            <option value="4">เมษายน</option>
+            <option value="5">พฤษภาคม</option>
+            <option value="6">มิถุนายน</option>
+            <option value="7">กรกฎาคม</option>
+            <option value="8">สิงหาคม</option>
+            <option value="9">กันยายน</option>
+            <option value="10">ตุลาคม</option>
+            <option value="11">พฤศจิกายน</option>
+            <option value="12">ธันวาคม</option>
+          </select>
+          <select v-model="filterYear" class="px-4 py-2 rounded-xl border-none text-sm font-bold text-slate-700 bg-slate-50 hover:bg-slate-100 focus:outline-none cursor-pointer transition-colors">
+            <option value="all">ทุกปี</option>
+            <option v-for="y in availableYears" :key="y" :value="y.toString()">ปี {{ y + 543 }}</option>
+          </select>
         </div>
       </div>
 

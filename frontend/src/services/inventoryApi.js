@@ -134,7 +134,7 @@ export const createAssetDistribution = (data) =>
 // Asset Timeline
 // ==========================================
 
-/** ดึงประวัติไทม์ไลน์ความเคลื่อนไหวของครุภัณฑ์รายชิ้น */
+/** ดึงประวัติไทม์ไลน์ความเคลื่อนไหวของครุภัณฑ์รายชิ้น (คืนค่า { assetStatus, timeline }) */
 export const getAssetTimeline = (id) =>
   api.get(`/api/assets/${id}/timeline`).then((r) => r.data.data)
 

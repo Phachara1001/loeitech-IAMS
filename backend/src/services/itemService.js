@@ -66,19 +66,22 @@ export const updateItem = async (id, data) => {
 };
 
 /**
- * ลบวัสดุ
+ * ลบวัสดุ (Soft Delete: ซ่อนออกจากรายการ แต่เก็บข้อมูล+ประวัติ stock transaction ไว้ครบ)
  */
 export const deleteItem = async (id) => {
-  await getItemById(id); // ตรวจสอบว่ามีอยู่ก่อน
-  return await itemRepository.remove(id);
+  await getItemById(id); // ตรวจสอบว่ามีอยู่ก่อน (และยังไม่ถูกลบไปแล้ว)
+  return await itemRepository.softDelete(id);
 };
 
 /**
  * ดึงประวัติ Running Balance ของวัสดุ
+ * @param {number|string} id
+ * @param {object} [options]
+ * @param {number|string} [options.year] - กรองเฉพาะปีที่ระบุ (ค.ศ.) ส่งต่อให้ repository กรองที่ database เลย
  */
-export const getItemTransactions = async (id) => {
+export const getItemTransactions = async (id, options = {}) => {
   await getItemById(id); // ตรวจสอบว่ามีอยู่ก่อน
-  return await itemRepository.findTransactionsByItemId(id);
+  return await itemRepository.findTransactionsByItemId(id, options);
 };
 
 /**

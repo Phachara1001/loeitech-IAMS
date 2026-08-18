@@ -28,15 +28,43 @@ import {
   ShoppingCart
 } from 'lucide-vue-next'
 import { useToast } from '../composables/useToast'
+import { API_BASE } from '../config/api'
 
 const router = useRouter()
 const toast = useToast()
 
-// --- User Context ---
-const currentUser = ref({
-  id: 'USR-001',
-  name: 'นายสมศักดิ์ รักการดี',
-  role: 'Admin'
+function authHeaders() {
+  const token = localStorage.getItem('tcaims_auth_token')
+  return { Authorization: `Bearer ${token}` }
+}
+
+function extractErrorMessage(error) {
+  const data = error.response?.data
+  if (data?.errors?.length) return data.errors.join(' / ')
+  if (data?.message) return data.message
+  return 'เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง'
+}
+
+function handleUnauthorized(error) {
+  if (error.response?.status === 401) {
+    localStorage.removeItem('tcaims_auth_token')
+    localStorage.removeItem('tcaims_user')
+    localStorage.removeItem('tcaims_role')
+    toast.error('เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่อีกครั้ง')
+    router.push('/login')
+    return true
+  }
+  return false
+}
+
+// ชื่อผู้ใช้งานที่ login อยู่ (ดึงจากแคชที่บันทึกไว้ตอน login จริง ไม่ใช่ mock)
+const currentUserName = computed(() => {
+  try {
+    const cached = JSON.parse(localStorage.getItem('tcaims_user') || 'null')
+    return cached?.name || 'ผู้ใช้งาน'
+  } catch {
+    return 'ผู้ใช้งาน'
+  }
 })
 
 // --- Form State ---
@@ -98,8 +126,8 @@ const handleSaveAsset = async () => {
       const uploadData = new FormData()
       uploadData.append('image', imageFile.value)
 
-      const uploadResponse = await axios.post('http://localhost:3000/api/assets/upload', uploadData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
+      const uploadResponse = await axios.post(`${API_BASE}/assets/upload`, uploadData, {
+        headers: { ...authHeaders(), 'Content-Type': 'multipart/form-data' }
       })
       imageUrl = uploadResponse.data.data.imageUrl
     }
@@ -111,7 +139,7 @@ const handleSaveAsset = async () => {
     }
 
     // Send to backend API
-    const response = await axios.post('http://localhost:3000/api/assets', payload)
+    const response = await axios.post(`${API_BASE}/assets`, payload, { headers: authHeaders() })
 
     // Set returned data to display in success modal
     newAssetSeq.value = response.data.data.seq
@@ -119,7 +147,7 @@ const handleSaveAsset = async () => {
     toast.success('บันทึกข้อมูลครุภัณฑ์เรียบร้อยแล้ว')
   } catch (error) {
     console.error('Error saving asset:', error)
-    toast.error('เกิดข้อผิดพลาดในการบันทึกข้อมูล: ' + (error.response?.data?.message || error.message))
+    if (!handleUnauthorized(error)) toast.error(extractErrorMessage(error))
   } finally {
     isSubmitting.value = false
   }
@@ -196,7 +224,7 @@ const resetFormAndContinue = () => {
           <div
             class="flex items-center gap-2 bg-black/20 border border-white/10 p-2.5 rounded-xl backdrop-blur-md self-start md:self-auto shrink-0">
             <ShieldCheck class="w-5 h-5 text-emerald-400 ml-1" />
-            <span class="text-sm font-bold text-white pr-2">{{ currentUser.name }}</span>
+            <span class="text-sm font-bold text-white pr-2">{{ currentUserName }}</span>
           </div>
         </div>
       </div>

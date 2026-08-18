@@ -54,6 +54,8 @@ model Item {
   quantity         Int                @default(0) // ยอดคงเหลือ
   minThreshold     Int                @default(0) // จุดเตือนสั่งซื้อ
   unitPrice        Float              @default(0) // ราคาต่อหน่วย
+  isDeleted        Boolean            @default(false) // Soft Delete: ซ่อนแทนการลบจริง เพื่อไม่ให้กระทบประวัติ stock transaction
+  deletedAt        DateTime?
   stockTx          StockTransaction[]
   requisitionItems RequisitionItem[]
   createdAt        DateTime           @default(now())

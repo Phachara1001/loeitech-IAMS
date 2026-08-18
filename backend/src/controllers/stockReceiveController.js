@@ -1,4 +1,5 @@
 import * as stockReceiveService from '../services/stockReceiveService.js';
+import { logActivity } from '../utils/activityLogger.js';
 
 /**
  * @swagger
@@ -61,6 +62,18 @@ import * as stockReceiveService from '../services/stockReceiveService.js';
 export const receiveStock = async (req, res, next) => {
   try {
     const result = await stockReceiveService.receiveStock(req.body);
+
+    await logActivity({
+      req,
+      action: 'INSERT',
+      entityType: 'ITEM',
+      entityId: result?.item?.id ?? result?.id ?? null,
+      newValue: result,
+      details: result.isNew
+        ? `รับวัสดุใหม่เข้าคลัง "${req.body.newItemName || result?.item?.name || ''}" จำนวน ${req.body.qty}`
+        : `รับวัสดุเข้าคลัง (Item ID: ${req.body.selectedItemId}) จำนวน ${req.body.qty}`
+    });
+
     res.status(201).json({
       status: 'success',
       data: result,

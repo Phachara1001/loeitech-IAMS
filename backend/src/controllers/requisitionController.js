@@ -1,4 +1,5 @@
 import * as requisitionService from '../services/requisitionService.js';
+import { logActivity } from '../utils/activityLogger.js';
 
 /**
  * @swagger
@@ -102,6 +103,16 @@ export const getRequisitionById = async (req, res, next) => {
 export const createRequisition = async (req, res, next) => {
   try {
     const data = await requisitionService.createRequisition(req.body);
+
+    await logActivity({
+      req,
+      action: 'INSERT',
+      entityType: 'REQUISITION',
+      entityId: data.id,
+      newValue: data,
+      details: `ยื่นคำขอเบิกพัสดุ ${data.reqCode || ''} เหตุผล: ${req.body.reason}`
+    });
+
     res.status(201).json({
       status: 'success',
       data,
@@ -149,7 +160,19 @@ export const createRequisition = async (req, res, next) => {
  */
 export const approveRequisition = async (req, res, next) => {
   try {
+    const before = await requisitionService.getRequisitionById(req.params.id);
     const data = await requisitionService.approveRequisition(req.params.id, req.body);
+
+    await logActivity({
+      req,
+      action: 'UPDATE',
+      entityType: 'REQUISITION',
+      entityId: data.id,
+      oldValue: before,
+      newValue: data,
+      details: `อนุมัติคำขอเบิกพัสดุ ${data.reqCode || ''} โดย ${req.body.approvedBy}`
+    });
+
     res.status(200).json({
       status: 'success',
       data,
@@ -190,7 +213,19 @@ export const approveRequisition = async (req, res, next) => {
  */
 export const rejectRequisition = async (req, res, next) => {
   try {
+    const before = await requisitionService.getRequisitionById(req.params.id);
     const data = await requisitionService.rejectRequisition(req.params.id, req.body);
+
+    await logActivity({
+      req,
+      action: 'UPDATE',
+      entityType: 'REQUISITION',
+      entityId: data.id,
+      oldValue: before,
+      newValue: data,
+      details: `ปฏิเสธคำขอเบิกพัสดุ ${data.reqCode || ''} โดย ${req.body.approvedBy}`
+    });
+
     res.status(200).json({
       status: 'success',
       data,

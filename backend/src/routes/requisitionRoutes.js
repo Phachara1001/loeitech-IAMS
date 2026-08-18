@@ -4,8 +4,11 @@ import {
   validateRequisitionInput,
   validateApprovalInput
 } from '../validations/requisitionValidation.js';
+import { authenticate } from '../middleware/auth.js';
 
 const router = Router();
+
+router.use(authenticate);
 
 // GET /api/requisitions?status=PENDING
 router.get('/', requisitionController.getRequisitions);

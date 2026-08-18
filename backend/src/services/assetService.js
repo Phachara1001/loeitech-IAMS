@@ -175,6 +175,11 @@ export const getAssetTimeline = async (id) => {
   // เรียงลำดับจากล่าสุดไปหาเก่าสุด
   timeline.sort((a, b) => new Date(b.date) - new Date(a.date));
 
-  return timeline;
+  // ส่ง assetStatus ปัจจุบันจาก DB กลับมาพร้อมกับ timeline เสมอ
+  // เพื่อให้ frontend อัปเดตสถานะ asset ได้แบบ real-time
+  return {
+    assetStatus: data.asset.status,
+    timeline
+  };
 };
 

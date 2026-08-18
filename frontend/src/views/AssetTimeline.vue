@@ -125,7 +125,14 @@ const viewAssetTimeline = async (asset) => {
   isTimelineLoading.value = true
   try {
     const data = await inventoryApi.getAssetTimeline(asset.id)
-    timelineLogs.value = data
+    // data = { assetStatus, timeline }
+    timelineLogs.value = data.timeline
+
+    // อัปเดตสถานะ asset ในรายการทันที แบบ real-time จากฐานข้อมูล
+    const idx = assets.value.findIndex(a => a.id === asset.id)
+    if (idx !== -1 && data.assetStatus) {
+      assets.value[idx].status = data.assetStatus
+    }
   } catch (err) {
     toast.error('ไม่สามารถดึงข้อมูลไทม์ไลน์ได้: ' + err.message)
   } finally {
@@ -243,28 +250,6 @@ const handleAddLog = () => {
           </div>
         </div>
 
-        <!-- Dev Role Switcher Button -->
-        <div class="flex items-center gap-2 bg-black/20 border border-white/10 p-2 rounded-xl backdrop-blur-md shrink-0">
-          <span class="text-xs sm:text-sm text-emerald-100/80 font-medium px-2">สิทธิ์สลับหน้าทดสอบ:</span>
-          <button 
-            @click="currentUser.role = 'Admin'" 
-            :class="['px-3 py-1.5 text-xs rounded-lg font-semibold transition backdrop-blur-md cursor-pointer', currentUser.role === 'Admin' ? 'bg-emerald-500 text-white shadow-sm' : 'text-emerald-100/70 hover:bg-white/10']"
-          >
-            Admin
-          </button>
-          <button 
-            @click="currentUser.role = 'Staff'" 
-            :class="['px-3 py-1.5 text-xs rounded-lg font-semibold transition backdrop-blur-md cursor-pointer', currentUser.role === 'Staff' ? 'bg-emerald-500 text-white shadow-sm' : 'text-emerald-100/70 hover:bg-white/10']"
-          >
-            Staff
-          </button>
-          <button 
-            @click="currentUser.role = 'User'" 
-            :class="['px-3 py-1.5 text-xs rounded-lg font-semibold transition backdrop-blur-md cursor-pointer', currentUser.role === 'User' ? 'bg-emerald-500 text-white shadow-sm' : 'text-emerald-100/70 hover:bg-white/10']"
-          >
-            User
-          </button>
-        </div>
       </div>
     </div>
 
@@ -328,16 +313,13 @@ const handleAddLog = () => {
                 </td>
                 <td class="px-6 py-4">
                   <span class="font-bold text-slate-800">{{ asset.seq }}</span>
-                  <div class="text-xs text-slate-400 font-mono">{{ asset.id }}</div>
                 </td>
                 <td class="px-6 py-4">
                   <div class="font-extrabold text-slate-900 text-base">{{ asset.name }}</div>
-                  <div class="text-xs text-slate-500 font-mono mt-0.5">{{ asset.code }}</div>
                 </td>
                 <td class="px-6 py-4 text-slate-600 font-mono">{{ asset.serial }}</td>
                 <td class="px-6 py-4 text-slate-700">
                   <div class="font-bold">{{ asset.currentLocation }}</div>
-                  <div class="text-xs text-slate-400">{{ asset.department }}</div>
                 </td>
                 <td class="px-6 py-4 text-slate-700">{{ asset.ownerName }}</td>
                 <td class="px-6 py-4">

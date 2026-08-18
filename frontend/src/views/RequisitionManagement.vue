@@ -253,28 +253,6 @@ const getStatusBadge = (status) => {
           </div>
         </div>
 
-        <!-- Dev Role Switcher Button -->
-        <div class="flex items-center gap-2 bg-black/20 border border-white/10 p-2 rounded-xl backdrop-blur-md shrink-0">
-          <span class="text-xs sm:text-sm text-emerald-100/80 font-medium px-2">สิทธิ์สลับหน้าทดสอบ:</span>
-          <button 
-            @click="currentUser.role = 'Admin'" 
-            :class="['px-3 py-1.5 text-xs rounded-lg font-semibold transition backdrop-blur-md cursor-pointer', currentUser.role === 'Admin' ? 'bg-emerald-500 text-white shadow-sm' : 'text-emerald-100/70 hover:bg-white/10']"
-          >
-            Admin
-          </button>
-          <button 
-            @click="currentUser.role = 'Staff'" 
-            :class="['px-3 py-1.5 text-xs rounded-lg font-semibold transition backdrop-blur-md cursor-pointer', currentUser.role === 'Staff' ? 'bg-emerald-500 text-white shadow-sm' : 'text-emerald-100/70 hover:bg-white/10']"
-          >
-            Staff
-          </button>
-          <button 
-            @click="currentUser.role = 'User'" 
-            :class="['px-3 py-1.5 text-xs rounded-lg font-semibold transition backdrop-blur-md cursor-pointer', currentUser.role === 'User' ? 'bg-emerald-500 text-white shadow-sm' : 'text-emerald-100/70 hover:bg-white/10']"
-          >
-            User (ผู้ขอเบิก)
-          </button>
-        </div>
       </div>
     </div>
 

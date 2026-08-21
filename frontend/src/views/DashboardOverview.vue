@@ -21,6 +21,11 @@ ChartJS.register(Title, Tooltip, Legend, BarElement, CategoryScale, LinearScale)
 const router = useRouter()
 const toast = useToast()
 
+// สิทธิ์การเข้าถึง: User ทั่วไปเห็นแค่ภาพรวม (การ์ดสรุป + กราฟ) ไม่เห็นตารางกิจกรรมล่าสุดเชิงลึกของฝ่ายอื่น
+const currentRole = ref(localStorage.getItem('tcaims_role') || 'user')
+const canSeeDetails = computed(() => ['admin', 'staff'].includes(currentRole.value))
+const isAdmin = computed(() => currentRole.value === 'admin')
+
 const isLoading = ref(true)
 const overview = ref(null) // ข้อมูลดิบทั้งหมดจาก backend
 
@@ -277,11 +282,11 @@ const chartOptions = {
       </div>
     </div>
 
-    <!-- Recent Activity Table -->
-    <div class="bg-white rounded-2xl shadow-sm border border-emerald-100 overflow-hidden">
+    <!-- Recent Activity Table (Admin, Staff เท่านั้น - User เห็นแค่ภาพรวมด้านบน) -->
+    <div v-if="canSeeDetails" class="bg-white rounded-2xl shadow-sm border border-emerald-100 overflow-hidden">
       <div class="px-6 py-5 flex justify-between items-center bg-gradient-to-r from-[#065f46] to-[#047857]">
         <h3 class="font-bold text-white text-lg">ประวัติกิจกรรมล่าสุดในระบบ</h3>
-        <router-link to="/activity-logs"
+        <router-link v-if="isAdmin" to="/activity-logs"
           class="text-sm text-[#065f46] font-bold hover:shadow-md flex items-center bg-white px-3.5 py-1.5 rounded-lg shadow-sm hover:-translate-y-0.5 active:translate-y-0 transition-all">
           ดูทั้งหมด
           <ArrowRight class="w-4 h-4 ml-1" />

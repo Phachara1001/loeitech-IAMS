@@ -22,6 +22,10 @@ import { API_BASE } from '../config/api'
 const router = useRouter()
 const toast = useToast()
 
+// สิทธิ์การเข้าถึง: ดูข้อมูลได้ทุก role / แก้ไขสถานะ, อัปโหลดรูป, แก้ไขข้อมูล, ลบ ได้เฉพาะ Admin, Staff
+const currentRole = ref(localStorage.getItem('tcaims_role') || 'user')
+const canManage = computed(() => ['admin', 'staff'].includes(currentRole.value))
+
 function authHeaders() {
   const token = localStorage.getItem('tcaims_auth_token')
   return { Authorization: `Bearer ${token}` }
@@ -275,7 +279,7 @@ const confirmDelete = async () => {
             class="px-4 py-2.5 bg-white/10 backdrop-blur-sm ring-1 ring-white/20 rounded-xl text-white hover:bg-white/20 font-semibold flex items-center transition-all shadow-sm">
             <Download class="w-4 h-4 mr-2 text-emerald-200" /> ส่งออก Excel
           </button>
-          <button @click="router.push('/new-asset')"
+          <button v-if="canManage" @click="router.push('/new-asset')"
             class="px-4 py-2.5 bg-white text-[#065f46] rounded-xl hover:bg-emerald-50 font-bold flex items-center shadow-md hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 transition-all">
             <Plus class="w-4 h-4 mr-2" /> เพิ่มครุภัณฑ์
           </button>
@@ -356,14 +360,18 @@ const confirmDelete = async () => {
               </td>
               <td class="px-6 py-4 text-slate-600">{{ asset.department }}</td>
               <td class="px-6 py-4">
-                <button @click="openStatusModal(asset)"
+                <button v-if="canManage" @click="openStatusModal(asset)"
                   :class="['px-2.5 py-1 text-xs font-medium rounded-full border hover:shadow-md transition-shadow cursor-pointer flex items-center', getStatusBadge(asset.status)]"
                   title="คลิกเพื่อเปลี่ยนสถานะ">
                   {{ getStatusText(asset.status) }}
                   <Edit class="w-3 h-3 ml-1 opacity-50" />
                 </button>
+                <span v-else
+                  :class="['px-2.5 py-1 text-xs font-medium rounded-full border inline-flex items-center', getStatusBadge(asset.status)]">
+                  {{ getStatusText(asset.status) }}
+                </span>
               </td>
-              <td class="px-6 py-4 text-center">
+              <td v-if="canManage" class="px-6 py-4 text-center">
                 <div class="flex items-center justify-center space-x-1.5">
                   <button @click="openEditModal(asset)"
                     class="p-2 rounded-lg text-slate-400 hover:text-amber-600 hover:bg-amber-50 hover:shadow-sm hover:scale-110 active:scale-95 transition-all"
@@ -381,6 +389,9 @@ const confirmDelete = async () => {
                     <MoreVertical class="w-4 h-4" />
                   </button>
                 </div>
+              </td>
+              <td v-else class="px-6 py-4 text-center text-slate-300 text-xs">
+                ดูอย่างเดียว
               </td>
             </tr>
             <tr v-if="filteredAssets.length === 0">

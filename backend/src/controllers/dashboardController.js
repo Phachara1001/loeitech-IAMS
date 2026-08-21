@@ -14,7 +14,7 @@ import * as dashboardService from '../services/dashboardService.js';
  */
 export async function getOverview(req, res, next) {
   try {
-    const data = await dashboardService.getOverview();
+    const data = await dashboardService.getOverview(req.user?.role);
     res.status(200).json({ status: 'success', data });
   } catch (err) {
     next(err);

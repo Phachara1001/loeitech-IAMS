@@ -92,7 +92,8 @@ model Asset {
   distributions     AssetDistribution[]
   borrows           BorrowTransaction[]
   repairs           RepairRequest[]
-  
+  disposalRequests  DisposalRequest[]
+   
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
@@ -244,4 +245,26 @@ model RepairRequest {
   updatedAt    DateTime  @updatedAt
 
   @@map("repair_requests")
+}
+
+// คำขอจำหน่ายพัสดุ/ครุภัณฑ์
+model DisposalRequest {
+  id           Int       @id @default(autoincrement())
+  disposalCode String    @unique // รหัสคำขอจำหน่าย เช่น 'DSP-2569-0001'
+  assetId      Int
+  asset        Asset     @relation(fields: [assetId], references: [id])
+  method       String    // ขายทอดตลาด, บริจาค, โอน, แปรสภาพ, ทำลาย
+  meetingDate  DateTime  // วันที่ประชุมคณะกรรมการ
+  committee    String    // รายชื่อคณะกรรมการ (คั่นด้วยจุลภาค)
+  resolution   String    // มติที่ประชุม
+  status       String    @default("PENDING") // PENDING, APPROVED, REJECTED, DISPOSED
+  requestedBy  String?   // ชื่อผู้สร้างคำขอ
+  approvedBy   String?   // ชื่อผู้อนุมัติ
+  approvedAt   DateTime?
+  disposedAt   DateTime?
+  remark       String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@map("disposal_requests")
 }

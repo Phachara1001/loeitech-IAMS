@@ -42,7 +42,7 @@ export async function getMonthlyRequisitions() {
   return { fiscalYearBE, data: buckets };
 }
 
-const ACTION_STATUS_MAP = { CREATE: 'success', UPDATE: 'info', DELETE: 'danger', LOGIN: 'info' };
+const ACTION_STATUS_MAP = { INSERT: 'success', UPDATE: 'info', DELETE: 'danger', LOGIN: 'info' };
 
 const ENTITY_TYPE_LABEL = {
   ASSET: 'ครุภัณฑ์',
@@ -52,7 +52,7 @@ const ENTITY_TYPE_LABEL = {
 };
 
 const ACTION_LABEL = {
-  CREATE: 'เพิ่มข้อมูลใหม่',
+  INSERT: 'เพิ่มข้อมูลใหม่',
   UPDATE: 'แก้ไขข้อมูล',
   DELETE: 'ลบข้อมูล',
   LOGIN: 'เข้าสู่ระบบ'
@@ -71,11 +71,13 @@ export async function getRecentActivities(limit = 10) {
   }));
 }
 
-export async function getOverview() {
+export async function getOverview(role) {
+  const canSeeDetails = ['ADMIN', 'STAFF'].includes(String(role).toUpperCase())
+
   const [stats, monthly, recentActivities] = await Promise.all([
     getStats(),
     getMonthlyRequisitions(),
-    getRecentActivities(10)
+    canSeeDetails ? getRecentActivities(10) : Promise.resolve([])
   ]);
 
   return { stats, monthlyRequisitions: monthly, recentActivities };

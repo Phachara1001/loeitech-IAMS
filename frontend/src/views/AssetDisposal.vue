@@ -1,48 +1,77 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import {
   Recycle, Plus, X, Check, Loader2, AlertTriangle, ShieldAlert,
   Search, ClipboardList, Gavel, PackageX, Ban, CheckCircle2
 } from 'lucide-vue-next'
+import api from '../services/api'
+import { useToast } from '../composables/useToast'
+
+const toast = useToast()
 
 // สิทธิ์การเข้าถึง: Admin, Staff เท่านั้น
 // TODO: เชื่อมกับระบบยืนยันตัวตนจริง เช่น decode role จาก JWT หรือข้อมูลผู้ใช้หลัง login
 const currentRole = ref(localStorage.getItem('tcaims_role') || 'admin')
 const canAccess = computed(() => ['admin', 'staff'].includes(currentRole.value))
 
-/* ---------------- ข้อมูลรายการที่รอจำหน่าย (mock: มาจากผลตรวจสอบประจำปี) ---------------- */
-const eligibleAssets = ref([
-  { id: 'AST-0032', name: 'เครื่องพิมพ์ Laser HP LaserJet P1102', condition: 'ชำรุด', unit: 'อาคาร 1 ห้อง 101' },
-  { id: 'AST-0058', name: 'เก้าอี้สำนักงานผู้บริหาร', condition: 'เสื่อมสภาพ', unit: 'อาคาร 3 สำนักงานงานพัสดุ' },
-  { id: 'AST-0071', name: 'โปรเจกเตอร์ Epson EB-X05', condition: 'ชำรุด', unit: 'อาคาร 1 ห้อง 201' },
-  { id: 'AST-0090', name: 'เครื่องคอมพิวเตอร์ตั้งโต๊ะ Dell OptiPlex', condition: 'สูญหาย', unit: 'อาคาร 3 ห้องปฏิบัติการ' }
-])
+/* ---------------- ข้อมูลรายการที่รอจำหน่าย (โหลดจาก backend จริง) ---------------- */
+const eligibleAssets = ref([])
+const isLoadingAssets = ref(false)
+
+async function loadEligibleAssets() {
+  isLoadingAssets.value = true
+  try {
+    const { data } = await api.get('/api/disposal-requests/eligible-assets')
+    eligibleAssets.value = (data.data || []).map((a) => ({
+      id: a.id,
+      name: a.name,
+      condition: a.status === 'Broken' ? 'ชำรุด' : 'กำลังซ่อม',
+      unit: a.location ? `${a.location.building || ''} ${a.location.name}`.trim() : a.department
+    }))
+  } catch (err) {
+    toast.error(err.message || 'โหลดรายการครุภัณฑ์ที่มีสิทธิ์จำหน่ายไม่สำเร็จ')
+  } finally {
+    isLoadingAssets.value = false
+  }
+}
 
 const disposalMethods = ['ขายทอดตลาด', 'บริจาค', 'โอน', 'แปรสภาพ', 'ทำลาย']
 
-/* ---------------- คำขอจำหน่าย ---------------- */
-const requests = ref([
-  {
-    id: 'DSP-2569-001',
-    assetName: 'เครื่องปรับอากาศ Daikin 18000 BTU',
-    assetId: 'AST-0011',
-    method: 'ขายทอดตลาด',
-    meetingDate: '2569-05-12',
-    committee: 'นายสมชาย ใจดี, นางสาวสมหญิง รักเรียน, นายวิชัย มั่นคง',
-    resolution: 'คณะกรรมการมีมติเห็นชอบให้จำหน่ายโดยวิธีขายทอดตลาด เนื่องจากชำรุดเกินความคุ้มค่าในการซ่อม',
-    status: 'จำหน่ายแล้ว'
-  },
-  {
-    id: 'DSP-2569-002',
-    assetName: 'ตู้เอกสารเหล็ก 4 ลิ้นชัก',
-    assetId: 'AST-0044',
-    method: 'บริจาค',
-    meetingDate: '2569-06-20',
-    committee: 'นายสมชาย ใจดี, นางสาวสมหญิง รักเรียน',
-    resolution: 'เสื่อมสภาพตามอายุการใช้งาน เห็นควรบริจาคให้หน่วยงานที่ขาดแคลน',
-    status: 'รออนุมัติ'
+/* ---------------- คำขอจำหน่าย (โหลดจาก backend จริง) ---------------- */
+const requests = ref([])
+const isLoadingRequests = ref(true)
+const loadError = ref('')
+
+async function loadRequests() {
+  isLoadingRequests.value = true
+  loadError.value = ''
+  try {
+    const { data } = await api.get('/api/disposal-requests', {
+      params: searchQuery.value ? { search: searchQuery.value } : {}
+    })
+    requests.value = (data.data || []).map((r) => ({
+      id: r.disposalCode,
+      dbId: r.id,
+      assetName: r.asset?.name || '',
+      assetId: r.asset?.seq || '',
+      method: r.method,
+      meetingDate: r.meetingDate?.slice(0, 10),
+      committee: r.committee,
+      resolution: r.resolution,
+      status: statusFromApi(r.status)
+    }))
+  } catch (err) {
+    loadError.value = 'ไม่สามารถโหลดรายการคำขอจำหน่ายได้ กรุณาลองใหม่อีกครั้ง'
+    toast.error(err.message || 'โหลดคำขอจำหน่ายไม่สำเร็จ')
+  } finally {
+    isLoadingRequests.value = false
   }
-])
+}
+
+function statusFromApi(status) {
+  const map = { PENDING: 'รออนุมัติ', APPROVED: 'อนุมัติแล้ว', REJECTED: 'ไม่อนุมัติ', DISPOSED: 'จำหน่ายแล้ว' }
+  return map[status] || status
+}
 
 function statusStyle(status) {
   if (status === 'จำหน่ายแล้ว') return 'bg-emerald-50 text-emerald-700 border-emerald-100'
@@ -52,13 +81,13 @@ function statusStyle(status) {
 }
 
 const searchQuery = ref('')
-const filteredRequests = computed(() =>
-  requests.value.filter(
-    (r) =>
-      r.assetName.toLowerCase().includes(searchQuery.value.toLowerCase()) ||
-      r.id.toLowerCase().includes(searchQuery.value.toLowerCase())
-  )
-)
+const filteredRequests = computed(() => requests.value) // กรองที่ backend แล้ว (ผ่าน search param)
+
+let searchDebounce = null
+function onSearchInput() {
+  clearTimeout(searchDebounce)
+  searchDebounce = setTimeout(loadRequests, 350)
+}
 
 /* ---------------- ฟอร์มสร้างคำขอจำหน่ายใหม่ ---------------- */
 const isFormOpen = ref(false)
@@ -75,7 +104,7 @@ function closeForm() {
   isFormOpen.value = false
 }
 
-function saveForm() {
+async function saveForm() {
   if (!form.value.assetId || !form.value.meetingDate || !form.value.committee.trim() || !form.value.resolution.trim()) {
     formError.value = 'กรุณากรอกข้อมูลให้ครบถ้วน โดยเฉพาะรายการ วันที่ประชุม รายชื่อกรรมการ และมติที่ประชุม'
     return
@@ -84,36 +113,57 @@ function saveForm() {
   isSaving.value = true
   formError.value = ''
 
-  // TODO: เชื่อมต่อ API บันทึกคำขอจำหน่ายจริงในภายหลัง
-  setTimeout(() => {
-    const asset = eligibleAssets.value.find((a) => a.id === form.value.assetId)
-    const nextNumber = requests.value.length + 1
-    requests.value.unshift({
-      id: `DSP-2569-${String(nextNumber).padStart(3, '0')}`,
-      assetName: asset?.name || '',
+  try {
+    await api.post('/api/disposal-requests', {
       assetId: form.value.assetId,
       method: form.value.method,
       meetingDate: form.value.meetingDate,
       committee: form.value.committee.trim(),
-      resolution: form.value.resolution.trim(),
-      status: 'รออนุมัติ'
+      resolution: form.value.resolution.trim()
     })
-    isSaving.value = false
+    toast.success('สร้างคำขอจำหน่ายสำเร็จ')
     isFormOpen.value = false
-  }, 600)
+    await Promise.all([loadRequests(), loadEligibleAssets()])
+  } catch (err) {
+    formError.value = err.message || 'สร้างคำขอไม่สำเร็จ กรุณาลองใหม่อีกครั้ง'
+  } finally {
+    isSaving.value = false
+  }
 }
 
 /* ---------------- อนุมัติ / จำหน่ายแล้ว ---------------- */
-function approveRequest(req) {
-  req.status = 'อนุมัติแล้ว'
+async function approveRequest(req) {
+  try {
+    await api.patch(`/api/disposal-requests/${req.dbId}/approve`)
+    toast.success('อนุมัติคำขอสำเร็จ')
+    await loadRequests()
+  } catch (err) {
+    toast.error(err.message || 'อนุมัติคำขอไม่สำเร็จ')
+  }
 }
-function rejectRequest(req) {
-  req.status = 'ไม่อนุมัติ'
+async function rejectRequest(req) {
+  try {
+    await api.patch(`/api/disposal-requests/${req.dbId}/reject`)
+    toast.success('บันทึกการไม่อนุมัติแล้ว')
+    await loadRequests()
+  } catch (err) {
+    toast.error(err.message || 'บันทึกไม่สำเร็จ')
+  }
 }
-function markDisposed(req) {
-  // TODO: เมื่อเชื่อมต่อ backend ให้ตัดยอดออกจากบัญชีคุมคลังอัตโนมัติในขั้นตอนนี้
-  req.status = 'จำหน่ายแล้ว'
+async function markDisposed(req) {
+  try {
+    await api.patch(`/api/disposal-requests/${req.dbId}/dispose`)
+    toast.success('บันทึกจำหน่ายแล้ว — ตัดยอดออกจากบัญชีคุมคลังเรียบร้อย')
+    await loadRequests()
+  } catch (err) {
+    toast.error(err.message || 'บันทึกไม่สำเร็จ')
+  }
 }
+
+onMounted(() => {
+  loadRequests()
+  loadEligibleAssets()
+})
 </script>
 
 <template>
@@ -145,12 +195,24 @@ function markDisposed(req) {
     </div>
 
     <template v-else>
-      <div class="bg-white rounded-2xl border border-emerald-100 shadow-sm overflow-hidden">
+      <div v-if="isLoadingRequests" class="w-full flex flex-col items-center justify-center py-20 text-slate-400">
+        <Loader2 class="w-8 h-8 animate-spin mb-3 text-[#065f46]" />
+        <p class="text-sm">กำลังโหลดคำขอจำหน่าย...</p>
+      </div>
+
+      <div v-else-if="loadError" class="w-full flex flex-col items-center justify-center py-20 text-center">
+        <AlertTriangle class="w-8 h-8 text-red-400 mb-3" />
+        <p class="text-sm text-slate-600 font-medium mb-3">{{ loadError }}</p>
+        <button @click="loadRequests" class="px-4 py-2 rounded-xl bg-[#065f46] hover:bg-[#047857] text-white text-sm font-semibold transition">ลองใหม่อีกครั้ง</button>
+      </div>
+
+      <div v-else class="bg-white rounded-2xl border border-emerald-100 shadow-sm overflow-hidden">
         <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-4 border-b border-emerald-50 bg-emerald-50/20">
           <div class="relative sm:w-72">
             <Search class="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               v-model="searchQuery"
+              @input="onSearchInput"
               type="text"
               placeholder="ค้นหาชื่อรายการหรือเลขที่คำขอ..."
               class="w-full pl-10 pr-4 py-2.5 rounded-lg border border-slate-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#065f46]/20 focus:border-[#065f46] transition"
@@ -238,10 +300,11 @@ function markDisposed(req) {
           <div class="space-y-4">
             <div>
               <label class="block text-sm font-medium text-slate-700 mb-1.5">รายการที่ต้องการจำหน่าย</label>
-              <select v-model="form.assetId" class="w-full px-3.5 py-2.5 rounded-lg border border-slate-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#065f46]/20 focus:border-[#065f46] transition">
-                <option value="" disabled>-- เลือกรายการ --</option>
+              <select v-model="form.assetId" :disabled="isLoadingAssets" class="w-full px-3.5 py-2.5 rounded-lg border border-slate-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#065f46]/20 focus:border-[#065f46] transition disabled:opacity-60">
+                <option value="" disabled>{{ isLoadingAssets ? 'กำลังโหลดรายการ...' : '-- เลือกรายการ --' }}</option>
                 <option v-for="a in eligibleAssets" :key="a.id" :value="a.id">{{ a.name }} · {{ a.condition }} ({{ a.unit }})</option>
               </select>
+              <p v-if="!isLoadingAssets && eligibleAssets.length === 0" class="text-xs text-amber-600 mt-1.5">ไม่มีครุภัณฑ์ที่มีสิทธิ์จำหน่ายได้ในขณะนี้ (ต้องมีสถานะ "ชำรุด" หรือ "กำลังซ่อม")</p>
             </div>
 
             <div>

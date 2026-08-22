@@ -15,6 +15,8 @@ import requisitionRoutes from './routes/requisitionRoutes.js';
 import borrowRoutes from './routes/borrowRoutes.js';
 import repairRoutes from './routes/repairRoutes.js';
 import assetDistributionRoutes from './routes/assetDistributionRoutes.js';
+import disposalRoutes from './routes/disposalRoutes.js';
+import reportRoutes from './routes/reportRoutes.js';
 
 const app = express();
 
@@ -42,6 +44,8 @@ app.use('/api/requisitions', requisitionRoutes);  // NewRequisition
 app.use('/api/borrows', borrowRoutes);
 app.use('/api/repairs', repairRoutes);
 app.use('/api/asset-distributions', assetDistributionRoutes);
+app.use('/api/disposal-requests', disposalRoutes);
+app.use('/api/reports', reportRoutes);
 
 // Error Handling Middleware (triggers reload)
 app.use((err, req, res, next) => {

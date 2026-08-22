@@ -1,14 +1,18 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import {
   Filter, Calendar, Building2, Package, FileSpreadsheet, FileText,
   Download, CheckCircle2, Loader2, AlertTriangle, ShieldAlert,
   ClipboardList, Boxes, Truck, Wrench, FileWarning, History, Check
 } from 'lucide-vue-next'
+import api from '../services/api'
+import { useToast } from '../composables/useToast'
+
+const toast = useToast()
 
 // สิทธิ์การเข้าถึง: Admin, Staff เท่านั้น
 // TODO: เชื่อมกับระบบยืนยันตัวตนจริง เช่น decode role จาก JWT หรือข้อมูลผู้ใช้หลัง login
-const currentRole = ref(localStorage.getItem('tcaims_role') || 'admin') // ตอนนี้ดึงจาก localStorage ไปก่อน (เซ็ตตอน login) ถ้ายังไม่มีค่า ให้ default เป็น 'admin' (สิทธิ์สูงสุด ปลอดภัยไว้ก่อน)
+const currentRole = ref(localStorage.getItem('tcaims_role') || 'admin')
 const canAccess = computed(() => ['admin', 'staff'].includes(currentRole.value))
 
 /* ---------------- ตัวกรองข้อมูล ---------------- */
@@ -23,6 +27,9 @@ const filters = ref({
   department: 'ทุกหน่วยงาน',
   category: 'ทุกประเภท'
 })
+
+// รายงานที่ backend รองรับจริงในตอนนี้ — อีก 3 รายงานยังเลือกได้ในหน้านี้ แต่จะแจ้งเตือนตอนส่งออกว่ายังไม่รองรับ
+const SUPPORTED_REPORT_KEYS = ['asset_register', 'consumable_ledger']
 
 /* ---------------- ประเภทรายงาน ---------------- */
 const reportTypes = [
@@ -77,18 +84,28 @@ function clearReports() {
 /* ---------------- รูปแบบไฟล์ ---------------- */
 const exportFormat = ref('excel') // 'excel' | 'pdf'
 
-/* ---------------- ส่งออกข้อมูล ---------------- */
+/* ---------------- ประวัติการส่งออก (โหลดจาก backend จริง) ---------------- */
 const isExporting = ref(false)
 const exportError = ref('')
 const showSuccess = ref(false)
+const successMessage = ref('')
 
-const exportHistory = ref([
-  { id: 1, name: 'ทะเบียนครุภัณฑ์ · ปีงบประมาณ 2569', format: 'Excel', date: '18 ก.ค. 2569 14:20', by: 'Admin User' },
-  { id: 2, name: 'รายงานครุภัณฑ์ชำรุดประจำปี · ปีงบประมาณ 2568', format: 'PDF', date: '02 ก.ค. 2569 09:05', by: 'สมชาย ใจดี' },
-  { id: 3, name: 'บัญชีคุมพัสดุสิ้นเปลือง · ปีงบประมาณ 2569', format: 'Excel', date: '28 มิ.ย. 2569 16:40', by: 'Admin User' }
-])
+const exportHistory = ref([])
+const isLoadingHistory = ref(true)
 
-function handleExport() {
+async function loadExportHistory() {
+  isLoadingHistory.value = true
+  try {
+    const { data } = await api.get('/api/reports/export-history')
+    exportHistory.value = data.data || []
+  } catch (err) {
+    toast.error(err.message || 'โหลดประวัติการส่งออกไม่สำเร็จ')
+  } finally {
+    isLoadingHistory.value = false
+  }
+}
+
+async function handleExport() {
   exportError.value = ''
 
   if (selectedReports.value.length === 0) {
@@ -96,28 +113,72 @@ function handleExport() {
     return
   }
 
+  const unsupported = selectedReports.value.filter((k) => !SUPPORTED_REPORT_KEYS.includes(k))
+  if (exportFormat.value === 'pdf') {
+    exportError.value = 'การส่งออกเป็น PDF ยังไม่รองรับในตอนนี้ กรุณาเลือกส่งออกเป็น Excel ไปก่อน'
+    return
+  }
+  if (unsupported.length === selectedReports.value.length) {
+    exportError.value = 'รายงานที่เลือกทั้งหมดยังไม่รองรับการส่งออก กรุณาเลือก "บัญชีคุมพัสดุสิ้นเปลือง" หรือ "ทะเบียนครุภัณฑ์"'
+    return
+  }
+
   isExporting.value = true
 
-  // TODO: เชื่อมต่อ API สร้างไฟล์ Excel/PDF จริงในภายหลัง (ตอนนี้จำลองการส่งออก)
-  setTimeout(() => {
-    const names = reportTypes
-      .filter((r) => selectedReports.value.includes(r.key))
-      .map((r) => r.title)
-      .join(', ')
+  try {
+    const response = await api.post(
+      '/api/reports/export',
+      {
+        reportKeys: selectedReports.value,
+        format: exportFormat.value,
+        filters: {
+          department: filters.value.department,
+          category: filters.value.category,
+          dateFrom: filters.value.dateFrom || undefined,
+          dateTo: filters.value.dateTo || undefined
+        }
+      },
+      { responseType: 'blob' }
+    )
 
-    exportHistory.value.unshift({
-      id: Date.now(),
-      name: `${names} · ปีงบประมาณ ${filters.value.fiscalYear}`,
-      format: exportFormat.value === 'excel' ? 'Excel' : 'PDF',
-      date: new Date().toLocaleString('th-TH', { dateStyle: 'medium', timeStyle: 'short' }),
-      by: 'Admin User'
-    })
+    // สั่งดาวน์โหลดไฟล์จริงที่ browser
+    const blobUrl = window.URL.createObjectURL(new Blob([response.data]))
+    const link = document.createElement('a')
+    link.href = blobUrl
+    link.download = `report-${Date.now()}.xlsx`
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    window.URL.revokeObjectURL(blobUrl)
 
-    isExporting.value = false
+    successMessage.value = unsupported.length > 0
+      ? `ส่งออกสำเร็จ (ยกเว้นรายงานที่ยังไม่รองรับ: ${unsupported.length} รายการ)`
+      : 'ส่งออกรายงานเรียบร้อยแล้ว ระบบได้บันทึกลงในประวัติการส่งออกด้านล่าง'
+    toast.success('ส่งออกรายงานเรียบร้อยแล้ว')
     showSuccess.value = true
     setTimeout(() => { showSuccess.value = false }, 3000)
-  }, 1200)
+
+    await loadExportHistory()
+  } catch (err) {
+    // response เป็น blob ตอน error ด้วย ต้องอ่านข้อความ error ออกมาจาก blob เอง
+    let message = err.message || 'ส่งออกรายงานไม่สำเร็จ'
+    if (err.response?.data instanceof Blob) {
+      try {
+        const text = await err.response.data.text()
+        const parsed = JSON.parse(text)
+        message = parsed.message || message
+      } catch (_) { /* เก็บ message เดิมไว้ถ้า parse ไม่ได้ */ }
+    }
+    exportError.value = message
+    toast.error(message)
+  } finally {
+    isExporting.value = false
+  }
 }
+
+onMounted(() => {
+  loadExportHistory()
+})
 </script>
 
 <template>
@@ -160,7 +221,7 @@ function handleExport() {
       >
         <div v-if="showSuccess" class="mb-6 flex items-center gap-2.5 rounded-xl bg-emerald-50 border border-emerald-100 px-4 py-3 text-emerald-700">
           <CheckCircle2 class="w-5 h-5 shrink-0" />
-          <p class="text-sm font-medium">ส่งออกรายงานเรียบร้อยแล้ว ระบบได้บันทึกลงในประวัติการส่งออกด้านล่าง</p>
+          <p class="text-sm font-medium">{{ successMessage }}</p>
         </div>
       </Transition>
 
@@ -251,6 +312,9 @@ function handleExport() {
                 <span v-if="report.highlight" class="text-[10px] font-bold text-rose-600 bg-rose-50 border border-rose-100 px-1.5 py-0.5 rounded-full shrink-0">
                   ประจำปี
                 </span>
+                <span v-if="!SUPPORTED_REPORT_KEYS.includes(report.key)" class="text-[10px] font-bold text-amber-600 bg-amber-50 border border-amber-100 px-1.5 py-0.5 rounded-full shrink-0">
+                  เร็วๆ นี้
+                </span>
               </div>
               <p class="text-xs text-slate-500 mt-1 leading-relaxed">{{ report.description }}</p>
             </div>
@@ -285,14 +349,13 @@ function handleExport() {
               </button>
               <button
                 type="button"
-                @click="exportFormat = 'pdf'"
-                :class="[
-                  'flex items-center gap-2 px-4 py-2.5 rounded-lg border-2 text-sm font-semibold transition-all',
-                  exportFormat === 'pdf' ? 'border-[#065f46] bg-emerald-50 text-[#065f46] shadow-sm' : 'border-slate-200 text-slate-600 hover:border-emerald-200 hover:shadow-sm'
-                ]"
+                @click="toast.info('รูปแบบ PDF ยังไม่พร้อมใช้งานในตอนนี้ กำลังพัฒนาอยู่')"
+                title="ยังไม่รองรับ กำลังพัฒนา"
+                class="flex items-center gap-2 px-4 py-2.5 rounded-lg border-2 border-dashed border-slate-200 text-sm font-semibold text-slate-400 cursor-not-allowed"
               >
                 <FileText class="w-4 h-4" />
                 PDF (.pdf)
+                <span class="text-[10px] font-bold text-amber-600 bg-amber-50 border border-amber-100 px-1.5 py-0.5 rounded-full">เร็วๆ นี้</span>
               </button>
             </div>
           </div>
@@ -324,7 +387,12 @@ function handleExport() {
           <h3 class="text-lg font-bold text-slate-900">ประวัติการส่งออกล่าสุด</h3>
         </div>
 
-        <div class="space-y-2">
+        <div v-if="isLoadingHistory" class="py-10 flex flex-col items-center justify-center text-emerald-700/60">
+          <Loader2 class="w-5 h-5 animate-spin mb-2" />
+          <p class="text-sm">กำลังโหลดประวัติการส่งออก...</p>
+        </div>
+
+        <div v-else class="space-y-2">
           <div
             v-for="record in exportHistory"
             :key="record.id"

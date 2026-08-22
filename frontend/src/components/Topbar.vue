@@ -10,10 +10,11 @@ const isMenuOpen = ref(false)
 const isLogoutModalOpen = ref(false)
 const menuRef = ref(null)
 
-// ข้อมูลผู้ใช้งานที่อัปเดตตามโปรไฟล์
+// ข้อมูลผู้ใช้งานที่อัปเดตตามโปรไฟล์ (เพิ่มฟิลด์ role สำหรับใช้เช็คสิทธิ์แสดงผล)
 const user = ref({
   name: 'Admin User',
-  avatar: null
+  avatar: null,
+  role: 'user' // ค่าเริ่มต้นเป็น user ทั่วไปเพื่อความปลอดภัย
 })
 
 const fiscalYear = ref('2569')
@@ -29,6 +30,12 @@ function loadUserData() {
       // ซิงค์ avatar (รองรับทั้งกรณีมีรูปภาพ หรือ null)
       user.value.avatar = stored.avatar || null
     }
+
+    // ดึงค่า role จาก localStorage ที่ระบบบันทึกไว้ตอน Login สำเร็จ
+    const storedRole = localStorage.getItem('tcaims_role')
+    if (storedRole) {
+      user.value.role = String(storedRole).toLowerCase() // แปลงเป็นพิมพ์เล็กเพื่อใช้เช็คเงื่อนไข
+    }
   } catch (e) {
     // ignore
   }
@@ -38,6 +45,7 @@ function handleProfileUpdate(e) {
   if (e.detail) {
     if (e.detail.name) user.value.name = e.detail.name
     if (e.detail.avatar !== undefined) user.value.avatar = e.detail.avatar
+    if (e.detail.role) user.value.role = String(e.detail.role).toLowerCase() // อัปเดตสิทธิ์แบบ Realtime
   }
 }
 
@@ -86,6 +94,7 @@ function cancelLogout() {
 function confirmLogout() {
   localStorage.removeItem('tcaims_auth_token')
   localStorage.removeItem('tcaims_user')
+  localStorage.removeItem('tcaims_role') // ล้างข้อมูลสิทธิ์ออกตอนออกจากระบบ
   isLogoutModalOpen.value = false
   router.push('/login')
 }
@@ -154,7 +163,10 @@ onUnmounted(() => {
           </div>
           <div class="text-left hidden sm:block">
             <div class="text-sm font-medium text-slate-700 leading-none">{{ user.name }}</div>
-            <div class="text-xs text-slate-500 mt-1">ผู้ดูแลระบบ</div>
+            <!-- แก้ไขจุดที่ 1: แสดงประเภทสิทธิ์ตามที่ดึงมาจากฐานข้อมูลจริงแบบ Dynamic -->
+            <div class="text-xs text-slate-500 mt-1">
+              {{ user.role === 'admin' ? 'ผู้ดูแลระบบ' : user.role === 'staff' ? 'เจ้าหน้าที่พัสดุ' : 'ผู้ใช้งานทั่วไป' }}
+            </div>
           </div>
           <ChevronDown
             class="w-4 h-4 text-slate-400 transition-transform hidden sm:block"
@@ -177,7 +189,10 @@ onUnmounted(() => {
           >
             <div class="px-3.5 py-2.5 border-b border-slate-100">
               <div class="text-sm font-medium text-slate-800 truncate">{{ user.name }}</div>
-              <div class="text-xs text-slate-500 mt-0.5">ผู้ดูแลระบบ</div>
+              <!-- แก้ไขจุดที่ 2: แสดงประเภทสิทธิ์ในกล่องเมนูดรอปดาวน์ตามจริงแบบ Dynamic -->
+              <div class="text-xs text-slate-500 mt-0.5">
+                {{ user.role === 'admin' ? 'ผู้ดูแลระบบ' : user.role === 'staff' ? 'เจ้าหน้าที่พัสดุ' : 'ผู้ใช้งานทั่วไป' }}
+              </div>
             </div>
 
             <button

@@ -24,8 +24,15 @@ import {
 } from 'lucide-vue-next'
 import * as inventoryApi from '../services/inventoryApi.js'
 import { useToast } from '../composables/useToast.js'
+import axios from 'axios'
+import { API_BASE } from '../config/api'
 
 const toast = useToast()
+
+function authHeaders() {
+  const token = localStorage.getItem('tcaims_auth_token')
+  return { Authorization: `Bearer ${token}` }
+}
 
 // --- View State ---
 const currentView = ref('LIST')
@@ -54,6 +61,22 @@ const currentUser = ref({
   name: userObj.name || 'ผู้ใช้งานระบบ',
   role: currentRoleStr === 'admin' ? 'Admin' : currentRoleStr === 'staff' ? 'Staff' : 'User'
 })
+
+// หน่วยงานจริงของผู้ใช้ที่ login อยู่ (ดึงจาก backend เพราะ localStorage ไม่ได้เก็บข้อมูลนี้ไว้)
+// ใช้เป็นเกณฑ์ "ครุภัณฑ์ที่ตนรับผิดชอบ" สำหรับ role User
+const myDepartment = ref('')
+const isProfileLoaded = ref(false)
+
+async function fetchMyProfile() {
+  try {
+    const response = await axios.get(`${API_BASE}/users/me`, { headers: authHeaders() })
+    myDepartment.value = response.data.data?.department?.name || ''
+  } catch (err) {
+    // ถ้าดึงไม่สำเร็จ ปล่อยว่างไว้ (User จะไม่เห็นรายการใดเลยตามค่า default ที่ปลอดภัยไว้ก่อน)
+  } finally {
+    isProfileLoaded.value = true
+  }
+}
 
 // --- Master Asset List Database ---
 const assets = ref([])
@@ -86,7 +109,10 @@ async function fetchAssets() {
   }
 }
 
-onMounted(fetchAssets)
+onMounted(async () => {
+  await fetchMyProfile()
+  await fetchAssets()
+})
 
 // --- Search & Filter State ---
 const searchQuery = ref('')
@@ -94,10 +120,10 @@ const statusFilter = ref('')
 
 const filteredAssets = computed(() => {
   return assets.value.filter(asset => {
-    if (currentUser.value.role === 'User' && asset.department !== userObj.department?.name) {
-      if (userObj.department?.name) {
-        return false
-      }
+    // User เห็นเฉพาะครุภัณฑ์ของหน่วยงานตัวเอง (ใช้เป็นตัวแทน "ที่ตนรับผิดชอบ" เพราะระบบยังผูกความรับผิดชอบระดับหน่วยงาน ไม่ใช่รายบุคคล)
+    if (currentUser.value.role === 'User') {
+      if (!myDepartment.value) return false // ยังไม่รู้หน่วยงานของผู้ใช้ ไม่แสดงอะไรไว้ก่อน (ปลอดภัยไว้ก่อน)
+      if (asset.department !== myDepartment.value) return false
     }
 
     const matchesSearch = asset.name.toLowerCase().includes(searchQuery.value.toLowerCase()) ||

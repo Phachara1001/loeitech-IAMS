@@ -30,8 +30,9 @@ const userObj = JSON.parse(localStorage.getItem('tcaims_user') || '{}')
 const currentUser = ref({
   id: userObj.id || 'USR-001',
   name: userObj.name || 'ผู้ตรวจสอบพัสดุ',
-  role: localStorage.getItem('tcaims_role') || 'Admin' // 'Admin' | 'Staff' | 'User'
+  role: (localStorage.getItem('tcaims_role') || 'user').toLowerCase() // 'admin' | 'staff' | 'user'
 })
+const canApprove = computed(() => ['admin', 'staff'].includes(currentUser.value.role))
 
 // --- Helper: Format DATETIME เป็นภาษาไทย ---
 const formatThaiDateTime = (dateString) => {
@@ -86,7 +87,7 @@ const statusFilter = ref('')
 const filteredRequisitions = computed(() => {
   return requisitions.value.filter(req => {
     // RBAC Control: User เห็นเฉพาะของตัวเอง | Staff/Admin เห็นทั้งหมด
-    if (currentUser.value.role === 'User' && req.requesterId && req.requesterId !== currentUser.value.id) {
+    if (currentUser.value.role === 'user' && req.requesterId && req.requesterId !== currentUser.value.id) {
       return false
     }
 
@@ -119,7 +120,7 @@ const openDetailModal = (req) => {
 
 // อนุมัติการเบิก -> หัก สต็อก (ผ่าน Backend transaction)
 const handleApprove = async (req) => {
-  if (currentUser.value.role === 'User') return
+  if (!canApprove.value) return
 
   if (confirm(`ยืนยันการอนุมัติใบขอเบิกเลขที่ ${req.reqCode || req.id} ?\nระบบจะทำการหักยอดพัสดุในคลังอัตโนมัติ`)) {
     isActionLoading.value = true
@@ -141,7 +142,7 @@ const handleApprove = async (req) => {
 
 // ปฏิเสธการเบิก
 const handleReject = async (req) => {
-  if (currentUser.value.role === 'User') return
+  if (!canApprove.value) return
 
   const reasonText = prompt(`กรุณาระบุเหตุผลในการปฏิเสธใบเบิก ${req.reqCode || req.id}:`)
   if (reasonText !== null && reasonText.trim() !== '') {
@@ -260,10 +261,10 @@ const getStatusBadge = (status) => {
     <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
       <div>
         <h2 class="text-2xl font-bold text-slate-800">
-          {{ currentUser.role === 'User' ? 'รายการคำขอเบิกของฉัน' : 'รายการคำขอเบิกพัสดุทั้งหมด' }}
+          {{ currentUser.role === 'user' ? 'รายการคำขอเบิกของฉัน' : 'รายการคำขอเบิกพัสดุทั้งหมด' }}
         </h2>
         <p class="text-slate-500 mt-0.5">
-          {{ currentUser.role === 'User' ? 'ติดตามสถานะการอนุมัติคำขอเบิกพัสดุของคุณ' : 'ตรวจสอบและอนุมัติใบขอเบิกเพื่อตัดยอดสต็อกพัสดุ' }}
+          {{ currentUser.role === 'user' ? 'ติดตามสถานะการอนุมัติคำขอเบิกพัสดุของคุณ' : 'ตรวจสอบและอนุมัติใบขอเบิกเพื่อตัดยอดสต็อกพัสดุ' }}
         </p>
       </div>
       <div>
@@ -359,7 +360,7 @@ const getStatusBadge = (status) => {
                   </button>
 
                   <!-- ปุ่ม อนุมัติ / ปฏิเสธ (แสดงเฉพาะ Staff / Admin เมื่อสถานะเป็น PENDING) -->
-                  <template v-if="(currentUser.role === 'Admin' || currentUser.role === 'Staff') && req.status === 'PENDING'">
+                  <template v-if="canApprove && req.status === 'PENDING'">
                     <button 
                       @click="handleApprove(req)"
                       class="px-3 py-1.5 bg-emerald-800 hover:bg-emerald-700 text-white rounded-xl font-extrabold text-xs flex items-center transition-all cursor-pointer shadow-sm"
@@ -483,7 +484,7 @@ const getStatusBadge = (status) => {
 
         <!-- Modal Footer Actions -->
         <div class="p-6 bg-slate-50 border-t border-slate-200 flex justify-end gap-3">
-          <template v-if="(currentUser.role === 'Admin' || currentUser.role === 'Staff') && selectedReq.status === 'PENDING'">
+          <template v-if="canApprove && selectedReq.status === 'PENDING'">
             <button 
               @click="handleReject(selectedReq)"
               class="px-5 py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-700 font-extrabold rounded-xl transition-all border border-rose-200 cursor-pointer"

@@ -406,7 +406,7 @@ async function completeRepair() {
                   <p v-else class="text-sm font-medium text-slate-500">คลิกเพื่อค้นหาและเลือกจากรายการ...</p>
                 </div>
                 <span :class="['shrink-0 px-4 py-2 rounded-xl text-sm font-bold transition-all',
-                  selectedAsset ? 'bg-white border border-emerald-100 text-emerald-700 shadow-sm' : 'bg-slate-800 text-white shadow-md hover:bg-slate-700']">
+                  selectedAsset ? 'bg-white border border-emerald-100 text-emerald-700 shadow-sm hover:bg-emerald-50' : 'bg-gradient-to-r from-[#072415] to-[#065f46] text-white shadow-md hover:shadow-lg']">
                   {{ selectedAsset ? 'เปลี่ยนครุภัณฑ์' : 'ค้นหาครุภัณฑ์' }}
                 </span>
               </button>
@@ -426,31 +426,47 @@ async function completeRepair() {
               <h3 class="text-lg font-bold text-slate-800 mb-1">ระดับความเร่งด่วน</h3>
               <p class="text-sm text-slate-500 mb-4">กำหนดระยะเวลาดำเนินการซ่อมที่ต้องการ</p>
 
-              <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <button v-for="opt in [
-                  { v: 'NORMAL',   icon: '🟢', label: 'ปกติ',      desc: 'ภายใน 7 วัน', color: 'slate-800' },
-                  { v: 'URGENT',   icon: '🟡', label: 'ด่วน',       desc: 'ภายใน 2 วัน', color: 'orange-500' },
-                  { v: 'CRITICAL', icon: '🔴', label: 'ด่วนที่สุด', desc: 'ภายในวันนี้', color: 'red-500' }
+                  { v: 'NORMAL',   icon: 'CheckCircle2', label: 'ปกติ',      desc: 'ภายใน 7 วัน', color: 'emerald', hex: '16, 185, 129' },
+                  { v: 'URGENT',   icon: 'Clock',        label: 'ด่วน',       desc: 'ภายใน 2 วัน', color: 'amber',   hex: '245, 158, 11' },
+                  { v: 'CRITICAL', icon: 'AlertTriangle',label: 'ด่วนที่สุด', desc: 'ภายในวันนี้', color: 'rose',    hex: '244, 63, 94' }
                 ]" :key="opt.v" type="button" @click="form.urgency = opt.v"
-                  :class="['relative flex items-center p-4 rounded-2xl border-2 transition-all duration-200 cursor-pointer overflow-hidden group',
+                  :class="['relative flex flex-col items-start p-5 rounded-2xl transition-all duration-300 cursor-pointer overflow-hidden group border-2',
                     form.urgency === opt.v
-                      ? `border-${opt.color} bg-${opt.color}/5 shadow-md`
-                      : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50']">
+                      ? `border-${opt.color}-500 bg-white shadow-[0_0_20px_rgba(${opt.hex},0.15)] -translate-y-1`
+                      : 'border-slate-200 bg-white hover:border-slate-300 hover:shadow-md hover:-translate-y-0.5'
+                  ]">
                   
-                  <div :class="['absolute inset-y-0 left-0 w-1.5 transition-colors duration-300', form.urgency === opt.v ? `bg-${opt.color}` : 'bg-transparent']"></div>
+                  <!-- Glow Effect in Background (Active) -->
+                  <div :class="['absolute -top-12 -right-12 w-32 h-32 rounded-full blur-3xl transition-opacity duration-500',
+                    form.urgency === opt.v ? `bg-${opt.color}-500/20 opacity-100` : 'opacity-0']"></div>
 
-                  <div class="pl-2 flex-1 text-left">
-                    <div class="flex items-center gap-2 mb-1">
-                      <span class="text-lg">{{ opt.icon }}</span>
-                      <span :class="['font-bold', form.urgency === opt.v ? `text-${opt.color}` : 'text-slate-700']">{{ opt.label }}</span>
+                  <!-- Icon & Checkmark -->
+                  <div class="flex items-start justify-between w-full mb-4 z-10">
+                    <div :class="['w-12 h-12 rounded-xl flex items-center justify-center transition-all duration-300 shadow-sm',
+                      form.urgency === opt.v ? `bg-${opt.color}-500 text-white shadow-${opt.color}-500/30 scale-110` : `bg-${opt.color}-50 text-${opt.color}-600 group-hover:scale-105`]">
+                      <CheckCircle2 v-if="opt.icon === 'CheckCircle2'" class="w-6 h-6" />
+                      <Clock v-else-if="opt.icon === 'Clock'" class="w-6 h-6" />
+                      <AlertTriangle v-else-if="opt.icon === 'AlertTriangle'" class="w-6 h-6" />
                     </div>
-                    <span :class="['text-xs font-medium', form.urgency === opt.v ? `text-${opt.color}/70` : 'text-slate-400']">{{ opt.desc }}</span>
+                    
+                    <!-- Radio Indicator -->
+                    <div :class="['w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all duration-300 mt-1',
+                      form.urgency === opt.v ? `border-${opt.color}-500 bg-${opt.color}-500 scale-110` : 'border-slate-300 bg-slate-50 group-hover:border-slate-400']">
+                      <Check v-if="form.urgency === opt.v" class="w-3.5 h-3.5 text-white" />
+                    </div>
                   </div>
-
-                  <div :class="['w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors',
-                    form.urgency === opt.v ? `border-${opt.color} bg-${opt.color}` : 'border-slate-300']">
-                    <Check v-if="form.urgency === opt.v" class="w-3.5 h-3.5 text-white" />
+                  
+                  <!-- Text Content -->
+                  <div class="z-10 text-left">
+                    <h4 :class="['text-lg font-bold transition-colors', form.urgency === opt.v ? `text-${opt.color}-700` : 'text-slate-800']">{{ opt.label }}</h4>
+                    <p :class="['text-sm font-medium mt-1', form.urgency === opt.v ? `text-${opt.color}-600/80` : 'text-slate-500']">{{ opt.desc }}</p>
                   </div>
+                  
+                  <!-- Animated Accent Bar at bottom -->
+                  <div :class="['absolute bottom-0 left-0 h-1 transition-all duration-500 ease-out', 
+                    form.urgency === opt.v ? `w-full bg-${opt.color}-500` : 'w-0 bg-transparent']"></div>
                 </button>
               </div>
             </div>
@@ -525,11 +541,11 @@ async function completeRepair() {
               </div>
 
               <button type="button" :disabled="isSubmitting" @click="submitRepairRequest"
-                class="w-full sm:w-auto flex items-center justify-center gap-3 rounded-full bg-slate-900 text-white px-8 py-4 text-base font-bold shadow-xl shadow-slate-900/20 hover:shadow-2xl hover:shadow-slate-900/30 hover:-translate-y-1 active:translate-y-0 transition-all disabled:opacity-50 disabled:translate-y-0 cursor-pointer group">
+                class="w-full sm:w-auto flex items-center justify-center gap-3 rounded-full bg-gradient-to-r from-[#072415] to-[#065f46] text-white px-8 py-4 text-base font-bold shadow-xl shadow-emerald-900/20 hover:shadow-2xl hover:shadow-emerald-900/30 hover:-translate-y-1 active:translate-y-0 transition-all disabled:opacity-50 disabled:translate-y-0 cursor-pointer group">
                 <Loader2 v-if="isSubmitting" class="w-5 h-5 animate-spin" />
-                <Wrench v-else class="w-5 h-5 group-hover:rotate-12 transition-transform" />
+                <Wrench v-else class="w-5 h-5 group-hover:rotate-12 transition-transform text-emerald-300" />
                 {{ isSubmitting ? 'กำลังส่งคำขอ...' : 'ส่งคำขอแจ้งซ่อม' }}
-                <div v-if="!isSubmitting" class="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center ml-2">
+                <div v-if="!isSubmitting" class="w-6 h-6 rounded-full bg-white/10 flex items-center justify-center ml-2">
                   <Check class="w-3.5 h-3.5 text-white" />
                 </div>
               </button>
@@ -540,7 +556,6 @@ async function completeRepair() {
         </div>
       </div>
     </div>
-
 
 
 

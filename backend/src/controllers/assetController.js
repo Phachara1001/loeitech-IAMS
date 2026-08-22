@@ -1,5 +1,5 @@
-import * as assetService from '../services/assetService.js';
-import { logActivity } from '../utils/activityLogger.js';
+import * as assetService from "../services/assetService.js";
+import { logActivity } from "../utils/activityLogger.js";
 
 /**
  * @swagger
@@ -21,7 +21,7 @@ import { logActivity } from '../utils/activityLogger.js';
 export const getAssets = async (req, res, next) => {
   try {
     const assets = await assetService.getAllAssets();
-    res.status(200).json({ status: 'success', data: assets });
+    res.status(200).json({ status: "success", data: assets });
   } catch (error) {
     next(error);
   }
@@ -48,7 +48,7 @@ export const getAssets = async (req, res, next) => {
 export const getAssetById = async (req, res, next) => {
   try {
     const asset = await assetService.getAssetById(req.params.id);
-    res.status(200).json({ status: 'success', data: asset });
+    res.status(200).json({ status: "success", data: asset });
   } catch (error) {
     next(error);
   }
@@ -94,14 +94,20 @@ export const createAsset = async (req, res, next) => {
 
     await logActivity({
       req,
-      action: 'INSERT',
-      entityType: 'ASSET',
+      action: "INSERT",
+      entityType: "ASSET",
       entityId: newAsset.id,
       newValue: newAsset,
-      details: `เพิ่มครุภัณฑ์ "${newAsset.name}" (${newAsset.seq})`
+      details: `เพิ่มครุภัณฑ์ "${newAsset.name}" (${newAsset.seq})`,
     });
 
-    res.status(201).json({ status: 'success', data: newAsset, message: 'บันทึกครุภัณฑ์สำเร็จ' });
+    res
+      .status(201)
+      .json({
+        status: "success",
+        data: newAsset,
+        message: "บันทึกครุภัณฑ์สำเร็จ",
+      });
   } catch (error) {
     next(error);
   }
@@ -132,19 +138,28 @@ export const createAsset = async (req, res, next) => {
 export const updateAsset = async (req, res, next) => {
   try {
     const before = await assetService.getAssetById(req.params.id);
-    const updatedAsset = await assetService.updateAsset(req.params.id, req.body);
+    const updatedAsset = await assetService.updateAsset(
+      req.params.id,
+      req.body,
+    );
 
     await logActivity({
       req,
-      action: 'UPDATE',
-      entityType: 'ASSET',
+      action: "UPDATE",
+      entityType: "ASSET",
       entityId: updatedAsset.id,
       oldValue: before,
       newValue: updatedAsset,
-      details: `แก้ไขครุภัณฑ์ "${updatedAsset.name}" (${updatedAsset.seq})`
+      details: `แก้ไขครุภัณฑ์ "${updatedAsset.name}" (${updatedAsset.seq})`,
     });
 
-    res.status(200).json({ status: 'success', data: updatedAsset, message: 'อัปเดตข้อมูลสำเร็จ' });
+    res
+      .status(200)
+      .json({
+        status: "success",
+        data: updatedAsset,
+        message: "อัปเดตข้อมูลสำเร็จ",
+      });
   } catch (error) {
     next(error);
   }
@@ -173,14 +188,14 @@ export const deleteAsset = async (req, res, next) => {
 
     await logActivity({
       req,
-      action: 'DELETE',
-      entityType: 'ASSET',
+      action: "DELETE",
+      entityType: "ASSET",
       entityId: before.id,
       oldValue: before,
-      details: `ลบครุภัณฑ์ "${before.name}" (${before.seq})`
+      details: `ลบครุภัณฑ์ "${before.name}" (${before.seq})`,
     });
 
-    res.status(200).json({ status: 'success', message: 'ลบข้อมูลสำเร็จ' });
+    res.status(200).json({ status: "success", message: "ลบข้อมูลสำเร็จ" });
   } catch (error) {
     next(error);
   }
@@ -211,10 +226,43 @@ export const deleteAsset = async (req, res, next) => {
 export const uploadImage = async (req, res, next) => {
   try {
     if (!req.file) {
-      return res.status(400).json({ status: 'error', message: 'กรุณาแนบไฟล์รูปภาพ' });
+      return res
+        .status(400)
+        .json({ status: "error", message: "กรุณาแนบไฟล์รูปภาพ" });
     }
     const imageUrl = await assetService.uploadImageToMinio(req.file);
-    res.status(200).json({ status: 'success', data: { imageUrl }, message: 'อัปโหลดรูปภาพสำเร็จ' });
+    res
+      .status(200)
+      .json({
+        status: "success",
+        data: { imageUrl },
+        message: "อัปโหลดรูปภาพสำเร็จ",
+      });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @swagger
+ * /api/assets/{id}/timeline:
+ *   get:
+ *     summary: ดึงข้อมูลไทม์ไลน์ของครุภัณฑ์
+ *     tags: [Assets]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: สำเร็จ
+ */
+export const getAssetTimeline = async (req, res, next) => {
+  try {
+    const data = await assetService.getAssetTimeline(req.params.id);
+    res.status(200).json({ status: "success", data });
   } catch (error) {
     next(error);
   }

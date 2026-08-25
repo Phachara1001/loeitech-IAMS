@@ -13,6 +13,7 @@ import {
   Package,
   UserCheck,
   AlertCircle,
+  AlertTriangle,
   TrendingDown,
   History,
   Calendar,
@@ -119,47 +120,85 @@ const openDetailModal = (req) => {
 }
 
 // อนุมัติการเบิก -> หัก สต็อก (ผ่าน Backend transaction)
-const handleApprove = async (req) => {
-  if (!canApprove.value) return
+const isApproveConfirmOpen = ref(false)
+const pendingApproveReq = ref(null)
 
-  if (confirm(`ยืนยันการอนุมัติใบขอเบิกเลขที่ ${req.reqCode || req.id} ?\nระบบจะทำการหักยอดพัสดุในคลังอัตโนมัติ`)) {
-    isActionLoading.value = true
-    try {
-      await inventoryApi.approveRequisition(req.id, {
-        approvedBy: currentUser.value.name,
-        remark: 'อนุมัติจ่ายพัสดุเรียบร้อย'
-      })
-      toast.success('อนุมัติและหักยอดสต็อกเรียบร้อยแล้ว!')
-      isDetailModalOpen.value = false
-      await fetchData() // อัปเดตตารางและจำนวนสต๊อกใหม่
-    } catch (err) {
-      toast.error('ไม่สามารถอนุมัติได้: ' + err.message)
-    } finally {
-      isActionLoading.value = false
-    }
+const handleApprove = (req) => {
+  if (!canApprove.value) return
+  pendingApproveReq.value = req
+  isApproveConfirmOpen.value = true
+}
+
+const cancelApprove = () => {
+  isApproveConfirmOpen.value = false
+  pendingApproveReq.value = null
+}
+
+const confirmApprove = async () => {
+  const req = pendingApproveReq.value
+  if (!req) return
+
+  isActionLoading.value = true
+  try {
+    await inventoryApi.approveRequisition(req.id, {
+      approvedBy: currentUser.value.name,
+      remark: 'อนุมัติจ่ายพัสดุเรียบร้อย'
+    })
+    toast.success('อนุมัติและหักยอดสต็อกเรียบร้อยแล้ว!')
+    isApproveConfirmOpen.value = false
+    isDetailModalOpen.value = false
+    await fetchData() // อัปเดตตารางและจำนวนสต๊อกใหม่
+  } catch (err) {
+    toast.error('ไม่สามารถอนุมัติได้: ' + err.message)
+  } finally {
+    isActionLoading.value = false
+    pendingApproveReq.value = null
   }
 }
 
 // ปฏิเสธการเบิก
-const handleReject = async (req) => {
-  if (!canApprove.value) return
+const isRejectModalOpen = ref(false)
+const pendingRejectReq = ref(null)
+const rejectReason = ref('')
+const rejectReasonError = ref('')
 
-  const reasonText = prompt(`กรุณาระบุเหตุผลในการปฏิเสธใบเบิก ${req.reqCode || req.id}:`)
-  if (reasonText !== null && reasonText.trim() !== '') {
-    isActionLoading.value = true
-    try {
-      await inventoryApi.rejectRequisition(req.id, {
-        approvedBy: currentUser.value.name,
-        remark: reasonText.trim()
-      })
-      toast.success('ปฏิเสธคำขอเบิกพัสดุเรียบร้อยแล้ว')
-      isDetailModalOpen.value = false
-      await fetchData()
-    } catch (err) {
-      toast.error('ปฏิเสธไม่สำเร็จ: ' + err.message)
-    } finally {
-      isActionLoading.value = false
-    }
+const handleReject = (req) => {
+  if (!canApprove.value) return
+  pendingRejectReq.value = req
+  rejectReason.value = ''
+  rejectReasonError.value = ''
+  isRejectModalOpen.value = true
+}
+
+const cancelReject = () => {
+  isRejectModalOpen.value = false
+  pendingRejectReq.value = null
+}
+
+const confirmReject = async () => {
+  const req = pendingRejectReq.value
+  if (!req) return
+
+  if (!rejectReason.value.trim()) {
+    rejectReasonError.value = 'กรุณาระบุเหตุผลในการปฏิเสธ'
+    return
+  }
+
+  isActionLoading.value = true
+  try {
+    await inventoryApi.rejectRequisition(req.id, {
+      approvedBy: currentUser.value.name,
+      remark: rejectReason.value.trim()
+    })
+    toast.success('ปฏิเสธคำขอเบิกพัสดุเรียบร้อยแล้ว')
+    isRejectModalOpen.value = false
+    isDetailModalOpen.value = false
+    await fetchData()
+  } catch (err) {
+    toast.error('ปฏิเสธไม่สำเร็จ: ' + err.message)
+  } finally {
+    isActionLoading.value = false
+    pendingRejectReq.value = null
   }
 }
 
@@ -475,8 +514,12 @@ const getStatusBadge = (status) => {
               <Calendar class="w-3.5 h-3.5 text-slate-400" />
               <span>เมื่อวันที่: {{ formatThaiDateTime(selectedReq.approvedAt) }}</span>
             </div>
-            <div v-if="selectedReq.remark" class="text-sm text-rose-700 font-bold pt-1">
-              เหตุผลการปฏิเสธ: {{ selectedReq.remark }}
+            <div
+              v-if="selectedReq.remark"
+              class="text-sm font-bold pt-1"
+              :class="selectedReq.status === 'APPROVED' ? 'text-emerald-700' : 'text-rose-700'"
+            >
+              {{ selectedReq.status === 'APPROVED' ? 'หมายเหตุการอนุมัติ' : 'เหตุผลการปฏิเสธ' }}: {{ selectedReq.remark }}
             </div>
           </div>
 
@@ -604,6 +647,94 @@ const getStatusBadge = (status) => {
 
         </form>
 
+      </div>
+    </div>
+
+    <!-- MODAL ยืนยันการอนุมัติ (แทน confirm() เดิม) -->
+    <div v-if="isApproveConfirmOpen" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm" @click.self="cancelApprove">
+      <div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 relative">
+        <button @click="cancelApprove" class="absolute top-4 right-4 text-slate-400 hover:text-slate-700 p-1 rounded-lg transition-colors cursor-pointer">
+          <X class="w-4 h-4" />
+        </button>
+
+        <div class="flex flex-col items-center text-center">
+          <div class="w-14 h-14 rounded-full bg-emerald-50 flex items-center justify-center mb-4">
+            <CheckCircle2 class="w-7 h-7 text-emerald-600" />
+          </div>
+          <h3 class="text-lg font-bold text-slate-900">ยืนยันการอนุมัติ</h3>
+          <p class="text-sm text-slate-500 mt-2 leading-relaxed">
+            ยืนยันการอนุมัติใบขอเบิกเลขที่ <span class="font-bold text-slate-700">{{ pendingApproveReq?.reqCode || pendingApproveReq?.id }}</span>
+            <br />ระบบจะทำการหักยอดพัสดุในคลังอัตโนมัติ
+          </p>
+        </div>
+
+        <div class="flex items-center gap-3 mt-6">
+          <button
+            type="button"
+            @click="cancelApprove"
+            :disabled="isActionLoading"
+            class="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-700 font-semibold text-sm hover:bg-slate-50 transition disabled:opacity-60"
+          >
+            ยกเลิก
+          </button>
+          <button
+            type="button"
+            @click="confirmApprove"
+            :disabled="isActionLoading"
+            class="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-sm shadow-md transition disabled:opacity-70"
+          >
+            <Loader2 v-if="isActionLoading" class="w-4 h-4 animate-spin" />
+            <span>{{ isActionLoading ? 'กำลังอนุมัติ...' : 'ยืนยันอนุมัติ' }}</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODAL ปฏิเสธพร้อมกรอกเหตุผล (แทน prompt() เดิม) -->
+    <div v-if="isRejectModalOpen" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm" @click.self="cancelReject">
+      <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 relative">
+        <button @click="cancelReject" class="absolute top-4 right-4 text-slate-400 hover:text-slate-700 p-1 rounded-lg transition-colors cursor-pointer">
+          <X class="w-4 h-4" />
+        </button>
+
+        <div class="flex flex-col items-center text-center mb-5">
+          <div class="w-14 h-14 rounded-full bg-rose-50 flex items-center justify-center mb-4">
+            <XCircle class="w-7 h-7 text-rose-600" />
+          </div>
+          <h3 class="text-lg font-bold text-slate-900">ปฏิเสธคำขอเบิก</h3>
+          <p class="text-sm text-slate-500 mt-1.5">
+            ใบขอเบิกเลขที่ <span class="font-bold text-slate-700">{{ pendingRejectReq?.reqCode || pendingRejectReq?.id }}</span>
+          </p>
+        </div>
+
+        <label class="block text-sm font-semibold text-slate-700 mb-1.5">เหตุผลในการปฏิเสธ</label>
+        <textarea
+          v-model="rejectReason"
+          rows="3"
+          placeholder="ระบุเหตุผล เช่น สต็อกไม่เพียงพอ, ข้อมูลไม่ครบถ้วน..."
+          class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-400 transition"
+        ></textarea>
+        <p v-if="rejectReasonError" class="text-xs text-rose-600 mt-1.5">{{ rejectReasonError }}</p>
+
+        <div class="flex items-center gap-3 mt-6">
+          <button
+            type="button"
+            @click="cancelReject"
+            :disabled="isActionLoading"
+            class="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-700 font-semibold text-sm hover:bg-slate-50 transition disabled:opacity-60"
+          >
+            ยกเลิก
+          </button>
+          <button
+            type="button"
+            @click="confirmReject"
+            :disabled="isActionLoading"
+            class="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-sm shadow-md transition disabled:opacity-70"
+          >
+            <Loader2 v-if="isActionLoading" class="w-4 h-4 animate-spin" />
+            <span>{{ isActionLoading ? 'กำลังบันทึก...' : 'ยืนยันปฏิเสธ' }}</span>
+          </button>
+        </div>
       </div>
     </div>
 

@@ -68,7 +68,8 @@ const currentUserName = computed(() => {
 })
 
 // --- Form State ---
-const todayStr = new Date().toISOString().substring(0, 10)
+const now = new Date()
+const todayStr = new Date(now.getTime() - (now.getTimezoneOffset() * 60000)).toISOString().slice(0, 16)
 
 const formData = ref({
   // ข้อมูลทั่วไป
@@ -136,6 +137,9 @@ const handleSaveAsset = async () => {
     const payload = { ...formData.value }
     if (imageUrl) {
       payload.image = imageUrl
+    }
+    if (payload.acquiredDate) {
+      payload.acquiredDate = new Date(payload.acquiredDate).toISOString()
     }
 
     // Send to backend API
@@ -322,7 +326,7 @@ const resetFormAndContinue = () => {
               <label class="block text-base font-extrabold text-slate-800 mb-2 flex items-center gap-2">
                 <Calendar class="w-5 h-5 text-emerald-600" /> วันที่ได้มา <span class="text-rose-500">*</span>
               </label>
-              <input v-model="formData.acquiredDate" type="date" required
+              <input v-model="formData.acquiredDate" type="datetime-local" required
                 class="w-full bg-slate-50 border-2 border-slate-200 rounded-2xl p-4 text-slate-900 font-bold text-lg focus:outline-none focus:border-emerald-600 focus:bg-white transition-all cursor-pointer" />
             </div>
 

@@ -102,6 +102,7 @@ export const getRequisitionById = async (req, res, next) => {
  */
 export const createRequisition = async (req, res, next) => {
   try {
+    req.body.requesterId = req.user?.id;
     const data = await requisitionService.createRequisition(req.body);
 
     await logActivity({
@@ -160,6 +161,7 @@ export const createRequisition = async (req, res, next) => {
  */
 export const approveRequisition = async (req, res, next) => {
   try {
+    req.body.approverId = req.user?.id;
     const before = await requisitionService.getRequisitionById(req.params.id);
     const data = await requisitionService.approveRequisition(req.params.id, req.body);
 

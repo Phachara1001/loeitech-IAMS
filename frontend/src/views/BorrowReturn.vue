@@ -134,13 +134,13 @@ async function saveForm() {
   isSaving.value = true
   formError.value = ''
   try {
-    const todayStr = new Date().toISOString().substring(0, 10)
+    const fullDateTime = new Date().toISOString()
     await inventoryApi.createBorrow({
       assetId: Number(form.value.assetId),
       borrowerName: currentUserName.value,
       borrowerDept: 'งานพัสดุกลาง',
-      borrowDate: todayStr,
-      dueDate: form.value.dueDate,
+      borrowDate: fullDateTime,
+      dueDate: new Date(form.value.dueDate).toISOString(),
       purpose: form.value.purpose.trim()
     })
     toast.success('ยื่นคำขอยืมครุภัณฑ์สำเร็จ!')
@@ -363,7 +363,7 @@ async function confirmReturn() {
 
             <div>
               <label class="block text-sm font-semibold text-slate-700 mb-1.5">กำหนดวันส่งคืน <span class="text-red-500">*</span></label>
-              <input v-model="form.dueDate" type="date"
+              <input v-model="form.dueDate" type="datetime-local"
                 class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#065f46]/20 focus:border-[#065f46] transition" />
             </div>
 

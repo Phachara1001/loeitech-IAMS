@@ -13,11 +13,14 @@ import {
   Image as ImageIcon,
   UploadCloud,
   X,
-  AlertTriangle
+  AlertTriangle,
+  Loader2,
+  Printer
 } from 'lucide-vue-next'
 import BaseModal from '../components/BaseModal.vue'
 import { useToast } from '../composables/useToast'
 import { API_BASE } from '../config/api'
+import PrintAssetListTemplate from '../components/PrintAssetListTemplate.vue'
 
 const router = useRouter()
 const toast = useToast()
@@ -180,7 +183,7 @@ const handleImageUpload = async (event) => {
     const uploadResponse = await axios.post(`${API_BASE}/assets/upload`, uploadData, {
       headers: { ...authHeaders(), 'Content-Type': 'multipart/form-data' }
     })
-    
+
     const imageUrl = uploadResponse.data.data.imageUrl
 
     // Prepare full update data to pass backend validation
@@ -189,10 +192,10 @@ const handleImageUpload = async (event) => {
 
     // Update the asset in database
     await axios.put(`${API_BASE}/assets/${selectedAsset.value.id}`, updateData, { headers: authHeaders() })
-    
+
     // Update local state
     selectedAsset.value.image = imageUrl
-    
+
     // Refresh main list to show new image thumbnail
     await fetchAssets()
     toast.success('เปลี่ยนรูปภาพสำเร็จ')
@@ -211,10 +214,11 @@ const handleImageUpload = async (event) => {
 const openEditModal = (asset) => {
   selectedAsset.value = asset
 
-  // Format date for input type="date"
+  // Format date for input type="datetime-local"
   let formattedDate = ''
   if (asset.acquiredDate) {
-    formattedDate = new Date(asset.acquiredDate).toISOString().split('T')[0]
+    const d = new Date(asset.acquiredDate)
+    formattedDate = new Date(d.getTime() - (d.getTimezoneOffset() * 60000)).toISOString().slice(0, 16)
   }
 
   tempAsset.value = { ...asset, acquiredDate: formattedDate }
@@ -224,6 +228,9 @@ const openEditModal = (asset) => {
 const saveEdit = async () => {
   try {
     const { id, createdAt, updatedAt, ...updateData } = tempAsset.value
+    if (updateData.acquiredDate) {
+      updateData.acquiredDate = new Date(updateData.acquiredDate).toISOString()
+    }
     await axios.put(`${API_BASE}/assets/${selectedAsset.value.id}`, updateData, { headers: authHeaders() })
 
     // Refresh list
@@ -252,10 +259,47 @@ const confirmDelete = async () => {
     if (!handleUnauthorized(error)) toast.error(extractErrorMessage(error))
   }
 }
+
+const isExporting = ref(false)
+
+const handleExport = async () => {
+  isExporting.value = true
+  try {
+    const response = await axios.post(
+      `${API_BASE}/reports/export`,
+      {
+        reportKeys: ['asset_register'],
+        format: 'excel',
+        filters: {}
+      },
+      { responseType: 'blob', headers: authHeaders() }
+    )
+
+    const blobUrl = window.URL.createObjectURL(new Blob([response.data]))
+    const link = document.createElement('a')
+    link.href = blobUrl
+    link.download = `asset-list-${Date.now()}.xlsx`
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    window.URL.revokeObjectURL(blobUrl)
+
+    toast.success('ส่งออก Excel สำเร็จ')
+  } catch (error) {
+    console.error('Export error:', error)
+    if (!handleUnauthorized(error)) toast.error('ไม่สามารถส่งออกข้อมูลได้')
+  } finally {
+    isExporting.value = false
+  }
+}
+
+const handlePrint = () => {
+  window.print()
+}
 </script>
 
 <template>
-  <div class="space-y-6 relative">
+  <div class="print:hidden space-y-6 relative">
     <div
       class="relative overflow-hidden rounded-2xl bg-gradient-to-br from-[#052e21] via-[#0b3d2c] to-[#0f5138] px-6 py-7 sm:px-8 sm:py-8 shadow-lg shadow-emerald-950/20">
       <div class="pointer-events-none absolute -top-16 -right-10 w-56 h-56 rounded-full bg-emerald-400/20 blur-3xl">
@@ -275,9 +319,15 @@ const confirmDelete = async () => {
           </div>
         </div>
         <div class="flex flex-col sm:flex-row gap-3">
-          <button
+          <button @click="handlePrint"
             class="px-4 py-2.5 bg-white/10 backdrop-blur-sm ring-1 ring-white/20 rounded-xl text-white hover:bg-white/20 font-semibold flex items-center transition-all shadow-sm">
-            <Download class="w-4 h-4 mr-2 text-emerald-200" /> ส่งออก Excel
+            <Printer class="w-4 h-4 mr-2 text-emerald-200" /> พิมพ์รายงาน PDF
+          </button>
+          <button @click="handleExport" :disabled="isExporting"
+            class="px-4 py-2.5 bg-white/10 backdrop-blur-sm ring-1 ring-white/20 rounded-xl text-white hover:bg-white/20 font-semibold flex items-center transition-all shadow-sm disabled:opacity-50">
+            <Loader2 v-if="isExporting" class="w-4 h-4 mr-2 animate-spin text-emerald-200" />
+            <Download v-else class="w-4 h-4 mr-2 text-emerald-200" />
+            {{ isExporting ? 'กำลังส่งออก...' : 'พิมพ์เอกสาร Excel' }}
           </button>
           <button v-if="canManage" @click="router.push('/new-asset')"
             class="px-4 py-2.5 bg-white text-[#065f46] rounded-xl hover:bg-emerald-50 font-bold flex items-center shadow-md hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 transition-all">
@@ -436,21 +486,23 @@ const confirmDelete = async () => {
       <div v-if="selectedAsset?.image"
         class="rounded-lg overflow-hidden border border-slate-200 bg-slate-100 flex items-center justify-center relative group">
         <img :src="selectedAsset.image" class="max-w-full max-h-64 object-contain" />
-        <div v-if="isUploadingImage" class="absolute inset-0 bg-white/50 backdrop-blur-sm flex items-center justify-center">
+        <div v-if="isUploadingImage"
+          class="absolute inset-0 bg-white/50 backdrop-blur-sm flex items-center justify-center">
           <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-[#065f46]"></div>
         </div>
       </div>
 
       <div v-else @click="triggerFileUpload"
         class="border-2 border-dashed border-slate-300 rounded-lg p-10 flex flex-col items-center justify-center bg-slate-50 hover:bg-emerald-50 hover:border-emerald-400 transition-colors cursor-pointer group relative">
-        <div v-if="isUploadingImage" class="absolute inset-0 bg-white/50 backdrop-blur-sm flex items-center justify-center z-10 rounded-lg">
+        <div v-if="isUploadingImage"
+          class="absolute inset-0 bg-white/50 backdrop-blur-sm flex items-center justify-center z-10 rounded-lg">
           <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-[#065f46]"></div>
         </div>
         <UploadCloud class="w-10 h-10 text-slate-400 group-hover:text-[#065f46] mb-3" />
         <p class="text-sm font-medium text-slate-700">คลิกเพื่ออัปโหลดไฟล์รูปภาพ</p>
         <p class="text-xs text-slate-500 mt-1">บันทึกผ่าน MinIO Storage (JPG, PNG)</p>
       </div>
-      
+
       <input type="file" ref="fileInput" class="hidden" accept="image/*" @change="handleImageUpload" />
 
       <template #footer>
@@ -557,7 +609,7 @@ const confirmDelete = async () => {
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           <div>
             <label class="block text-sm font-medium text-slate-700 mb-1">วันที่ได้มา</label>
-            <input v-model="tempAsset.acquiredDate" type="date"
+            <input v-model="tempAsset.acquiredDate" type="datetime-local"
               class="w-full border border-slate-300 rounded-lg py-2 px-3 text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#065f46]/20 focus:border-[#065f46]">
           </div>
           <div>
@@ -639,6 +691,11 @@ const confirmDelete = async () => {
         </button>
       </template>
     </BaseModal>
+  </div>
+
+  <!-- Print Template Container -->
+  <div class="hidden print:block">
+    <PrintAssetListTemplate :assets="filteredAssets" />
   </div>
 </template>
 

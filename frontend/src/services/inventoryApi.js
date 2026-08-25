@@ -62,6 +62,10 @@ export const createRequisition = (data) =>
 export const getRequisitions = (params = {}) =>
   api.get('/api/requisitions', { params }).then((r) => r.data.data)
 
+/** ดึงคำขอเบิกตาม ID */
+export const getRequisitionById = (id) =>
+  api.get(`/api/requisitions/${id}`).then((r) => r.data.data)
+
 /** อนุมัติคำขอเบิก */
 export const approveRequisition = (id, data) =>
   api.put(`/api/requisitions/${id}/approve`, data).then((r) => r.data)

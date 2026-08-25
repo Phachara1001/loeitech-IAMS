@@ -44,20 +44,29 @@ export const findAll = async ({ status = '' } = {}) => {
  * ดึงคำขอเบิกตาม ID
  */
 export const findById = async (id) => {
-  return await prisma.requisition.findUnique({
+  const req = await prisma.requisition.findUnique({
     where: { id: Number(id) },
     include: {
       items: {
         include: { item: { select: { id: true, sku: true, name: true, unit: true, quantity: true } } }
-      }
+      },
+      requester: { include: { department: true } },
+      approver: true
     }
   });
+
+  if (req && req.requester) {
+    req.requesterName = req.requester.name || req.requester.username;
+    req.requesterPosition = req.requester.position;
+    req.department = req.requester.department?.name;
+  }
+  return req;
 };
 
 /**
  * อนุมัติคำขอเบิก — อัปเดต status และตัด stock OUT (ใช้ Prisma $transaction)
  */
-export const approve = async (id, { approvedBy, approvedQtyMap = {}, remark = '' }) => {
+export const approve = async (id, { approvedBy, approverId, approvedQtyMap = {}, remark = '' }) => {
   return await prisma.$transaction(async (tx) => {
     const requisition = await tx.requisition.findUnique({
       where: { id: Number(id) },
@@ -116,6 +125,7 @@ export const approve = async (id, { approvedBy, approvedQtyMap = {}, remark = ''
       data: {
         status: 'APPROVED',
         approvedBy: approvedBy || null,
+        approverId: approverId || null,
         approvedAt: new Date(),
         remark: remark || null
       }
@@ -126,7 +136,7 @@ export const approve = async (id, { approvedBy, approvedQtyMap = {}, remark = ''
 /**
  * ปฏิเสธคำขอเบิก
  */
-export const reject = async (id, { approvedBy, remark = '' }) => {
+export const reject = async (id, { approvedBy, approverId, remark = '' }) => {
   const requisition = await prisma.requisition.findUnique({ where: { id: Number(id) } });
   if (!requisition) throw Object.assign(new Error('ไม่พบคำขอเบิก'), { status: 404 });
   if (requisition.status !== 'PENDING') {
@@ -138,6 +148,7 @@ export const reject = async (id, { approvedBy, remark = '' }) => {
     data: {
       status: 'REJECTED',
       approvedBy: approvedBy || null,
+      approverId: approverId || null,
       approvedAt: new Date(),
       remark: remark || null
     }

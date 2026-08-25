@@ -1,12 +1,12 @@
 import * as requisitionRepository from '../repositories/requisitionRepository.js';
 
 /**
- * Generate เลขที่คำขอเบิก เช่น REQ-2569-0001
+ * Generate เลขที่คำขอเบิก เช่น 1/2567
  */
-const generateReqCode = async () => {
-  const buddhistYear = new Date().getFullYear() + 543;
+const generateReqCode = async (fiscalYear) => {
+  const buddhistYear = fiscalYear || (new Date().getFullYear() + 543);
   const count = await requisitionRepository.count();
-  return `REQ-${buddhistYear}-${String(count + 1).padStart(4, '0')}`;
+  return `${count + 1}/${buddhistYear}`;
 };
 
 /**
@@ -17,7 +17,7 @@ const generateReqCode = async () => {
  * @param {number} [data.requesterId]
  */
 export const createRequisition = async (data) => {
-  const { items, reason, requesterId } = data;
+  const { items, reason, requesterId, fiscalYear } = data;
 
   if (!items || items.length === 0) {
     const err = new Error('กรุณาเลือกรายการพัสดุอย่างน้อย 1 รายการ');
@@ -30,7 +30,8 @@ export const createRequisition = async (data) => {
     throw err;
   }
 
-  const reqCode = await generateReqCode();
+  // สร้างรหัสคำขอ
+  const reqCode = await generateReqCode(fiscalYear);
 
   return await requisitionRepository.create({
     reqCode,
@@ -63,13 +64,13 @@ export const getRequisitionById = async (id) => {
 /**
  * อนุมัติคำขอเบิก (ตัด stock OUT)
  */
-export const approveRequisition = async (id, { approvedBy, approvedQtyMap, remark }) => {
-  return await requisitionRepository.approve(id, { approvedBy, approvedQtyMap, remark });
+export const approveRequisition = async (id, { approvedBy, approverId, approvedQtyMap, remark }) => {
+  return await requisitionRepository.approve(id, { approvedBy, approverId, approvedQtyMap, remark });
 };
 
 /**
  * ปฏิเสธคำขอเบิก
  */
-export const rejectRequisition = async (id, { approvedBy, remark }) => {
-  return await requisitionRepository.reject(id, { approvedBy, remark });
+export const rejectRequisition = async (id, { approvedBy, approverId, remark }) => {
+  return await requisitionRepository.reject(id, { approvedBy, approverId, remark });
 };

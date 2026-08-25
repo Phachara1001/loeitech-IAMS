@@ -86,10 +86,10 @@ const isActive = (path) => {
   <aside class="w-64 bg-emerald-800 text-slate-100 flex flex-col transition-all duration-300">
     <div
       class="h-16 flex items-center px-6 border-b border-emerald-700/50 text-white font-bold text-lg tracking-wide shrink-0">
-      <div class="w-8 h-8 rounded bg-emerald-600 mr-3 flex items-center justify-center text-white">
-        <Database :size="20" />
+      <div class="w-12 h-12 mr-3 flex items-center justify-center text-white">
+        <img src="../../public/logo1.png" />
       </div>
-      TCAIMS
+      LOEITECH-IAMS
     </div>
 
     <!-- เพิ่มคลาสสำหรับซ่อน Scrollbar แท็บเลื่อนข้างซ้าย -->

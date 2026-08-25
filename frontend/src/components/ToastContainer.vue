@@ -36,7 +36,7 @@ const getTitleColor = (type) => {
 </script>
 
 <template>
-  <div class="fixed top-6 right-6 z-50 flex flex-col gap-4 w-[340px] max-w-[calc(100vw-3rem)]">
+  <div class="fixed top-6 right-6 z-50 flex flex-col gap-4 w-[340px] max-w-[calc(100vw-3rem)] print:hidden">
     <TransitionGroup enter-active-class="transform ease-out duration-300 transition"
       enter-from-class="-translate-y-4 opacity-0 sm:-translate-y-0 sm:translate-x-8"
       enter-to-class="translate-y-0 opacity-100 sm:translate-x-0" leave-active-class="transition ease-in duration-200"

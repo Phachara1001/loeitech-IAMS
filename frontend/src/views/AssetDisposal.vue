@@ -117,7 +117,7 @@ async function saveForm() {
     await api.post('/api/disposal-requests', {
       assetId: form.value.assetId,
       method: form.value.method,
-      meetingDate: form.value.meetingDate,
+      meetingDate: new Date(form.value.meetingDate).toISOString(),
       committee: form.value.committee.trim(),
       resolution: form.value.resolution.trim()
     })
@@ -316,7 +316,7 @@ onMounted(() => {
 
             <div>
               <label class="block text-sm font-medium text-slate-700 mb-1.5">วันที่ประชุมคณะกรรมการ</label>
-              <input v-model="form.meetingDate" type="date" class="w-full px-3.5 py-2.5 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#065f46]/20 focus:border-[#065f46] transition" />
+              <input v-model="form.meetingDate" type="datetime-local" class="w-full px-3.5 py-2.5 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#065f46]/20 focus:border-[#065f46] transition" />
             </div>
 
             <div>

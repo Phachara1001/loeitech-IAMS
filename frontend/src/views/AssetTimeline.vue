@@ -38,12 +38,15 @@ function authHeaders() {
 const currentView = ref('LIST')
 
 // --- Helper: Format DATETIME เป็นภาษาไทย ---
+// ระบุ timeZone: 'Asia/Bangkok' ตรง ๆ เพื่อกันปัญหาโชว์เวลาเพี้ยนตอนเครื่อง/เบราว์เซอร์
+// ตั้ง system timezone เป็น UTC หรือ timezone อื่นที่ไม่ใช่ไทย (ไม่งั้นเวลาจะเลื่อนไป ±7 ชม.)
 const formatThaiDateTime = (dateString) => {
   if (!dateString) return '-'
   const date = new Date(dateString)
   if (isNaN(date.getTime())) return dateString
 
   return date.toLocaleDateString('th-TH', {
+    timeZone: 'Asia/Bangkok',
     year: 'numeric',
     month: 'short',
     day: 'numeric',

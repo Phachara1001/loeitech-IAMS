@@ -1,7 +1,21 @@
 import * as repairRepository from '../repositories/repairRepository.js';
+import prisma from '../prisma/index.js';
 
 export const getAllRepairs = async () => {
   return await repairRepository.findAll();
+};
+
+/**
+ * ดึงคำขอแจ้งซ่อมตาม ID (ใช้เก็บค่าก่อนแก้ไขสำหรับ activity log)
+ */
+export const getRepairById = async (id) => {
+  const repair = await prisma.repairRequest.findUnique({
+    where: { id: Number(id) }
+  });
+  if (!repair) {
+    throw Object.assign(new Error('ไม่พบรายการแจ้งซ่อมนี้'), { status: 404 });
+  }
+  return repair;
 };
 
 export const createRepair = async (data) => {

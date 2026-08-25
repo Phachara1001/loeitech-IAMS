@@ -39,6 +39,19 @@ export const createBorrow = async (data) => {
 };
 
 /**
+ * ดึงคำขอยืมตาม ID (ใช้เก็บค่าก่อนแก้ไขสำหรับ activity log)
+ */
+export const getBorrowById = async (id) => {
+  const borrow = await prisma.borrowTransaction.findUnique({
+    where: { id: Number(id) }
+  });
+  if (!borrow) {
+    throw Object.assign(new Error('ไม่พบรายการยืม-คืนนี้'), { status: 404 });
+  }
+  return borrow;
+};
+
+/**
  * อนุมัติการยืม
  */
 export const approveBorrow = async (id, { approvedBy }) => {

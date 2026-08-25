@@ -98,7 +98,8 @@ export const approve = async (id, { approvedBy, approvedQtyMap = {}, remark = ''
           transactionType: 'OUT',
           quantity: approvedQty,
           reference: requisition.reqCode,
-          remarks: `อนุมัติจาก ${approvedBy || 'ผู้อนุมัติ'}`
+          remarks: `อนุมัติจาก ${approvedBy || 'ผู้อนุมัติ'}`,
+          receivedDate: new Date()
         }
       });
 

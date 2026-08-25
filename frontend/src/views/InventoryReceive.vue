@@ -85,7 +85,8 @@ onMounted(async () => {
 // =============================================
 // Form State
 // =============================================
-const todayStr = new Date().toISOString().substring(0, 10)
+const now = new Date()
+const todayStr = new Date(now.getTime() - (now.getTimezoneOffset() * 60000)).toISOString().slice(0, 16)
 
 // 'EXISTING' = วัสดุเดิมที่มีอยู่แล้ว | 'NEW' = วัสดุใหม่
 const itemSourceType = ref('EXISTING')
@@ -181,7 +182,7 @@ const handleSaveStockReceive = async () => {
       newItemUnit: itemSourceType.value === 'NEW' ? formData.value.newItemUnit : undefined,
       qty: Number(formData.value.qty),
       unitPrice: Number(formData.value.unitPrice),
-      receivedDate: formData.value.receivedDate,
+      receivedDate: new Date(formData.value.receivedDate).toISOString(),
       acquisitionMethod: formData.value.acquisitionMethod,
       budgetType: formData.value.budgetType,
       remark: formData.value.remark,
@@ -332,7 +333,7 @@ function selectItemFromModal(item) {
                 <label class="block text-base font-extrabold text-slate-800 mb-2 flex items-center gap-2">
                   <Calendar class="w-5 h-5 text-emerald-600" /> วัน เดือน ปี ที่รับ
                 </label>
-                <input v-model="formData.receivedDate" type="date" required
+                <input v-model="formData.receivedDate" type="datetime-local" required
                   class="w-full bg-slate-50 border-2 border-slate-200 rounded-2xl p-4 text-slate-900 font-bold text-lg focus:outline-none focus:border-emerald-600 focus:bg-white transition-all cursor-pointer" />
               </div>
 
@@ -629,10 +630,7 @@ function selectItemFromModal(item) {
         <div>
           <h3 class="text-2xl font-extrabold text-slate-900">บันทึกรับเข้าสำเร็จ!</h3>
           <p class="text-base text-slate-600 mt-2">
-            ระบบอัปเดตข้อมูลพัสดุในตาราง <code
-              class="bg-slate-100 px-2 py-0.5 rounded text-emerald-700 font-bold">items</code> และบันทึกประวัติลงใน
-            <code class="bg-slate-100 px-2 py-0.5 rounded text-emerald-700 font-bold">stock_transactions</code>
-            เรียบร้อยแล้ว
+            ระบบได้บันทึกข้อมูลการรับพัสดุเข้าคลังและอัปเดตยอดคงเหลือเรียบร้อยแล้ว
           </p>
         </div>
 

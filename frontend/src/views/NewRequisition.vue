@@ -18,6 +18,7 @@ import {
 } from 'lucide-vue-next'
 import * as inventoryApi from '../services/inventoryApi.js'
 import { useToast } from '../composables/useToast.js'
+import PrintRequisitionTemplate from '../components/PrintRequisitionTemplate.vue'
 
 const toast = useToast()
 
@@ -181,6 +182,8 @@ const requestCode = ref('')
 const submittedSummary = ref([])
 const submittedReason = ref('')
 const submitError = ref('')
+const requestId = ref(null)
+const requestData = ref(null)
 
 // ==========================================
 // Submit → POST /api/requisitions
@@ -195,13 +198,16 @@ async function handleSubmit() {
   try {
     const payload = {
       items: cart.value.map((c) => ({ id: c.id, qty: c.qty })),
-      reason: reason.value.trim()
+      reason: reason.value.trim(),
+      fiscalYear: localStorage.getItem('tcaims_fiscal_year') || (new Date().getFullYear() + 543).toString()
     }
 
     const result = await inventoryApi.createRequisition(payload)
 
     // รับเลขที่คำขอจาก backend จริง
     requestCode.value = result.data?.reqCode || 'REQ-UNKNOWN'
+    requestId.value = result.data?.id
+    requestData.value = result.data
     submittedSummary.value = cart.value.map((c) => ({ ...c }))
     submittedReason.value = reason.value.trim()
     submitted.value = true
@@ -220,13 +226,18 @@ function startNewRequest() {
   touchedSubmit.value = false
   submitted.value = false
   requestCode.value = ''
+  requestId.value = null
+  requestData.value = null
   submitError.value = ''
+}
+
+const handlePrint = () => {
+  window.print()
 }
 </script>
 
-
 <template>
-  <div class="min-h-screen bg-[#f8fafc] font-sarabun p-4 sm:p-6 lg:p-8">
+  <div class="print:hidden min-h-screen bg-[#f8fafc] font-sarabun p-4 sm:p-6 lg:p-8">
     <div class="w-full space-y-6">
 
       <!-- ================= HEADER ================= -->
@@ -398,14 +409,24 @@ function startNewRequest() {
 
               <p class="text-xs text-slate-400 mt-4">คำขอจะถูกส่งให้ผู้มีสิทธิ์อนุมัติตรวจสอบต่อไป</p>
 
-              <button
-                type="button"
-                @click="startNewRequest"
-                class="mt-5 w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-slate-200 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition"
-              >
-                <RotateCcw class="w-4 h-4" />
-                ยื่นคำขอใหม่
-              </button>
+              <div class="mt-5 w-full flex gap-2">
+                <button
+                  v-if="requestData"
+                  type="button"
+                  @click="handlePrint"
+                  class="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-blue-50 text-sm font-semibold text-blue-700 hover:bg-blue-100 transition border border-blue-200"
+                >
+                  พิมพ์ใบเบิก
+                </button>
+                <button
+                  type="button"
+                  @click="startNewRequest"
+                  class="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border border-slate-200 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition"
+                >
+                  <RotateCcw class="w-4 h-4" />
+                  ยื่นคำขอใหม่
+                </button>
+              </div>
             </div>
 
             <!-- ------- สถานะ: กำลังเลือกรายการ ------- -->
@@ -517,6 +538,11 @@ function startNewRequest() {
         </div>
       </div>
     </div>
+  </div>
+
+  <!-- Print Template Container -->
+  <div v-if="requestData" class="hidden print:block">
+    <PrintRequisitionTemplate :requisition="requestData" />
   </div>
 </template>
 

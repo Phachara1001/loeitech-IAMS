@@ -21,6 +21,7 @@ import {
 } from 'lucide-vue-next'
 import * as inventoryApi from '../services/inventoryApi.js'
 import { useToast } from '../composables/useToast.js'
+import PrintRequisitionTemplate from '../components/PrintRequisitionTemplate.vue'
 
 const toast = useToast()
 
@@ -268,10 +269,14 @@ const getStatusBadge = (status) => {
     default: return { text: 'รอตรวจสอบ', class: 'bg-amber-50 text-amber-700 border-amber-200', icon: Clock }
   }
 }
+
+const handlePrint = () => {
+  window.print()
+}
 </script>
 
 <template>
-  <div class="relative w-full min-h-screen p-4 md:p-8 bg-slate-100 text-slate-800 space-y-6">
+  <div class="print:hidden relative w-full min-h-screen p-4 md:p-8 bg-slate-100 text-slate-800 space-y-6">
 
     <!-- Global Top Header Bar (เหมือน AssetTimeline) -->
     <div class="relative overflow-hidden rounded-2xl bg-[#072415] text-white shadow-xl">
@@ -527,6 +532,13 @@ const getStatusBadge = (status) => {
 
         <!-- Modal Footer Actions -->
         <div class="p-6 bg-slate-50 border-t border-slate-200 flex justify-end gap-3">
+          <button 
+            @click="handlePrint"
+            class="px-6 py-2.5 bg-blue-50 hover:bg-blue-100 text-blue-700 font-extrabold rounded-xl transition-all border border-blue-200 cursor-pointer mr-auto flex items-center gap-1.5"
+          >
+            <FileText class="w-4 h-4" />
+            พิมพ์ใบเบิก
+          </button>
           <template v-if="canApprove && selectedReq.status === 'PENDING'">
             <button 
               @click="handleReject(selectedReq)"
@@ -738,5 +750,10 @@ const getStatusBadge = (status) => {
       </div>
     </div>
 
+  </div>
+
+  <!-- Print Template Container -->
+  <div v-if="selectedReq" class="hidden print:block">
+    <PrintRequisitionTemplate :requisition="selectedReq" />
   </div>
 </template>

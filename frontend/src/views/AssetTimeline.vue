@@ -45,15 +45,23 @@ const formatThaiDateTime = (dateString) => {
   const date = new Date(dateString)
   if (isNaN(date.getTime())) return dateString
 
-  return date.toLocaleDateString('th-TH', {
-    timeZone: 'Asia/Bangkok',
+  // หากเป็น Date-only (00:00:00.000Z) จะไม่แสดงเวลา เพราะถ้าแปลงเป็นเวลาไทยจะกลายเป็น 07:00 ซึ่งทำให้สับสน
+  const isMidnightUTC = typeof dateString === 'string' && dateString.endsWith('T00:00:00.000Z')
+
+  const options = {
+    timeZone: isMidnightUTC ? 'UTC' : 'Asia/Bangkok',
     year: 'numeric',
     month: 'short',
     day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false
-  })
+  }
+
+  if (!isMidnightUTC) {
+    options.hour = '2-digit'
+    options.minute = '2-digit'
+    options.hour12 = false
+  }
+
+  return date.toLocaleDateString('th-TH', options)
 }
 
 // --- User Context ---

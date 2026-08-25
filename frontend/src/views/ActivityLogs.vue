@@ -115,7 +115,7 @@ const getActionBadgeClass = (action) => {
   }
 }
 
-// ตารางที่เกี่ยวข้อง (entityType) ตามที่ backend บันทึกจริง
+// ข้อมูลที่เกี่ยวข้อง (entityType) ตามที่ backend บันทึกจริง
 const ENTITY_TYPE_OPTIONS = [
   { value: 'ASSET', label: 'ครุภัณฑ์' },
   { value: 'ITEM', label: 'พัสดุสิ้นเปลือง' },
@@ -229,7 +229,7 @@ const closeModal = () => {
                 v-model="selectedTable"
                 class="w-full sm:w-auto text-sm font-medium bg-white border border-slate-300 rounded-xl px-4 py-2.5 text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 cursor-pointer"
               >
-                <option value="ALL">ตารางทั้งหมด</option>
+                <option value="ALL">ข้อมูลทั้งหมด</option>
                 <option v-for="t in ENTITY_TYPE_OPTIONS" :key="t.value" :value="t.value">{{ t.label }}</option>
               </select>
             </div>
@@ -245,7 +245,7 @@ const closeModal = () => {
                   <th class="py-3.5 px-6">วัน-เวลา</th>
                   <th class="py-3.5 px-6">ผู้ทำการรายการ</th>
                   <th class="py-3.5 px-6 text-center">ประเภทคำสั่ง</th>
-                  <th class="py-3.5 px-6 text-center">ตารางที่เกี่ยวข้อง</th>
+                  <th class="py-3.5 px-6 text-center">ข้อมูลที่เกี่ยวข้อง</th>
                   <th class="py-3.5 px-6 text-center">IP ADDRESS</th>
                   <th class="py-3.5 px-6 text-center">รายละเอียด</th>
                 </tr>
@@ -372,7 +372,7 @@ const closeModal = () => {
               <span class="font-bold text-slate-900 text-sm">{{ ACTION_LABEL[selectedLogData?.action] || selectedLogData?.action }}</span>
             </div>
             <div>
-              <span class="text-slate-400 font-bold block mb-0.5">ตาราง:</span>
+              <span class="text-slate-400 font-bold block mb-0.5">ข้อมูล:</span>
               <span class="font-bold text-slate-900 font-mono text-sm">{{ entityTypeLabel(selectedLogData?.entityType) }}</span>
             </div>
             <div>

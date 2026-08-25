@@ -20,6 +20,8 @@ model User {
   department           Department?   @relation(fields: [departmentId], references: [id])
   activities           ActivityLog[]
   distributions        AssetDistribution[]
+  requisitions         Requisition[] @relation(name: "RequisitionRequester")
+  approvedRequisitions Requisition[] @relation(name: "RequisitionApprover")
 
   // สำหรับฟีเจอร์ลืมรหัสผ่าน: เก็บรหัสยืนยัน 6 หลักและเวลาหมดอายุ
   resetPasswordCode    String?
@@ -159,9 +161,12 @@ model Requisition {
   id          Int               @id @default(autoincrement())
   reqCode     String            @unique // เลขที่คำขอ เช่น REQ-2569-0001
   requesterId Int?              // ผู้ยื่นคำขอ (userId)
+  requester   User?             @relation(name: "RequisitionRequester", fields: [requesterId], references: [id])
   reason      String            // เหตุผลการเบิก
   status      String            @default("PENDING") // PENDING, APPROVED, REJECTED
-  approvedBy  String?           // ชื่อผู้อนุมัติ
+  approverId  Int?              // ผู้อนุมัติ (userId)
+  approver    User?             @relation(name: "RequisitionApprover", fields: [approverId], references: [id])
+  approvedBy  String?           // ชื่อผู้อนุมัติ (เก็บเป็น text เผื่อไว้)
   approvedAt  DateTime?         // วันที่อนุมัติ
   remark      String?           // หมายเหตุของผู้อนุมัติ
   items       RequisitionItem[]

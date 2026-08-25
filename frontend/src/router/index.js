@@ -106,6 +106,11 @@ const routes = [
         component: () => import('../views/FiscalYearSettings.vue')
       }
     ]
+  },
+  {
+    path: '/print-requisition/:id',
+    name: 'PrintRequisition',
+    component: () => import('../views/PrintRequisition.vue')
   }
 ]
 

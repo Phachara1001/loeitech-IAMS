@@ -505,7 +505,6 @@ function handlePrintPdf() {
                 <Package class="w-5 h-5 text-[#1B5E3C]" />
                 รายการครุภัณฑ์ที่รับผิดชอบหลักในปัจจุบัน
               </h2>
-              <p class="text-xs text-slate-500 mt-0.5">เชื่อมโยงข้อมูลจากตาราง asset_distributions</p>
             </div>
 
             <button @click="handlePrintPdf"

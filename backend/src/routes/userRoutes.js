@@ -23,6 +23,8 @@ router.put('/me/password', validateChangePasswordInput, userController.changePas
 // ----- Admin จัดการผู้ใช้งานคนอื่น -----
 router.get('/', authorize('ADMIN', 'STAFF'), userController.listUsers);
 router.post('/', authorize('ADMIN'), validateCreateUserInput, userController.createUser);
+router.patch('/:id/approve', authorize('ADMIN'), userController.approveUserById);
+router.patch('/:id/reject', authorize('ADMIN'), userController.rejectUserById);
 router.put('/:id', authorize('ADMIN'), validateUpdateUserByAdminInput, userController.updateUserById);
 router.delete('/:id', authorize('ADMIN'), userController.deleteUserById);
 

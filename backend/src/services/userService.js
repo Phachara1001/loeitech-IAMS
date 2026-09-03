@@ -213,6 +213,22 @@ export const updateUserByAdmin = async (id, data) => {
 };
 
 /**
+ * Admin อนุมัติบัญชีที่สมัครเข้ามารอการอนุมัติ (accountStatus: PENDING → ACTIVE)
+ */
+export const approveUser = async (id) => {
+  const updated = await userRepository.update(id, { accountStatus: 'ACTIVE' });
+  return toSafeUser(updated);
+};
+
+/**
+ * Admin ไม่อนุมัติบัญชี (accountStatus → REJECTED) — เก็บประวัติไว้ ไม่ลบบัญชีทิ้ง
+ */
+export const rejectUser = async (id) => {
+  const updated = await userRepository.update(id, { accountStatus: 'REJECTED' });
+  return toSafeUser(updated);
+};
+
+/**
  * Admin ลบผู้ใช้งาน
  */
 export const deleteUserByAdmin = async (id) => {

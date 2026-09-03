@@ -16,6 +16,7 @@ model User {
   position             String?
   avatarUrl            String?
   role                 String        @default("USER") // e.g., ADMIN, USER
+  accountStatus        String        @default("ACTIVE") // ACTIVE, PENDING, REJECTED
   departmentId         Int?
   department           Department?   @relation(fields: [departmentId], references: [id])
   activities           ActivityLog[]

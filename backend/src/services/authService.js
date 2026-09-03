@@ -59,7 +59,8 @@ export const register = async ({ name, email, password }) => {
     email,
     username,
     password: hashedPassword,
-    role: 'USER'
+    role: 'USER',
+    accountStatus: 'PENDING' // สมัครเองต้องรอ Admin อนุมัติก่อน ถึงจะ login ได้
   });
 
   return toSafeUser(user);
@@ -83,6 +84,17 @@ export const login = async ({ username, password }) => {
   if (!isMatch) {
     const err = new Error('ชื่อผู้ใช้งานหรือรหัสผ่านไม่ถูกต้อง');
     err.status = 401;
+    throw err;
+  }
+
+  if (user.accountStatus === 'PENDING') {
+    const err = new Error('บัญชีของคุณกำลังรอการอนุมัติจากผู้ดูแลระบบ กรุณารอการอนุมัติก่อนเข้าสู่ระบบ');
+    err.status = 403;
+    throw err;
+  }
+  if (user.accountStatus === 'REJECTED') {
+    const err = new Error('บัญชีของคุณไม่ได้รับการอนุมัติให้ใช้งานระบบ กรุณาติดต่อผู้ดูแลระบบ');
+    err.status = 403;
     throw err;
   }
 

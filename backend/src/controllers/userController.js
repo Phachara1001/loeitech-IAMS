@@ -254,6 +254,84 @@ export const updateUserById = async (req, res, next) => {
 
 /**
  * @swagger
+ * /api/users/{id}/approve:
+ *   patch:
+ *     summary: Admin อนุมัติบัญชีผู้ใช้งานที่รออนุมัติ (PENDING → ACTIVE)
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: อนุมัติสำเร็จ
+ */
+export const approveUserById = async (req, res, next) => {
+  try {
+    const before = await userService.getProfile(req.params.id);
+    const user = await userService.approveUser(req.params.id);
+
+    await logActivity({
+      req,
+      action: 'UPDATE',
+      entityType: 'USER',
+      entityId: user.id,
+      oldValue: { accountStatus: before.accountStatus },
+      newValue: { accountStatus: user.accountStatus },
+      details: `อนุมัติบัญชีผู้ใช้งาน "${user.name}" (${user.email})`
+    });
+
+    res.status(200).json({ status: 'success', data: user, message: 'อนุมัติบัญชีผู้ใช้งานสำเร็จ' });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @swagger
+ * /api/users/{id}/reject:
+ *   patch:
+ *     summary: Admin ไม่อนุมัติบัญชีผู้ใช้งานที่รออนุมัติ (PENDING → REJECTED)
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: บันทึกการไม่อนุมัติสำเร็จ
+ */
+export const rejectUserById = async (req, res, next) => {
+  try {
+    const before = await userService.getProfile(req.params.id);
+    const user = await userService.rejectUser(req.params.id);
+
+    await logActivity({
+      req,
+      action: 'UPDATE',
+      entityType: 'USER',
+      entityId: user.id,
+      oldValue: { accountStatus: before.accountStatus },
+      newValue: { accountStatus: user.accountStatus },
+      details: `ไม่อนุมัติบัญชีผู้ใช้งาน "${user.name}" (${user.email})`
+    });
+
+    res.status(200).json({ status: 'success', data: user, message: 'บันทึกการไม่อนุมัติบัญชีแล้ว' });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @swagger
  * /api/users/{id}:
  *   delete:
  *     summary: Admin ลบผู้ใช้งาน

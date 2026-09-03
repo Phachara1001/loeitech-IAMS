@@ -234,7 +234,7 @@ function handleClose() {
               <h3 class="text-xl font-bold text-white mb-1.5">สร้างบัญชีสำเร็จ</h3>
               <p class="text-white text-sm leading-relaxed">
                 บัญชีของ <span class="text-white font-semibold">{{ email }}</span> ถูกสร้างเรียบร้อยแล้ว
-                ท่านสามารถเข้าสู่ระบบได้ทันที
+                โปรดรอผู้ดูแลระบบอนุมัติบัญชีของคุณ จึงจะสามารถเข้าสู่ระบบได้
               </p>
               <button
                 type="button"

@@ -4,7 +4,7 @@ import { useRouter } from 'vue-router'
 import axios from 'axios'
 import {
   Building2, MapPin, Users, Plus, Pencil, Trash2, X, Check, Loader2,
-  AlertTriangle, ShieldAlert, Search, ShieldCheck, UserCog, User as UserIcon
+  AlertTriangle, ShieldAlert, Search, ShieldCheck, UserCog, User as UserIcon, Ban, Clock
 } from 'lucide-vue-next'
 import { useToast } from '../composables/useToast'
 import { API_BASE } from '../config/api'
@@ -141,6 +141,43 @@ async function updateUserRole(user, newRole) {
   } catch (error) {
     user.role = previousRole // ย้อนกลับถ้า backend ปฏิเสธ
     if (!handleUnauthorized(error)) toast.error(extractErrorMessage(error))
+  }
+}
+
+/* ---------------- อนุมัติ / ไม่อนุมัติ บัญชีที่สมัครเข้ามารออนุมัติ ---------------- */
+const accountStatusLabel = { ACTIVE: 'ใช้งานได้', PENDING: 'รออนุมัติ', REJECTED: 'ไม่อนุมัติ' }
+const accountStatusStyle = {
+  ACTIVE: 'bg-emerald-50 text-emerald-700 border-emerald-100',
+  PENDING: 'bg-amber-50 text-amber-700 border-amber-100',
+  REJECTED: 'bg-red-50 text-red-700 border-red-100'
+}
+const pendingUsersCount = computed(() => users.value.filter((u) => u.accountStatus === 'PENDING').length)
+
+const approvingUserId = ref(null)
+
+async function approveUser(user) {
+  approvingUserId.value = user.id
+  try {
+    await axios.patch(`${API_BASE}/users/${user.id}/approve`, {}, { headers: authHeaders() })
+    user.accountStatus = 'ACTIVE'
+    toast.success(`อนุมัติบัญชีของ ${user.name} เรียบร้อยแล้ว`)
+  } catch (error) {
+    if (!handleUnauthorized(error)) toast.error(extractErrorMessage(error))
+  } finally {
+    approvingUserId.value = null
+  }
+}
+
+async function rejectUser(user) {
+  approvingUserId.value = user.id
+  try {
+    await axios.patch(`${API_BASE}/users/${user.id}/reject`, {}, { headers: authHeaders() })
+    user.accountStatus = 'REJECTED'
+    toast.info(`บันทึกการไม่อนุมัติบัญชีของ ${user.name} แล้ว`)
+  } catch (error) {
+    if (!handleUnauthorized(error)) toast.error(extractErrorMessage(error))
+  } finally {
+    approvingUserId.value = null
   }
 }
 
@@ -468,7 +505,13 @@ const deleteItemLabel = computed(() => {
       <!-- ===== แท็บ: ผู้ใช้งานระบบ ===== -->
       <div v-else class="bg-white rounded-2xl border border-emerald-100 shadow-sm overflow-hidden">
         <div class="flex items-center justify-between p-4 border-b border-emerald-50 bg-emerald-50/20">
-          <p class="text-sm text-slate-500">ทั้งหมด <span class="font-bold text-[#065f46]">{{ filteredUsers.length }}</span> ผู้ใช้งาน</p>
+          <div class="flex items-center gap-3">
+            <p class="text-sm text-slate-500">ทั้งหมด <span class="font-bold text-[#065f46]">{{ filteredUsers.length }}</span> ผู้ใช้งาน</p>
+            <span v-if="pendingUsersCount > 0" class="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-amber-50 text-amber-700 border border-amber-100">
+              <Clock class="w-3 h-3" />
+              รออนุมัติ {{ pendingUsersCount }} บัญชี
+            </span>
+          </div>
           <Loader2 v-if="isLoadingUsers" class="w-4 h-4 text-[#065f46] animate-spin" />
         </div>
 
@@ -478,6 +521,7 @@ const deleteItemLabel = computed(() => {
               <tr class="bg-gradient-to-r from-[#065f46] to-[#047857] text-left">
                 <th class="px-4 py-3.5 font-semibold text-[11px] uppercase tracking-wide text-emerald-50">ชื่อ-นามสกุล</th>
                 <th class="px-4 py-3.5 font-semibold text-[11px] uppercase tracking-wide text-emerald-50">อีเมล</th>
+                <th class="px-4 py-3.5 font-semibold text-[11px] uppercase tracking-wide text-emerald-50">สถานะบัญชี</th>
                 <th class="px-4 py-3.5 font-semibold text-[11px] uppercase tracking-wide text-emerald-50">ระดับสิทธิ์</th>
                 <th class="px-4 py-3.5 font-semibold text-[11px] uppercase tracking-wide text-emerald-50 text-right">การจัดการ</th>
               </tr>
@@ -486,6 +530,11 @@ const deleteItemLabel = computed(() => {
               <tr v-for="user in filteredUsers" :key="user.id" class="group hover:bg-emerald-50/60 transition-colors">
                 <td class="px-4 py-3 text-slate-800 font-medium border-l-4 border-transparent group-hover:border-[#065f46] transition-colors">{{ user.name }}</td>
                 <td class="px-4 py-3 text-slate-500">{{ user.email }}</td>
+                <td class="px-4 py-3">
+                  <span :class="['inline-flex px-2.5 py-1 rounded-full text-xs font-semibold border', accountStatusStyle[user.accountStatus] || accountStatusStyle.ACTIVE]">
+                    {{ accountStatusLabel[user.accountStatus] || user.accountStatus }}
+                  </span>
+                </td>
                 <td class="px-4 py-3">
                   <div class="relative inline-flex items-center">
                     <component :is="roleIcon(user.role)" class="w-3.5 h-3.5 absolute left-2.5 pointer-events-none z-10" :class="roleIconColor(user.role)" />
@@ -500,6 +549,28 @@ const deleteItemLabel = computed(() => {
                 </td>
                 <td class="px-4 py-3">
                   <div class="flex items-center justify-end gap-1.5">
+                    <template v-if="user.accountStatus === 'PENDING'">
+                      <button
+                        type="button"
+                        :disabled="approvingUserId === user.id"
+                        @click="approveUser(user)"
+                        title="อนุมัติบัญชี"
+                        class="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-emerald-50 text-emerald-700 hover:bg-emerald-100 hover:shadow-sm transition-all disabled:opacity-60"
+                      >
+                        <Loader2 v-if="approvingUserId === user.id" class="w-3.5 h-3.5 animate-spin" />
+                        <Check v-else class="w-3.5 h-3.5" />
+                        อนุมัติ
+                      </button>
+                      <button
+                        type="button"
+                        :disabled="approvingUserId === user.id"
+                        @click="rejectUser(user)"
+                        title="ไม่อนุมัติ"
+                        class="p-2 rounded-lg text-slate-500 hover:text-red-600 hover:bg-red-50 hover:shadow-sm hover:scale-110 active:scale-95 transition-all disabled:opacity-60"
+                      >
+                        <Ban class="w-4 h-4" />
+                      </button>
+                    </template>
                     <button type="button" @click="openEditForm(user)" title="แก้ไข" class="p-2 rounded-lg text-slate-500 hover:text-amber-600 hover:bg-amber-50 hover:shadow-sm hover:scale-110 active:scale-95 transition-all">
                       <Pencil class="w-4 h-4" />
                     </button>
@@ -510,7 +581,7 @@ const deleteItemLabel = computed(() => {
                 </td>
               </tr>
               <tr v-if="filteredUsers.length === 0">
-                <td colspan="4" class="px-4 py-12 text-center text-slate-400">ไม่พบผู้ใช้งานที่ตรงกับคำค้นหา</td>
+                <td colspan="5" class="px-4 py-12 text-center text-slate-400">ไม่พบผู้ใช้งานที่ตรงกับคำค้นหา</td>
               </tr>
             </tbody>
           </table>

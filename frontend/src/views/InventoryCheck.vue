@@ -1,4 +1,4 @@
-<script setup>
+﻿<script setup>
 import { ref, computed, onMounted } from 'vue'
 import {
   ClipboardList, Search, RefreshCw, CheckCircle2, AlertTriangle,

@@ -13,11 +13,11 @@ import {
   ShieldCheck,
   RefreshCw,
   PlusCircle,
-  FolderPlus,
   Package,
   Sparkles,
   Loader2
 } from 'lucide-vue-next'
+import ThaiDatePicker from '../components/ThaiDatePicker.vue'
 import * as inventoryApi from '../services/inventoryApi.js'
 import { useToast } from '../composables/useToast.js'
 
@@ -331,10 +331,10 @@ function selectItemFromModal(item) {
             <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mt-6">
               <div>
                 <label class="block text-base font-extrabold text-slate-800 mb-2 flex items-center gap-2">
-                  <Calendar class="w-5 h-5 text-emerald-600" /> วัน เดือน ปี ที่รับ
+                  <Calendar class="w-5 h-5 text-emerald-600" /> วัน เดือน ปี ที่รับ <span class="text-rose-500">*</span>
                 </label>
-                <input v-model="formData.receivedDate" type="datetime-local" required
-                  class="w-full bg-slate-50 border-2 border-slate-200 rounded-2xl p-4 text-slate-900 font-bold text-lg focus:outline-none focus:border-emerald-600 focus:bg-white transition-all cursor-pointer" />
+                <ThaiDatePicker v-model="formData.receivedDate" type="datetime-local" required
+                  inputClass="w-full bg-slate-50 border-2 border-slate-200 rounded-2xl p-4 text-slate-900 font-bold text-lg focus:outline-none focus:border-emerald-600 focus:bg-white transition-all cursor-pointer" />
               </div>
 
               <div>

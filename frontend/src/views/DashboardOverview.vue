@@ -1,4 +1,4 @@
-<script setup>
+﻿<script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import axios from 'axios'
@@ -151,7 +151,7 @@ const chartData = computed(() => {
     datasets: [
       {
         label: 'จำนวนคำขอเบิก (ครั้ง)',
-        backgroundColor: '#047857', // Emerald 700
+        backgroundColor: '#047857', // emerald 700
         borderRadius: 4,
         data: monthly.map((m) => m.count)
       }
@@ -243,7 +243,7 @@ const chartOptions = {
           <h3 class="font-bold text-slate-800 text-lg">เมนูด่วน</h3>
         </div>
         <div class="p-6 space-y-3">
-          <router-link to="/inventory-receive"
+          <router-link v-if="canSeeDetails" to="/inventory-receive"
             class="w-full flex items-center justify-between p-3.5 rounded-xl border-2 border-slate-200 hover:border-[#065f46] hover:bg-emerald-50 hover:shadow-md transition-all group">
             <div class="flex items-center text-slate-700 group-hover:text-[#065f46] font-semibold">
               <div
@@ -267,7 +267,7 @@ const chartOptions = {
             <ArrowRight class="w-4 h-4 text-slate-400 group-hover:text-[#065f46] group-hover:translate-x-0.5 transition-all" />
           </router-link>
 
-          <router-link to="/requisition-management"
+          <router-link v-if="canSeeDetails" to="/requisition-management"
             class="w-full flex items-center justify-between p-3.5 rounded-xl border-2 border-slate-200 hover:border-[#065f46] hover:bg-emerald-50 hover:shadow-md transition-all group">
             <div class="flex items-center text-slate-700 group-hover:text-[#065f46] font-semibold">
               <div

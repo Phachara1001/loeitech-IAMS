@@ -27,6 +27,7 @@ import {
   Loader2,
   ShoppingCart
 } from 'lucide-vue-next'
+import ThaiDatePicker from '../components/ThaiDatePicker.vue'
 import { useToast } from '../composables/useToast'
 import { API_BASE } from '../config/api'
 
@@ -326,8 +327,7 @@ const resetFormAndContinue = () => {
               <label class="block text-base font-extrabold text-slate-800 mb-2 flex items-center gap-2">
                 <Calendar class="w-5 h-5 text-emerald-600" /> วันที่ได้มา <span class="text-rose-500">*</span>
               </label>
-              <input v-model="formData.acquiredDate" type="datetime-local" required
-                class="w-full bg-slate-50 border-2 border-slate-200 rounded-2xl p-4 text-slate-900 font-bold text-lg focus:outline-none focus:border-emerald-600 focus:bg-white transition-all cursor-pointer" />
+              <ThaiDatePicker v-model="formData.acquiredDate" type="datetime-local" required inputClass="w-full bg-slate-50 border-2 border-slate-200 rounded-2xl p-4 text-slate-900 font-bold text-lg focus:outline-none focus:border-emerald-600 focus:bg-white transition-all cursor-pointer" />
             </div>
 
             <div>

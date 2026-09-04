@@ -2,8 +2,10 @@
 import { ref, computed, onMounted } from 'vue'
 import {
   Recycle, Plus, X, Check, Loader2, AlertTriangle, ShieldAlert,
-  Search, ClipboardList, Gavel, PackageX, Ban, CheckCircle2
+  Search, ClipboardList, Gavel, PackageX, Ban, CheckCircle2,
+  PackageSearch, PackageOpen, Wrench
 } from 'lucide-vue-next'
+import ThaiDatePicker from '../components/ThaiDatePicker.vue'
 import api from '../services/api'
 import { useToast } from '../composables/useToast'
 
@@ -25,8 +27,12 @@ async function loadEligibleAssets() {
     eligibleAssets.value = (data.data || []).map((a) => ({
       id: a.id,
       name: a.name,
+      seq: a.seq,
+      category: a.category,
       condition: a.status === 'Broken' ? 'ชำรุด' : 'กำลังซ่อม',
-      unit: a.location ? `${a.location.building || ''} ${a.location.name}`.trim() : a.department
+      unit: a.location ? `${a.location.building || ''} ${a.location.name}`.trim() : a.department,
+      distributions: a.distributions,
+      department: a.department
     }))
   } catch (err) {
     toast.error(err.message || 'โหลดรายการครุภัณฑ์ที่มีสิทธิ์จำหน่ายไม่สำเร็จ')
@@ -102,6 +108,64 @@ function openForm() {
 }
 function closeForm() {
   isFormOpen.value = false
+}
+
+// --- Modal Selection Logic for Asset ---
+const isAssetSelectorOpen = ref(false)
+const searchAssetQuery = ref('')
+const assetCatFilter = ref('ทั้งหมด')
+
+const assetCategories = computed(() => {
+  const cats = new Set(eligibleAssets.value.map(a => a.category).filter(Boolean))
+  return ['ทั้งหมด', ...Array.from(cats)]
+})
+
+const filteredAssetsForSelector = computed(() => {
+  let result = eligibleAssets.value
+  
+  if (assetCatFilter.value !== 'ทั้งหมด') {
+    result = result.filter(a => a.category === assetCatFilter.value)
+  }
+  
+  if (searchAssetQuery.value) {
+    const q = searchAssetQuery.value.toLowerCase()
+    result = result.filter(item => 
+      (item.name && item.name.toLowerCase().includes(q)) || 
+      (item.seq && item.seq.toLowerCase().includes(q))
+    )
+  }
+  
+  return result
+})
+
+const selectedFormAsset = computed(() => {
+  return eligibleAssets.value.find(a => a.id === Number(form.value.assetId)) || null
+})
+
+function selectAsset(asset) {
+  form.value.assetId = asset.id.toString()
+  isAssetSelectorOpen.value = false
+  searchAssetQuery.value = ''
+}
+
+function getAssetLocation(asset) {
+  if (asset.distributions && asset.distributions.length > 0) {
+    const dist = asset.distributions[0];
+    const parts = [];
+    if (dist.department) parts.push(dist.department);
+    else if (asset.department) parts.push(asset.department);
+
+    if (dist.building || dist.room) {
+      let loc = '';
+      if (dist.building) loc += `อาคาร ${dist.building}`;
+      if (dist.room) loc += (loc ? ' ' : '') + `ห้อง ${dist.room}`;
+      parts.push(`(${loc})`);
+    }
+
+    if (parts.length > 0) return parts.join(' ');
+  }
+  if (asset.unit) return asset.unit;
+  return asset.department || 'ส่วนกลาง';
 }
 
 async function saveForm() {
@@ -281,8 +345,9 @@ onMounted(() => {
       enter-active-class="transition ease-out duration-150" enter-from-class="opacity-0" enter-to-class="opacity-100"
       leave-active-class="transition ease-in duration-100" leave-from-class="opacity-100" leave-to-class="opacity-0"
     >
-      <div v-if="isFormOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-[1px] px-4" @click.self="closeForm">
-        <div class="bg-white rounded-2xl shadow-2xl ring-1 ring-emerald-900/5 w-full max-w-lg relative max-h-[90vh] overflow-y-auto no-scrollbar">
+      <div v-if="isFormOpen" class="fixed inset-0 z-50 overflow-y-auto bg-slate-900/40 backdrop-blur-[1px]" @click.self="closeForm">
+        <div class="min-h-screen flex items-center justify-center py-8 px-4" @click.self="closeForm">
+          <div class="bg-white rounded-2xl shadow-2xl ring-1 ring-emerald-900/5 w-full max-w-lg relative overflow-visible my-auto">
           <div class="h-1.5 bg-gradient-to-r from-[#065f46] via-emerald-400 to-[#065f46] sticky top-0"></div>
           <div class="p-6">
           <button type="button" @click="closeForm" class="absolute top-5 right-5 text-slate-400 hover:text-slate-600 hover:rotate-90 transition-all" aria-label="ปิด">
@@ -300,10 +365,14 @@ onMounted(() => {
           <div class="space-y-4">
             <div>
               <label class="block text-sm font-medium text-slate-700 mb-1.5">รายการที่ต้องการจำหน่าย</label>
-              <select v-model="form.assetId" :disabled="isLoadingAssets" class="w-full px-3.5 py-2.5 rounded-lg border border-slate-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#065f46]/20 focus:border-[#065f46] transition disabled:opacity-60">
-                <option value="" disabled>{{ isLoadingAssets ? 'กำลังโหลดรายการ...' : '-- เลือกรายการ --' }}</option>
-                <option v-for="a in eligibleAssets" :key="a.id" :value="a.id">{{ a.name }} · {{ a.condition }} ({{ a.unit }})</option>
-              </select>
+              <button type="button" @click.stop.prevent="isAssetSelectorOpen = true" :disabled="isLoadingAssets"
+                class="w-full flex items-center justify-between text-left bg-white border border-slate-200 rounded-lg px-3.5 py-2.5 hover:border-[#065f46] focus:outline-none focus:ring-2 focus:ring-[#065f46]/20 transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed">
+                <div v-if="selectedFormAsset" class="text-slate-900 font-bold truncate flex-1">
+                  [{{ selectedFormAsset.seq || '-' }}] {{ selectedFormAsset.name }}
+                </div>
+                <div v-else class="text-slate-400 font-medium truncate flex-1">{{ isLoadingAssets ? 'กำลังโหลดรายการ...' : '-- คลิกเพื่อค้นหาและเลือกครุภัณฑ์ --' }}</div>
+                <span class="ml-3 shrink-0 px-2.5 py-1 rounded-md bg-slate-100 text-slate-600 text-xs font-bold border border-slate-200">{{ selectedFormAsset ? 'เปลี่ยน' : 'ค้นหา' }}</span>
+              </button>
               <p v-if="!isLoadingAssets && eligibleAssets.length === 0" class="text-xs text-amber-600 mt-1.5">ไม่มีครุภัณฑ์ที่มีสิทธิ์จำหน่ายได้ในขณะนี้ (ต้องมีสถานะ "ชำรุด" หรือ "กำลังซ่อม")</p>
             </div>
 
@@ -315,8 +384,8 @@ onMounted(() => {
             </div>
 
             <div>
-              <label class="block text-sm font-medium text-slate-700 mb-1.5">วันที่ประชุมคณะกรรมการ</label>
-              <input v-model="form.meetingDate" type="datetime-local" class="w-full px-3.5 py-2.5 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#065f46]/20 focus:border-[#065f46] transition" />
+              <label class="block text-sm font-semibold text-slate-700 mb-1.5">วันที่ประชุมคณะกรรมการ</label>
+              <ThaiDatePicker v-model="form.meetingDate" type="datetime-local" inputClass="w-full px-3.5 py-2.5 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#065f46]/20 focus:border-[#065f46] transition bg-white" />
             </div>
 
             <div>
@@ -343,6 +412,89 @@ onMounted(() => {
               บันทึกคำขอ
             </button>
           </div>
+        </div>
+        </div>
+      </div>
+      </div>
+    </Transition>
+
+    <!-- Modal: เลือกพัสดุ (สำหรับจำหน่าย) -->
+    <Transition enter-active-class="transition ease-out duration-200" enter-from-class="opacity-0 scale-95" enter-to-class="opacity-100 scale-100"
+      leave-active-class="transition ease-in duration-150" leave-from-class="opacity-100 scale-100" leave-to-class="opacity-0 scale-95">
+      <div v-if="isAssetSelectorOpen" class="fixed inset-0 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4" style="z-index: 9999;" @click.self="isAssetSelectorOpen = false">
+        <div class="bg-white rounded-2xl w-full max-w-3xl h-[80vh] flex flex-col overflow-hidden shadow-2xl">
+          <!-- Header -->
+          <div class="px-6 py-5 border-b border-slate-100 shrink-0">
+            <div class="flex items-center justify-between mb-4">
+              <div>
+                <h3 class="text-lg font-bold text-slate-900">ค้นหาและเลือกครุภัณฑ์เพื่อจำหน่าย</h3>
+                <p class="text-xs text-slate-500 mt-0.5">เฉพาะครุภัณฑ์ที่มีสถานะ "ชำรุด" หรือ "กำลังซ่อม" เท่านั้น</p>
+              </div>
+              <button type="button" @click="isAssetSelectorOpen = false" class="w-9 h-9 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-500 transition-colors cursor-pointer">
+                <X class="w-4 h-4" />
+              </button>
+            </div>
+            
+            <!-- Search -->
+            <div class="relative mb-3">
+              <Search class="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+              <input type="text" v-model="searchAssetQuery" placeholder="ค้นหาชื่อครุภัณฑ์ หรือเลขครุภัณฑ์..."
+                class="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:border-[#047857] focus:ring-2 focus:ring-[#065f46]/10 transition" />
+            </div>
+            
+            <!-- Category Chips -->
+            <div class="flex items-center gap-2 overflow-x-auto pb-1">
+              <button v-for="cat in assetCategories" :key="cat" type="button" @click="assetCatFilter = cat"
+                :class="[
+                  'px-4 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all cursor-pointer shrink-0',
+                  assetCatFilter === cat ? 'bg-[#065f46] text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                ]">
+                {{ cat }}
+              </button>
+            </div>
+          </div>
+
+          <!-- Cards Grid -->
+          <div class="flex-1 overflow-y-auto p-5 bg-slate-50/50">
+            <div v-if="filteredAssetsForSelector.length === 0" class="py-12 text-center text-slate-400">
+              <Wrench class="w-12 h-12 mx-auto mb-2 text-slate-200" />
+              <p class="text-sm">ไม่พบรายการครุภัณฑ์ที่ค้นหา</p>
+            </div>
+            
+            <div v-else class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+              <div v-for="asset in filteredAssetsForSelector" :key="asset.id" @click="selectAsset(asset)" type="button"
+                class="bg-white rounded-xl border-2 border-slate-200 hover:border-[#047857] hover:shadow-md transition-all cursor-pointer p-4 flex flex-col gap-3 group text-left">
+                <div class="flex items-start justify-between">
+                  <div class="w-10 h-10 rounded-xl bg-amber-50 group-hover:bg-[#065f46] flex items-center justify-center transition-colors shrink-0">
+                    <Recycle class="w-5 h-5 text-amber-600 group-hover:text-white transition-colors" />
+                  </div>
+                  <span :class="[
+                    'text-xs font-bold px-2 py-0.5 rounded-full',
+                    asset.condition === 'ชำรุด' ? 'bg-red-50 text-red-700' : 'bg-amber-50 text-amber-700'
+                  ]">
+                    {{ asset.condition }}
+                  </span>
+                </div>
+                <div class="flex-1">
+                  <h4 class="text-sm font-semibold text-slate-900 group-hover:text-[#065f46] transition-colors line-clamp-2">{{ asset.name }}</h4>
+                  <p class="text-xs text-slate-400 mt-0.5">{{ asset.seq || '-' }} · {{ asset.category || 'ไม่ระบุ' }}</p>
+                </div>
+                <div class="pt-3 border-t border-slate-100 flex items-center justify-between mt-auto">
+                  <span class="text-xs text-slate-400 font-medium truncate pr-2" :title="getAssetLocation(asset)">{{ getAssetLocation(asset) }}</span>
+                  <span class="text-xs font-bold text-[#065f46] bg-emerald-50 group-hover:bg-[#065f46] group-hover:text-white px-3 py-1 rounded-lg transition-all shrink-0">
+                    เลือก
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Footer -->
+          <div class="px-6 py-4 border-t border-slate-100 shrink-0 flex justify-end">
+            <button type="button" @click="isAssetSelectorOpen = false"
+              class="px-6 py-2.5 rounded-xl border border-slate-200 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition-colors cursor-pointer">
+              ปิดหน้าต่าง
+            </button>
           </div>
         </div>
       </div>

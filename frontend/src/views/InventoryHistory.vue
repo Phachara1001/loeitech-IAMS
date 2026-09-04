@@ -10,7 +10,11 @@ import {
   TrendingDown,
   TrendingUp,
   Minus,
-  Loader2
+  Loader2,
+  Printer,
+  X,
+  PackageSearch,
+  PackageOpen
 } from 'lucide-vue-next'
 import api from '../services/api'
 import { useToast } from '../composables/useToast'
@@ -42,6 +46,26 @@ const selectedSkuId = ref('')
 const selectedItem = computed(() => {
   return inventoryItems.value.find(i => i.id === selectedSkuId.value) || null
 })
+
+// --- Modal Selection Logic ---
+const isItemSelectorOpen = ref(false)
+const searchItemQuery = ref('')
+
+const filteredItemsForSelector = computed(() => {
+  if (!searchItemQuery.value) return inventoryItems.value
+  const q = searchItemQuery.value.toLowerCase()
+  return inventoryItems.value.filter(item => 
+    item.name.toLowerCase().includes(q) || 
+    item.code.toLowerCase().includes(q) || 
+    item.category.toLowerCase().includes(q)
+  )
+})
+
+function selectItem(item) {
+  selectedSkuId.value = item.id
+  isItemSelectorOpen.value = false
+  searchItemQuery.value = ''
+}
 
 async function loadItems() {
   isLoadingItems.value = true
@@ -222,6 +246,12 @@ watch([selectedSkuId, selectedYear], () => {
           </div>
         </div>
 
+        <div class="flex items-center gap-3">
+          <router-link :to="selectedSkuId ? `/print-item-movement?itemId=${selectedSkuId}` : '/print-item-movement'" target="_blank" class="flex items-center gap-2 px-5 py-3 bg-white hover:bg-emerald-50 text-emerald-900 rounded-xl font-bold transition-colors shadow-sm">
+            <Printer class="w-5 h-5" />
+            พิมพ์ประวัติการเคลื่อนไหว
+          </router-link>
+        </div>
       </div>
     </div>
 
@@ -260,14 +290,14 @@ watch([selectedSkuId, selectedYear], () => {
         <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-100 pb-4">
           <div class="flex-1">
             <label class="block text-xs font-bold text-slate-400 mb-1">เลือกรายการพัสดุเพื่อดูบัญชีคุม:</label>
-            <select 
-              v-model="selectedSkuId" 
-              class="w-full text-sm md:text-base font-bold text-slate-900 bg-slate-50 border-2 border-slate-200 rounded-xl p-3 focus:border-emerald-600 focus:outline-none cursor-pointer"
-            >
-              <option v-for="item in inventoryItems" :key="item.id" :value="item.id">
-                [{{ item.code }}] {{ item.name }} (หมวด: {{ item.category }})
-              </option>
-            </select>
+            <button type="button" @click="isItemSelectorOpen = true"
+              class="w-full flex items-center justify-between text-left bg-slate-50 border-2 border-slate-200 rounded-xl p-3 hover:border-emerald-600 focus:outline-none transition-all cursor-pointer">
+              <div v-if="selectedItem" class="text-slate-900 font-bold truncate">
+                [{{ selectedItem.code }}] {{ selectedItem.name }} <span class="text-slate-500 font-medium text-sm ml-1">(หมวด: {{ selectedItem.category }})</span>
+              </div>
+              <div v-else class="text-slate-400 font-medium">-- คลิกเพื่อค้นหาและเลือกรายการพัสดุ --</div>
+              <span class="ml-3 shrink-0 px-3 py-1 rounded-lg bg-slate-100 text-slate-600 text-xs font-semibold">เปลี่ยน</span>
+            </button>
           </div>
         </div>
 
@@ -467,5 +497,65 @@ watch([selectedSkuId, selectedYear], () => {
 
     </div>
 
+    <!-- Modal: เลือกพัสดุ -->
+    <Transition enter-active-class="transition ease-out duration-150" enter-from-class="opacity-0" enter-to-class="opacity-100"
+      leave-active-class="transition ease-in duration-100" leave-from-class="opacity-100" leave-to-class="opacity-0">
+      <div v-if="isItemSelectorOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm px-4" @click.self="isItemSelectorOpen = false">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[85vh]">
+          <!-- Header -->
+          <div class="flex items-center justify-between px-6 py-4 border-b border-slate-100 shrink-0 bg-slate-50/50">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 rounded-xl bg-emerald-100/50 flex items-center justify-center">
+                <PackageSearch class="w-5 h-5 text-emerald-700" />
+              </div>
+              <div>
+                <h3 class="text-lg font-extrabold text-slate-900">เลือกรายการพัสดุ</h3>
+                <p class="text-sm text-slate-500 font-medium">ค้นหาและเลือกพัสดุที่ต้องการดูบัญชีคุม</p>
+              </div>
+            </div>
+            <button type="button" @click="isItemSelectorOpen = false" class="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-500 transition-colors cursor-pointer">
+              <X class="w-4 h-4" />
+            </button>
+          </div>
+
+          <!-- Search & Filter -->
+          <div class="p-4 border-b border-slate-100 shrink-0 bg-white">
+            <div class="relative">
+              <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                <Search class="w-5 h-5 text-slate-400" />
+              </div>
+              <input type="text" v-model="searchItemQuery" placeholder="ค้นหาด้วยรหัส, ชื่อพัสดุ หรือหมวดหมู่..."
+                class="w-full pl-10 pr-4 py-3 rounded-xl border-2 border-slate-200 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 transition-all font-medium text-slate-700 placeholder:text-slate-400" />
+            </div>
+          </div>
+
+          <!-- List -->
+          <div class="overflow-y-auto flex-1 bg-slate-50/50 p-2">
+            <div class="grid grid-cols-1 gap-2">
+              <div v-if="filteredItemsForSelector.length === 0" class="p-8 text-center text-slate-400">
+                <PackageOpen class="w-10 h-10 mx-auto mb-3 opacity-20" />
+                <p class="font-medium">ไม่พบรายการพัสดุที่ค้นหา</p>
+              </div>
+              
+              <button v-for="item in filteredItemsForSelector" :key="item.id" @click="selectItem(item)" type="button"
+                class="flex items-start gap-4 p-4 rounded-xl border border-slate-200 bg-white hover:border-emerald-300 hover:shadow-md transition-all text-left group">
+                <div class="w-12 h-12 rounded-xl bg-slate-100 flex items-center justify-center shrink-0 group-hover:bg-emerald-50 transition-colors">
+                  <PackageOpen class="w-6 h-6 text-slate-500 group-hover:text-emerald-600 transition-colors" />
+                </div>
+                <div class="flex-1 min-w-0">
+                  <div class="flex items-center justify-between gap-2 mb-1">
+                    <p class="font-extrabold text-slate-900 text-base truncate group-hover:text-emerald-700 transition-colors">{{ item.name }}</p>
+                  </div>
+                  <div class="flex flex-wrap items-center gap-3 text-sm text-slate-500 font-medium">
+                    <span class="flex items-center gap-1.5"><span class="w-1.5 h-1.5 rounded-full bg-slate-300"></span> รหัส: {{ item.code }}</span>
+                    <span class="flex items-center gap-1.5"><span class="w-1.5 h-1.5 rounded-full bg-slate-300"></span> หมวดหมู่: {{ item.category }}</span>
+                  </div>
+                </div>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Transition>
   </div>
 </template>

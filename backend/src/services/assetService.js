@@ -53,6 +53,18 @@ export const updateAsset = async (id, data) => {
   await getAssetById(id);
 
   const updatedData = { ...data };
+  
+  // Sanitize payload to avoid Prisma nested write errors
+  const fieldsToRemove = [
+    'id', 'createdAt', 'updatedAt', 'distributions', 'location', 
+    'responsiblePerson', 'qty'
+  ];
+  fieldsToRemove.forEach(field => {
+    if (field in updatedData) {
+      delete updatedData[field];
+    }
+  });
+
   if (data.acquiredDate) {
     updatedData.acquiredDate = new Date(data.acquiredDate);
   }

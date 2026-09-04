@@ -17,6 +17,7 @@ import {
   Loader2,
   Printer
 } from 'lucide-vue-next'
+import ThaiDatePicker from '../components/ThaiDatePicker.vue'
 import BaseModal from '../components/BaseModal.vue'
 import { useToast } from '../composables/useToast'
 import { API_BASE } from '../config/api'
@@ -28,6 +29,7 @@ const toast = useToast()
 // สิทธิ์การเข้าถึง: ดูข้อมูลได้ทุก role / แก้ไขสถานะ, อัปโหลดรูป, แก้ไขข้อมูล, ลบ ได้เฉพาะ Admin, Staff
 const currentRole = ref(localStorage.getItem('tcaims_role') || 'user')
 const canManage = computed(() => ['admin', 'staff'].includes(currentRole.value))
+const isAdmin = computed(() => currentRole.value === 'admin')
 
 function authHeaders() {
   const token = localStorage.getItem('tcaims_auth_token')
@@ -492,7 +494,7 @@ const handlePrint = () => {
         </div>
       </div>
 
-      <div v-else @click="triggerFileUpload"
+      <div v-else-if="isAdmin" @click="triggerFileUpload"
         class="border-2 border-dashed border-slate-300 rounded-lg p-10 flex flex-col items-center justify-center bg-slate-50 hover:bg-emerald-50 hover:border-emerald-400 transition-colors cursor-pointer group relative">
         <div v-if="isUploadingImage"
           class="absolute inset-0 bg-white/50 backdrop-blur-sm flex items-center justify-center z-10 rounded-lg">
@@ -503,6 +505,11 @@ const handlePrint = () => {
         <p class="text-xs text-slate-500 mt-1">บันทึกผ่าน MinIO Storage (JPG, PNG)</p>
       </div>
 
+      <div v-else class="border-2 border-dashed border-slate-300 rounded-lg p-10 flex flex-col items-center justify-center bg-slate-50">
+        <ImageIcon class="w-10 h-10 text-slate-400 mb-3" />
+        <p class="text-sm font-medium text-slate-500">ยังไม่มีรูปภาพครุภัณฑ์</p>
+      </div>
+
       <input type="file" ref="fileInput" class="hidden" accept="image/*" @change="handleImageUpload" />
 
       <template #footer>
@@ -510,7 +517,7 @@ const handlePrint = () => {
           class="px-4 py-2 border border-slate-300 rounded-lg text-slate-700 hover:bg-slate-100 font-medium text-sm">
           ปิด
         </button>
-        <button v-if="selectedAsset?.image" @click="triggerFileUpload" :disabled="isUploadingImage"
+        <button v-if="selectedAsset?.image && isAdmin" @click="triggerFileUpload" :disabled="isUploadingImage"
           class="px-4 py-2 bg-gradient-to-r from-[#065f46] to-[#047857] text-white rounded-lg font-semibold text-sm flex items-center shadow-md hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 transition-all disabled:opacity-50 disabled:cursor-not-allowed">
           <UploadCloud class="w-4 h-4 mr-2" /> {{ isUploadingImage ? 'กำลังอัปโหลด...' : 'เปลี่ยนรูปภาพ' }}
         </button>
@@ -609,8 +616,7 @@ const handlePrint = () => {
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           <div>
             <label class="block text-sm font-medium text-slate-700 mb-1">วันที่ได้มา</label>
-            <input v-model="tempAsset.acquiredDate" type="datetime-local"
-              class="w-full border border-slate-300 rounded-lg py-2 px-3 text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#065f46]/20 focus:border-[#065f46]">
+            <ThaiDatePicker v-model="tempAsset.acquiredDate" type="datetime-local" inputClass="w-full border border-slate-300 rounded-lg py-2 px-3 text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#065f46]/20 focus:border-[#065f46] bg-white" />
           </div>
           <div>
             <label class="block text-sm font-medium text-slate-700 mb-1">วิธีการได้มา</label>

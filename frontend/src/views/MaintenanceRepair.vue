@@ -1,4 +1,4 @@
-<script setup>
+﻿<script setup>
 import { ref, computed, onMounted } from 'vue'
 import {
   Wrench, Plus, X, Check, Loader2, AlertTriangle, Image as ImageIcon,
@@ -49,7 +49,10 @@ onMounted(fetchData)
 
 // รายการซ่อมแซมที่กำลังรอดำเนินการ (PENDING, APPROVED, REPAIRING)
 const activeRepairs = computed(() => {
-  return repairRequests.value.filter(r => r.status === 'PENDING' || r.status === 'APPROVED' || r.status === 'REPAIRING')
+  return repairRequests.value.filter(r => {
+    if (!canManage.value && r.reporterName !== currentUserName.value) return false
+    return r.status === 'PENDING' || r.status === 'APPROVED' || r.status === 'REPAIRING'
+  })
 })
 
 // ตัวกรองเดือนและปีสำหรับประวัติ
@@ -69,6 +72,7 @@ const availableYears = computed(() => {
 // ประวัติซ่อมเสร็จสิ้นแล้ว หรือถูกปฏิเสธ (COMPLETED, REJECTED)
 const repairHistory = computed(() => {
   return repairRequests.value.filter(r => {
+    if (!canManage.value && r.reporterName !== currentUserName.value) return false
     if (r.status !== 'COMPLETED' && r.status !== 'REJECTED') return false
     
     const d = new Date(r.finishDate || r.updatedAt || r.createdAt)
@@ -85,12 +89,15 @@ const totalRepairCost = computed(() => {
 })
 
 // Stats: นับสถานะ
-const stats = computed(() => ({
-  pending:   repairRequests.value.filter(r => r.status === 'PENDING').length,
-  repairing: repairRequests.value.filter(r => r.status === 'APPROVED' || r.status === 'REPAIRING').length,
-  done:      repairRequests.value.filter(r => r.status === 'COMPLETED').length,
-  rejected:  repairRequests.value.filter(r => r.status === 'REJECTED').length,
-}))
+const stats = computed(() => {
+  const visibleRequests = canManage.value ? repairRequests.value : repairRequests.value.filter(r => r.reporterName === currentUserName.value)
+  return {
+    pending:   visibleRequests.filter(r => r.status === 'PENDING').length,
+    repairing: visibleRequests.filter(r => r.status === 'APPROVED' || r.status === 'REPAIRING').length,
+    done:      visibleRequests.filter(r => r.status === 'COMPLETED').length,
+    rejected:  visibleRequests.filter(r => r.status === 'REJECTED').length,
+  }
+})
 
 /* ---------------- Modal: เลือกครุภัณฑ์ ---------------- */
 const assetSelectorOpen = ref(false)

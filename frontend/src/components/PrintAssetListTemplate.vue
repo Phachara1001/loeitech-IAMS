@@ -32,6 +32,12 @@ const getStatusText = (status) => {
     default: return status || '-'
   }
 }
+
+const toThaiNumerals = (num) => {
+  if (num == null) return ''
+  const thaiNums = ['๐', '๑', '๒', '๓', '๔', '๕', '๖', '๗', '๘', '๙']
+  return String(num).replace(/\d/g, (d) => thaiNums[d])
+}
 </script>
 
 <template>
@@ -43,7 +49,7 @@ const getStatusText = (status) => {
       <div class="text-center mb-8 relative">
         <h1 class="text-xl font-bold mb-1">ทะเบียนคุมทรัพย์สิน (ครุภัณฑ์)</h1>
         <h2 class="text-lg">วิทยาลัยเทคนิคเลย</h2>
-        <p class="text-sm mt-2">พิมพ์ข้อมูล ณ วันที่ {{ printDate }} เวลา {{ printTime }} น.</p>
+        <p class="text-sm mt-2">พิมพ์ข้อมูล ณ วันที่ {{ toThaiNumerals(printDate) }} เวลา {{ toThaiNumerals(printTime) }} น.</p>
       </div>
 
       <!-- ตารางข้อมูล -->
@@ -61,16 +67,16 @@ const getStatusText = (status) => {
         </thead>
         <tbody>
           <tr v-for="(asset, index) in assets" :key="asset.id">
-            <td class="border border-black px-2 py-1.5 text-center">{{ index + 1 }}</td>
-            <td class="border border-black px-2 py-1.5">{{ asset.seq }}</td>
+            <td class="border border-black px-2 py-1.5 text-center">{{ toThaiNumerals(index + 1) }}</td>
+            <td class="border border-black px-2 py-1.5">{{ toThaiNumerals(asset.seq) }}</td>
             <td class="border border-black px-2 py-1.5">
-              <div>{{ asset.name }}</div>
+              <div>{{ toThaiNumerals(asset.name) }}</div>
             </td>
-            <td class="border border-black px-2 py-1.5 text-center">{{ formatThaiDate(asset.acquiredDate) }}</td>
-            <td class="border border-black px-2 py-1.5 text-right">{{ asset.unitPrice?.toLocaleString(undefined,
-              { minimumFractionDigits: 2 }) || '-' }}</td>
-            <td class="border border-black px-2 py-1.5">{{ asset.department }}</td>
-            <td class="border border-black px-2 py-1.5 text-center">{{ getStatusText(asset.status) }}</td>
+            <td class="border border-black px-2 py-1.5 text-center">{{ toThaiNumerals(formatThaiDate(asset.acquiredDate)) }}</td>
+            <td class="border border-black px-2 py-1.5 text-right">{{ toThaiNumerals(asset.unitPrice?.toLocaleString(undefined,
+              { minimumFractionDigits: 2 }) || '-') }}</td>
+            <td class="border border-black px-2 py-1.5">{{ toThaiNumerals(asset.department) }}</td>
+            <td class="border border-black px-2 py-1.5 text-center">{{ toThaiNumerals(getStatusText(asset.status)) }}</td>
           </tr>
           <tr v-if="assets.length === 0">
             <td colspan="7" class="border border-black px-4 py-8 text-center text-gray-500">ไม่พบข้อมูลครุภัณฑ์</td>
@@ -81,8 +87,8 @@ const getStatusText = (status) => {
           <tr>
             <th colspan="4" class="border border-black px-2 py-2 text-right font-bold">รวมมูลค่าทั้งสิ้น</th>
             <th class="border border-black px-2 py-2 text-right font-bold">
-              {{assets.reduce((sum, a) => sum + (Number(a.unitPrice) || 0), 0).toLocaleString(undefined,
-                { minimumFractionDigits: 2 })}}
+              {{toThaiNumerals(assets.reduce((sum, a) => sum + (Number(a.unitPrice) || 0), 0).toLocaleString(undefined,
+                { minimumFractionDigits: 2 }))}}
             </th>
             <th colspan="2" class="border border-black px-2 py-2"></th>
           </tr>
@@ -97,7 +103,7 @@ const getStatusText = (status) => {
           <p class="text-sm font-bold">( {{ currentUser?.name ||
             '......................................................' }} )</p>
           <p class="text-sm mt-1">ผู้พิมพ์รายงาน</p>
-          <p class="text-xs mt-1">วันที่ {{ printDate }}</p>
+          <p class="text-xs mt-1">วันที่ {{ toThaiNumerals(printDate) }}</p>
         </div>
       </div>
 

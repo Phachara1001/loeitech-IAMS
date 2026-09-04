@@ -94,6 +94,25 @@ export const findTransactionsByItemId = async (itemId, { year } = {}) => {
 };
 
 /**
+ * ดึงประวัติ stock transaction ของวัสดุทั้งหมด
+ */
+export const findAllTransactions = async ({ year } = {}) => {
+  const where = {};
+  if (year) {
+    const yearNum = Number(year);
+    where.receivedDate = {
+      gte: new Date(yearNum, 0, 1),
+      lt: new Date(yearNum + 1, 0, 1)
+    };
+  }
+  return await prisma.stockTransaction.findMany({
+    where,
+    orderBy: { createdAt: 'desc' },
+    include: { item: { select: { sku: true, name: true, unit: true } } }
+  });
+};
+
+/**
  * บันทึก StockTransaction ประเภท ADJUSTMENT (ผลตรวจนับ)
  */
 export const createAdjustmentTransaction = async ({ itemId, quantity, remark, operatorName }) => {

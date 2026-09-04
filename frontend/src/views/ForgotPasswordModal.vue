@@ -1,4 +1,4 @@
-<script setup>
+﻿<script setup>
 import { ref } from 'vue'
 import axios from 'axios'
 import { X, Mail, Lock, Eye, EyeOff, Loader2, CheckCircle2, KeyRound, ArrowLeft } from 'lucide-vue-next'

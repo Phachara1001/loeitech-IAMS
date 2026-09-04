@@ -29,14 +29,25 @@ export const create = async ({ reqCode, requesterId, reason, items }) => {
  * ดึงรายการคำขอเบิกทั้งหมด
  */
 export const findAll = async ({ status = '' } = {}) => {
-  return await prisma.requisition.findMany({
+  const reqs = await prisma.requisition.findMany({
     where: status ? { status } : {},
     include: {
       items: {
         include: { item: { select: { id: true, sku: true, name: true, unit: true } } }
-      }
+      },
+      requester: { include: { department: true } },
+      approver: true
     },
     orderBy: { createdAt: 'desc' }
+  });
+
+  return reqs.map(req => {
+    if (req.requester) {
+      req.requesterName = req.requester.name || req.requester.username;
+      req.requesterPosition = req.requester.position;
+      req.department = req.requester.department?.name;
+    }
+    return req;
   });
 };
 
@@ -70,7 +81,10 @@ export const approve = async (id, { approvedBy, approverId, approvedQtyMap = {},
   return await prisma.$transaction(async (tx) => {
     const requisition = await tx.requisition.findUnique({
       where: { id: Number(id) },
-      include: { items: { include: { item: true } } }
+      include: { 
+        items: { include: { item: true } },
+        requester: true
+      }
     });
 
     if (!requisition) throw Object.assign(new Error('ไม่พบคำขอเบิก'), { status: 404 });
@@ -100,6 +114,9 @@ export const approve = async (id, { approvedBy, approverId, approvedQtyMap = {},
         data: { quantity: { decrement: approvedQty } }
       });
 
+      // ชื่อผู้เบิก
+      const requesterName = requisition.requester ? (requisition.requester.name || requisition.requester.username) : 'ระบบ';
+
       // บันทึก transaction OUT
       const stockTx = await tx.stockTransaction.create({
         data: {
@@ -108,6 +125,7 @@ export const approve = async (id, { approvedBy, approverId, approvedQtyMap = {},
           quantity: approvedQty,
           reference: requisition.reqCode,
           remarks: `อนุมัติจาก ${approvedBy || 'ผู้อนุมัติ'}`,
+          operatorName: requesterName,
           receivedDate: new Date()
         }
       });

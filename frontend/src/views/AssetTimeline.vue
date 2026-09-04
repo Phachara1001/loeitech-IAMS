@@ -20,7 +20,8 @@ import {
   ArrowRightLeft,
   Sparkles,
   Check,
-  Loader2
+  Loader2,
+  Printer
 } from 'lucide-vue-next'
 import * as inventoryApi from '../services/inventoryApi.js'
 import { useToast } from '../composables/useToast.js'
@@ -99,20 +100,37 @@ async function fetchAssets() {
   try {
     const data = await inventoryApi.getAssets()
     // Map backend schema to format expected by view
-    assets.value = data.map(a => ({
-      id: a.id,
-      seq: a.seq,
-      name: a.name,
-      code: a.referenceCode || '-',
-      serial: a.serialNumber || '-',
-      category: a.category,
-      ownerId: a.department,
-      ownerName: a.department || 'ไม่ระบุ',
-      department: a.department || 'ไม่ระบุ',
-      currentLocation: a.location?.name || 'ไม่ระบุสถานที่',
-      status: a.status,
-      image: a.image
-    }))
+    assets.value = data.map(a => {
+      const currentDist = a.distributions && a.distributions.length > 0 ? a.distributions[0] : null;
+      let ownerName = 'ส่วนกลาง';
+      let currentLocation = 'ไม่ระบุสถานที่';
+      
+      if (currentDist) {
+        ownerName = currentDist.responsiblePerson?.name || 'ไม่ระบุ';
+        const roomStr = currentDist.room || '';
+        const bldgStr = currentDist.building || '';
+        if (roomStr && bldgStr) {
+          currentLocation = `${roomStr} ${bldgStr}`;
+        } else {
+          currentLocation = roomStr || bldgStr || currentDist.department || 'ไม่ระบุสถานที่';
+        }
+      }
+
+      return {
+        id: a.id,
+        seq: a.seq,
+        name: a.name,
+        code: a.referenceCode || '-',
+        serial: a.serialNumber || '-',
+        category: a.category,
+        ownerId: a.department,
+        ownerName: ownerName,
+        department: a.department || 'ไม่ระบุ',
+        currentLocation: currentLocation,
+        status: a.status,
+        image: a.image
+      }
+    })
   } catch (err) {
     toast.error('ไม่สามารถโหลดข้อมูลครุภัณฑ์ได้: ' + err.message)
   } finally {
@@ -287,6 +305,12 @@ const handleAddLog = () => {
           </div>
         </div>
 
+        <div class="flex items-center gap-3">
+          <router-link to="/print-asset-movement" target="_blank" class="flex items-center gap-2 px-5 py-3 bg-white hover:bg-emerald-50 text-emerald-900 rounded-xl font-bold transition-colors shadow-sm">
+            <Printer class="w-5 h-5" />
+            พิมพ์ประวัติการเคลื่อนไหว
+          </router-link>
+        </div>
       </div>
     </div>
 

@@ -11,9 +11,10 @@ import {
   CheckCircle2,
   Clock,
   ArrowRightLeft,
-  User,
-  X,
-  Check
+  Check,
+  PackageSearch,
+  PackageOpen,
+  Wrench
 } from 'lucide-vue-next'
 import * as inventoryApi from '../services/inventoryApi.js'
 import { useToast } from '../composables/useToast.js'
@@ -58,7 +59,8 @@ const departments = [
   'ฝ่ายวิชาการ',
   'งานการเงินและบัญชี',
   'งานพัสดุกลาง',
-  'แผนกช่างยนต์'
+  'แผนกช่างยนต์',
+  'ส่วนกลาง'
 ]
 
 async function fetchData() {
@@ -70,7 +72,7 @@ async function fetchData() {
       inventoryApi.getUsers()
     ])
     masterAssets.value = assetsData
-    
+
     distributionLogs.value = distsData.map(d => ({
       id: d.id.toString(),
       assetId: d.assetId,
@@ -141,6 +143,63 @@ const form = ref({
   note: ''
 })
 
+// --- Modal Selection Logic for Asset ---
+const isAssetSelectorOpen = ref(false)
+const searchAssetQuery = ref('')
+const assetCatFilter = ref('ทั้งหมด')
+
+const assetCategories = computed(() => {
+  const cats = new Set(masterAssets.value.map(a => a.category).filter(Boolean))
+  return ['ทั้งหมด', ...Array.from(cats)]
+})
+
+const filteredAssetsForSelector = computed(() => {
+  let result = masterAssets.value
+  
+  if (assetCatFilter.value !== 'ทั้งหมด') {
+    result = result.filter(a => a.category === assetCatFilter.value)
+  }
+  
+  if (searchAssetQuery.value) {
+    const q = searchAssetQuery.value.toLowerCase()
+    result = result.filter(item => 
+      item.name.toLowerCase().includes(q) || 
+      (item.seq && item.seq.toLowerCase().includes(q))
+    )
+  }
+  
+  return result
+})
+
+const selectedFormAsset = computed(() => {
+  return masterAssets.value.find(a => a.id === Number(form.value.assetId)) || null
+})
+
+function selectAsset(asset) {
+  form.value.assetId = asset.id.toString()
+  isAssetSelectorOpen.value = false
+  searchAssetQuery.value = ''
+}
+
+function getAssetLocation(asset) {
+  if (asset.distributions && asset.distributions.length > 0) {
+    const dist = asset.distributions[0];
+    const parts = [];
+    if (dist.department) parts.push(dist.department);
+    else if (asset.department) parts.push(asset.department);
+
+    if (dist.building || dist.room) {
+      let loc = '';
+      if (dist.building) loc += `อาคาร ${dist.building}`;
+      if (dist.room) loc += (loc ? ' ' : '') + `ห้อง ${dist.room}`;
+      parts.push(`(${loc})`);
+    }
+
+    if (parts.length > 0) return parts.join(' ');
+  }
+  return asset.department || 'ส่วนกลาง';
+}
+
 const handleAssignAsset = async () => {
   if (currentUser.value.role === 'User') return
 
@@ -164,7 +223,7 @@ const handleAssignAsset = async () => {
 
     await inventoryApi.createAssetDistribution(payload)
     toast.success(`จัดสรรครุภัณฑ์ ${selectedAsset.seq || '-'} ไปยัง ${form.value.department} เรียบร้อยแล้ว!`)
-    
+
     // Reset Form & Close Modal
     isModalOpen.value = false
     form.value = { assetId: '', department: '', building: '', room: '', responsiblePersonId: '', note: '' }
@@ -182,19 +241,24 @@ const handleAssignAsset = async () => {
     <div class="relative overflow-hidden rounded-2xl bg-[#072415] text-white shadow-xl print:hidden">
       <!-- Background Mesh Gradient -->
       <div class="absolute inset-0 pointer-events-none overflow-hidden">
-        <div class="absolute -top-20 -right-20 w-[500px] h-[500px] rounded-full bg-[#1B5E3C] opacity-75 blur-[90px]"></div>
-        <div class="absolute top-1/2 -left-20 w-[400px] h-[400px] rounded-full bg-[#288252] opacity-40 blur-[80px]"></div>
-        <div class="absolute -bottom-20 right-1/3 w-[350px] h-[350px] rounded-full bg-[#04140B] opacity-90 blur-[70px]"></div>
+        <div class="absolute -top-20 -right-20 w-[500px] h-[500px] rounded-full bg-[#1B5E3C] opacity-75 blur-[90px]">
+        </div>
+        <div class="absolute top-1/2 -left-20 w-[400px] h-[400px] rounded-full bg-[#288252] opacity-40 blur-[80px]">
+        </div>
+        <div class="absolute -bottom-20 right-1/3 w-[350px] h-[350px] rounded-full bg-[#04140B] opacity-90 blur-[70px]">
+        </div>
       </div>
 
       <div class="relative z-10 p-6 sm:p-8 flex flex-col lg:flex-row items-center justify-between gap-6">
         <div class="flex items-center gap-4">
-          <div class="p-3.5 bg-emerald-400/20 border border-emerald-400/30 rounded-2xl text-emerald-300 backdrop-blur-md shrink-0">
+          <div
+            class="p-3.5 bg-emerald-400/20 border border-emerald-400/30 rounded-2xl text-emerald-300 backdrop-blur-md shrink-0">
             <Building2 class="w-8 h-8" />
           </div>
           <div>
             <h1 class="text-2xl sm:text-3xl font-bold text-white">ทะเบียนคุมครุภัณฑ์จ่ายให้หน่วย</h1>
-            <p class="text-emerald-100/80 text-sm sm:text-base mt-1">ระบบควบคุมการจัดสรร โยกย้ายสถานที่ และระบุบุคลากรผู้รับผิดชอบดูแลครุภัณฑ์</p>
+            <p class="text-emerald-100/80 text-sm sm:text-base mt-1">ระบบควบคุมการจัดสรร โยกย้ายสถานที่
+              และระบุบุคลากรผู้รับผิดชอบดูแลครุภัณฑ์</p>
           </div>
         </div>
 
@@ -205,19 +269,19 @@ const handleAssignAsset = async () => {
     <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
       <div>
         <h2 class="text-xl font-extrabold text-slate-800">
-          {{ currentUser.role === 'User' ? `รายการครุภัณฑ์ในสังกัด (${currentUser.department})` : 'รายการประวัติการจ่ายครุภัณฑ์ทั้งหมด' }}
+          {{ currentUser.role === 'User' ? `รายการครุภัณฑ์ในสังกัด (${currentUser.department})` :
+            'รายการประวัติการจ่ายครุภัณฑ์ทั้งหมด' }}
         </h2>
         <p class="text-sm text-slate-500 mt-0.5">
-          {{ currentUser.role === 'User' ? 'แสดงเฉพาะรายการครุภัณฑ์ที่ผูกกับแผนกหรือตัวท่าน' : 'บันทึกการจัดสรร โยกย้าย และลงประวัติการส่งคืนอัตโนมัติ' }}
+          <span v-if="currentUser.role === 'User'">แสดงเฉพาะรายการครุภัณฑ์ที่ผูกกับแผนกหรือตัวท่าน</span>
+          <span v-else>บันทึกการจัดสรร โยกย้าย และลงประวัติการส่งคืนอัตโนมัติ</span>
         </p>
       </div>
 
       <!-- ปุ่มเปิด Modal จัดสรรครุภัณฑ์ (เฉพาะ Admin & Staff) -->
       <div v-if="currentUser.role === 'Admin' || currentUser.role === 'Staff'">
-        <button 
-          @click="isModalOpen = true"
-          class="px-5 py-3 bg-emerald-800 text-white hover:bg-emerald-700 rounded-2xl font-extrabold flex items-center transition-all shadow-md cursor-pointer"
-        >
+        <button @click="isModalOpen = true"
+          class="px-5 py-3 bg-emerald-800 text-white hover:bg-emerald-700 rounded-2xl font-extrabold flex items-center transition-all shadow-md cursor-pointer">
           <Plus class="w-5 h-5 mr-2 stroke-[3]" />
           ทำรายการจัดสรร / โยกย้ายครุภัณฑ์
         </button>
@@ -226,23 +290,21 @@ const handleAssignAsset = async () => {
 
     <!-- Main Table Container -->
     <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-      
+
       <!-- Filter Toolbar -->
       <div class="p-4 border-b border-slate-200 bg-slate-50/50 flex flex-col sm:flex-row justify-between gap-4">
         <div class="relative w-full sm:w-80">
           <Search class="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-          <input 
-            v-model="searchQuery" 
-            type="text" 
-            placeholder="ค้นหาเลขครุภัณฑ์, ชื่อ, ห้อง, ผู้ดูแล..."
-            class="pl-10 pr-4 py-2.5 w-full bg-white border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-slate-900 font-medium" 
-          />
+          <input v-model="searchQuery" type="text" placeholder="ค้นหาเลขครุภัณฑ์, ชื่อ, ห้อง, ผู้ดูแล..."
+            class="pl-10 pr-4 py-2.5 w-full bg-white border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-slate-900 font-medium" />
         </div>
 
         <div class="flex items-center gap-3">
-          <label class="inline-flex items-center gap-2 cursor-pointer text-sm font-bold text-slate-700 bg-white px-3 py-2 rounded-xl border border-slate-300">
-            <input type="checkbox" v-model="currentOnlyFilter" class="w-4 h-4 text-emerald-800 rounded focus:ring-emerald-500" />
-            <span>แสดงเฉพาะที่ครอบครองอยู่ปัจจุบัน (is_current)</span>
+          <label
+            class="inline-flex items-center gap-2 cursor-pointer text-sm font-bold text-slate-700 bg-white px-3 py-2 rounded-xl border border-slate-300">
+            <input type="checkbox" v-model="currentOnlyFilter"
+              class="w-4 h-4 text-emerald-800 rounded focus:ring-emerald-500" />
+            <span>แสดงเฉพาะที่ครอบครองอยู่ปัจจุบัน</span>
           </label>
         </div>
       </div>
@@ -261,11 +323,13 @@ const handleAssignAsset = async () => {
             </tr>
           </thead>
           <tbody class="divide-y divide-slate-200 font-medium">
-            <tr v-for="item in filteredDistributions" :key="item.id" :class="['transition-colors', item.is_current ? 'hover:bg-slate-50/80' : 'bg-slate-50/40 text-slate-400']">
-              
+            <tr v-for="item in filteredDistributions" :key="item.id"
+              :class="['transition-colors', item.is_current ? 'hover:bg-slate-50/80' : 'bg-slate-50/40 text-slate-400']">
+
               <!-- หมายเลขครุภัณฑ์ -->
               <td class="px-6 py-4">
-                <div class="font-mono font-extrabold text-slate-900 text-base" :class="{ 'opacity-60': !item.is_current }">
+                <div class="font-mono font-extrabold text-slate-900 text-base"
+                  :class="{ 'opacity-60': !item.is_current }">
                   {{ item.assetCode }}
                 </div>
                 <div class="text-xs text-slate-500 font-bold mt-0.5">{{ item.assetName }}</div>
@@ -273,7 +337,7 @@ const handleAssignAsset = async () => {
 
               <!-- ฝ่าย/หน่วยงาน -->
               <td class="px-6 py-4 font-bold text-slate-800">
-                {{ item.department }}
+                {{ item.department || 'ส่วนกลาง' }}
               </td>
 
               <!-- อาคาร / ห้อง -->
@@ -288,7 +352,8 @@ const handleAssignAsset = async () => {
               <!-- บุคลากรผู้รับผิดชอบ -->
               <td class="px-6 py-4">
                 <div class="flex items-center gap-2">
-                  <div class="w-7 h-7 bg-slate-100 text-slate-700 rounded-full flex items-center justify-center font-bold text-xs border">
+                  <div
+                    class="w-7 h-7 bg-slate-100 text-slate-700 rounded-full flex items-center justify-center font-bold text-xs border">
                     <User class="w-3.5 h-3.5" />
                   </div>
                   <div>
@@ -309,16 +374,12 @@ const handleAssignAsset = async () => {
 
               <!-- สถานะ is_current -->
               <td class="px-6 py-4 text-center">
-                <span 
-                  v-if="item.is_current" 
-                  class="px-3 py-1 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-full text-xs font-extrabold inline-flex items-center gap-1"
-                >
+                <span v-if="item.is_current"
+                  class="px-3 py-1 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-full text-xs font-extrabold inline-flex items-center gap-1">
                   <CheckCircle2 class="w-3.5 h-3.5" /> ครอบครองปัจจุบัน
                 </span>
-                <span 
-                  v-else 
-                  class="px-3 py-1 bg-slate-100 text-slate-500 border border-slate-200 rounded-full text-xs font-bold inline-flex items-center gap-1"
-                >
+                <span v-else
+                  class="px-3 py-1 bg-slate-100 text-slate-500 border border-slate-200 rounded-full text-xs font-bold inline-flex items-center gap-1">
                   <ArrowRightLeft class="w-3.5 h-3.5" /> โยกย้ายแล้ว (ประวัติ)
                 </span>
               </td>
@@ -339,9 +400,11 @@ const handleAssignAsset = async () => {
     <!-- =========================================
          MODAL: ฟอร์มจัดสรร / โยกย้ายครุภัณฑ์
          ========================================= -->
-    <div v-if="isModalOpen" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
-      <div class="bg-white w-full max-w-xl rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col">
-        
+    <div v-if="isModalOpen"
+      class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
+      <div
+        class="bg-white w-full max-w-xl rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col">
+
         <div class="px-8 py-6 border-b border-slate-100 flex items-center justify-between bg-emerald-50">
           <h3 class="font-extrabold text-slate-900 text-2xl flex items-center gap-2">
             <Building2 class="w-7 h-7 text-emerald-800" />
@@ -353,22 +416,25 @@ const handleAssignAsset = async () => {
         </div>
 
         <form @submit.prevent="handleAssignAsset" class="p-8 space-y-4 text-sm">
-          
+
           <!-- เลือกครุภัณฑ์ -->
           <div>
             <label class="block font-extrabold text-slate-800 mb-1">เลือกครุภัณฑ์ที่ต้องการจัดสรร:</label>
-            <select v-model="form.assetId" required class="w-full p-3 border-2 border-slate-300 rounded-xl font-bold bg-slate-50 focus:border-emerald-600 focus:outline-none">
-              <option value="" disabled>-- เลือกครุภัณฑ์ --</option>
-              <option v-for="asset in masterAssets" :key="asset.id" :value="asset.id">
-                [{{ asset.seq || '-' }}] {{ asset.name }}
-              </option>
-            </select>
+            <button type="button" @click="isAssetSelectorOpen = true"
+              class="w-full flex items-center justify-between text-left bg-slate-50 border-2 border-slate-300 rounded-xl p-3 hover:border-emerald-600 focus:outline-none transition-all cursor-pointer">
+              <div v-if="selectedFormAsset" class="text-slate-900 font-bold truncate">
+                [{{ selectedFormAsset.seq || '-' }}] {{ selectedFormAsset.name }}
+              </div>
+              <div v-else class="text-slate-400 font-medium">-- คลิกเพื่อค้นหาและเลือกครุภัณฑ์ --</div>
+              <span class="ml-3 shrink-0 px-3 py-1 rounded-lg bg-slate-200 text-slate-700 text-xs font-bold">{{ selectedFormAsset ? 'เปลี่ยน' : 'ค้นหา' }}</span>
+            </button>
           </div>
 
           <!-- เลือกหน่วยงาน / ฝ่าย -->
           <div>
             <label class="block font-extrabold text-slate-800 mb-1">นามหน่วยงาน / ฝ่าย ที่รับมอบ:</label>
-            <select v-model="form.department" required class="w-full p-3 border border-slate-300 rounded-xl font-bold bg-white focus:outline-none">
+            <select v-model="form.department" required
+              class="w-full p-3 border border-slate-300 rounded-xl font-bold bg-white focus:outline-none">
               <option value="" disabled>-- เลือกฝ่าย/แผนก --</option>
               <option v-for="dept in departments" :key="dept" :value="dept">{{ dept }}</option>
             </select>
@@ -378,18 +444,21 @@ const handleAssignAsset = async () => {
           <div class="grid grid-cols-2 gap-3">
             <div>
               <label class="block font-extrabold text-slate-800 mb-1">ชื่ออาคาร:</label>
-              <input v-model="form.building" type="text" required placeholder="เช่น อาคาร 3" class="w-full p-3 border border-slate-300 rounded-xl font-medium" />
+              <input v-model="form.building" type="text" required placeholder="เช่น อาคาร 3"
+                class="w-full p-3 border border-slate-300 rounded-xl font-medium" />
             </div>
             <div>
               <label class="block font-extrabold text-slate-800 mb-1">ห้องเรียน / ห้องทำงาน:</label>
-              <input v-model="form.room" type="text" required placeholder="เช่น ห้อง 304" class="w-full p-3 border border-slate-300 rounded-xl font-medium" />
+              <input v-model="form.room" type="text" required placeholder="เช่น ห้อง 304"
+                class="w-full p-3 border border-slate-300 rounded-xl font-medium" />
             </div>
           </div>
 
           <!-- บุคลากรผู้รับผิดชอบ -->
           <div>
             <label class="block font-extrabold text-slate-800 mb-1">บุคลากรผู้ลงนามรับผิดชอบดูแล:</label>
-            <select v-model="form.responsiblePersonId" required class="w-full p-3 border border-slate-300 rounded-xl font-bold bg-white focus:outline-none">
+            <select v-model="form.responsiblePersonId" required
+              class="w-full p-3 border border-slate-300 rounded-xl font-bold bg-white focus:outline-none">
               <option value="" disabled>-- เลือกผู้รับผิดชอบ --</option>
               <option v-for="p in personnelList" :key="p.id" :value="p.id">
                 {{ p.name }} ({{ p.dept }})
@@ -400,14 +469,17 @@ const handleAssignAsset = async () => {
           <!-- หมายเหตุ -->
           <div>
             <label class="block font-extrabold text-slate-800 mb-1">หมายเหตุการจัดสรร / โยกย้าย:</label>
-            <textarea v-model="form.note" rows="2" placeholder="เช่น โยกย้ายตามคำขอประจำภาคเรียน..." class="w-full p-3 border border-slate-300 rounded-xl font-medium"></textarea>
+            <textarea v-model="form.note" rows="2" placeholder="เช่น โยกย้ายตามคำขอประจำภาคเรียน..."
+              class="w-full p-3 border border-slate-300 rounded-xl font-medium"></textarea>
           </div>
 
           <div class="pt-4 flex justify-end gap-3 border-t border-slate-100">
-            <button type="button" @click="isModalOpen = false" class="px-6 py-2.5 bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold rounded-xl cursor-pointer">
+            <button type="button" @click="isModalOpen = false"
+              class="px-6 py-2.5 bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold rounded-xl cursor-pointer">
               ยกเลิก
             </button>
-            <button type="submit" class="px-6 py-2.5 bg-emerald-800 hover:bg-emerald-700 text-white font-extrabold rounded-xl shadow-md cursor-pointer flex items-center gap-1.5">
+            <button type="submit"
+              class="px-6 py-2.5 bg-emerald-800 hover:bg-emerald-700 text-white font-extrabold rounded-xl shadow-md cursor-pointer flex items-center gap-1.5">
               <Check class="w-4 h-4 stroke-[3]" /> ยืนยันการจัดสรร
             </button>
           </div>
@@ -417,5 +489,83 @@ const handleAssignAsset = async () => {
       </div>
     </div>
 
+    <!-- Modal: เลือกพัสดุ (ซ้อนทับ Modal จัดสรรอีกที) -->
+    <Transition enter-active-class="transition ease-out duration-200" enter-from-class="opacity-0 scale-95" enter-to-class="opacity-100 scale-100"
+      leave-active-class="transition ease-in duration-150" leave-from-class="opacity-100 scale-100" leave-to-class="opacity-0 scale-95">
+      <div v-if="isAssetSelectorOpen" class="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4" @click.self="isAssetSelectorOpen = false">
+        <div class="bg-white rounded-2xl w-full max-w-3xl h-[80vh] flex flex-col overflow-hidden shadow-2xl">
+          <!-- Header -->
+          <div class="px-6 py-5 border-b border-slate-100 shrink-0">
+            <div class="flex items-center justify-between mb-4">
+              <div>
+                <h3 class="text-lg font-bold text-slate-900">ค้นหาและเลือกครุภัณฑ์เพื่อจัดสรร</h3>
+                <p class="text-xs text-slate-500 mt-0.5">ค้นหาครุภัณฑ์ที่ต้องการจัดสรรหรือโยกย้ายหน่วยงาน</p>
+              </div>
+              <button type="button" @click="isAssetSelectorOpen = false" class="w-9 h-9 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-500 transition-colors cursor-pointer">
+                <X class="w-4 h-4" />
+              </button>
+            </div>
+            
+            <!-- Search -->
+            <div class="relative mb-3">
+              <Search class="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+              <input type="text" v-model="searchAssetQuery" placeholder="ค้นหาชื่อครุภัณฑ์ หรือเลขครุภัณฑ์..."
+                class="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:border-[#047857] focus:ring-2 focus:ring-[#065f46]/10 transition" />
+            </div>
+            
+            <!-- Category Chips -->
+            <div class="flex items-center gap-2 overflow-x-auto pb-1">
+              <button v-for="cat in assetCategories" :key="cat" type="button" @click="assetCatFilter = cat"
+                :class="[
+                  'px-4 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all cursor-pointer shrink-0',
+                  assetCatFilter === cat ? 'bg-[#065f46] text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                ]">
+                {{ cat }}
+              </button>
+            </div>
+          </div>
+
+          <!-- Cards Grid -->
+          <div class="flex-1 overflow-y-auto p-5 bg-slate-50/50">
+            <div v-if="filteredAssetsForSelector.length === 0" class="py-12 text-center text-slate-400">
+              <Wrench class="w-12 h-12 mx-auto mb-2 text-slate-200" />
+              <p class="text-sm">ไม่พบรายการครุภัณฑ์ที่ค้นหา</p>
+            </div>
+            
+            <div v-else class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+              <div v-for="asset in filteredAssetsForSelector" :key="asset.id" @click="selectAsset(asset)" type="button"
+                class="bg-white rounded-xl border-2 border-slate-200 hover:border-[#047857] hover:shadow-md transition-all cursor-pointer p-4 flex flex-col gap-3 group text-left">
+                <div class="flex items-start justify-between">
+                  <div class="w-10 h-10 rounded-xl bg-emerald-50 group-hover:bg-[#065f46] flex items-center justify-center transition-colors shrink-0">
+                    <Wrench class="w-5 h-5 text-[#065f46] group-hover:text-white transition-colors" />
+                  </div>
+                  <span class="text-xs font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700">
+                    พร้อมใช้
+                  </span>
+                </div>
+                <div class="flex-1">
+                  <h4 class="text-sm font-semibold text-slate-900 group-hover:text-[#065f46] transition-colors line-clamp-2">{{ asset.name }}</h4>
+                  <p class="text-xs text-slate-400 mt-0.5">{{ asset.seq || '-' }} · {{ asset.category || 'ไม่ระบุ' }}</p>
+                </div>
+                <div class="pt-3 border-t border-slate-100 flex items-center justify-between mt-auto">
+                  <span class="text-xs text-slate-400 font-medium truncate pr-2" :title="getAssetLocation(asset)">{{ getAssetLocation(asset) }}</span>
+                  <span class="text-xs font-bold text-[#065f46] bg-emerald-50 group-hover:bg-[#065f46] group-hover:text-white px-3 py-1 rounded-lg transition-all shrink-0">
+                    เลือก
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Footer -->
+          <div class="px-6 py-4 border-t border-slate-100 shrink-0 flex justify-end">
+            <button type="button" @click="isAssetSelectorOpen = false"
+              class="px-6 py-2.5 rounded-xl border border-slate-200 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition-colors cursor-pointer">
+              ปิดหน้าต่าง
+            </button>
+          </div>
+        </div>
+      </div>
+    </Transition>
   </div>
 </template>

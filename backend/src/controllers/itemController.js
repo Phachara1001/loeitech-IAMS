@@ -223,3 +223,28 @@ export const getItemTransactions = async (req, res, next) => {
     next(error);
   }
 };
+
+/**
+ * @swagger
+ * /api/items/transactions/all:
+ *   get:
+ *     summary: ดูประวัติ Running Balance ของวัสดุทั้งหมด
+ *     tags: [Items]
+ *     parameters:
+ *       - in: query
+ *         name: year
+ *         schema:
+ *           type: integer
+ *         description: กรองเฉพาะปีที่ระบุ (ค.ศ.)
+ *     responses:
+ *       200:
+ *         description: สำเร็จ
+ */
+export const getAllTransactions = async (req, res, next) => {
+  try {
+    const txs = await itemService.getAllTransactions({ year: req.query.year });
+    res.status(200).json({ status: 'success', data: txs });
+  } catch (error) {
+    next(error);
+  }
+};

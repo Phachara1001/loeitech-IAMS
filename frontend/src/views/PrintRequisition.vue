@@ -70,6 +70,11 @@ const padItems = computed(() => {
 
 const numberThai = ['๑', '๒', '๓', '๔', '๕', '๖', '๗', '๘', '๙', '๑๐']
 
+const toThaiNumerals = (num) => {
+  if (num == null) return ''
+  const thaiNums = ['๐', '๑', '๒', '๓', '๔', '๕', '๖', '๗', '๘', '๙']
+  return String(num).replace(/\d/g, (d) => thaiNums[d])
+}
 </script>
 
 <template>
@@ -97,8 +102,8 @@ const numberThai = ['๑', '๒', '๓', '๔', '๕', '๖', '๗', '๘', '๙
         <div>
           ใบเบิกเลขที่<span
             class="mx-2 px-4 border-b border-dotted border-black min-w-[60px] inline-block text-center">{{
-              reqNumberParts.num }}/{{
-              reqNumberParts.year }}</span>
+              toThaiNumerals(reqNumberParts.num) }}/{{
+              toThaiNumerals(reqNumberParts.year) }}</span>
         </div>
         <div>
           หน่วยงาน<span
@@ -108,16 +113,16 @@ const numberThai = ['๑', '๒', '๓', '๔', '๕', '๖', '๗', '๘', '๙
 
       <div class="flex justify-end mb-6 text-sm leading-relaxed">
         <div>
-          วันที่ {{ reqDate.day }} {{ reqDate.month }} พ.ศ. {{ reqDate.year }}
+          วันที่ {{ toThaiNumerals(reqDate.day) }} {{ reqDate.month }} พ.ศ. {{ toThaiNumerals(reqDate.year) }}
         </div>
       </div>
 
       <div class="text-sm leading-relaxed mb-6">
         <div>เรื่อง<span class="ml-4">ขออนุมัติเบิกวัสดุสิ่งของใช้ราชการ</span></div>
-        <div>เรียน<span class="ml-4">หัวหน้าหน่วยพัสดุ</span></div>
+        <div>เรียน<span class="ml-4">หัวหน้าแผนกวิชาเทคโนโลยีสารสนเทศ</span></div>
         <div class="indent-12 mt-2">
-          ด้วยข้าพเจ้า {{ requisition.requesterName }} สังกัด {{ วิทยาลัยเทคนิคเลย }}
-          มีความประสงค์จะขอเบิกพัสดุสิ่งของเพื่อไปใช้เพื่อ{{ requisition.reason }}
+          ด้วยข้าพเจ้า {{ requisition.requesterName }} สังกัดแผนกวิชาเทคโนโลยีสารสนเทศ
+          มีความประสงค์จะขอเบิกพัสดุสิ่งของเพื่อไปใช้เพื่อ{{ toThaiNumerals(requisition.reason) }}
         </div>
         <div>
           ตามรายการต่อไปนี้คือ
@@ -135,9 +140,9 @@ const numberThai = ['๑', '๒', '๓', '๔', '๕', '๖', '๗', '๘', '๙
         </thead>
         <tbody>
           <tr v-for="(item, index) in padItems" :key="index" class="h-8">
-            <td class="border border-black p-1.5 text-center">{{ numberThai[index] || index + 1 }}</td>
-            <td class="border border-black p-1.5 px-3 truncate">{{ item?.item?.name || '' }}</td>
-            <td class="border border-black p-1.5 text-center">{{ item ? `${item.requestedQty} ${item.item?.unit || ''}`
+            <td class="border border-black p-1.5 text-center">{{ toThaiNumerals(numberThai[index] || index + 1) }}</td>
+            <td class="border border-black p-1.5 px-3 truncate">{{ toThaiNumerals(item?.item?.name || '') }}</td>
+            <td class="border border-black p-1.5 text-center">{{ item ? toThaiNumerals(`${item.requestedQty} ${item.item?.unit || ''}`)
               : '' }}</td>
             <td class="border border-black p-1.5 text-center"></td>
           </tr>

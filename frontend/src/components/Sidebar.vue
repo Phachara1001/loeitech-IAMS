@@ -7,7 +7,7 @@ import {
   Database, SendToBack, CalendarClock,
   ClipboardList, FilePlus,
   Settings, Activity, FileText,
-  Recycle, ClipboardCheck, ArrowLeftRight, Wrench, CalendarCheck
+  Recycle, ClipboardCheck, ArrowLeftRight, Wrench, CalendarCheck, Users
 } from 'lucide-vue-next'
 
 const route = useRoute()
@@ -19,7 +19,7 @@ const menuGroups = [
   {
     title: 'ภาพรวมระบบ',
     items: [
-      { name: 'Dashboard', path: '/', icon: LayoutDashboard, roles: ['admin', 'staff', 'user'] },
+      { name: 'หน้าแรก', path: '/', icon: LayoutDashboard, roles: ['admin', 'staff', 'user'] },
     ]
   },
   {
@@ -28,6 +28,7 @@ const menuGroups = [
       { name: 'ทะเบียนพัสดุ', path: '/inventory-stock', icon: PackageSearch, roles: ['admin', 'staff', 'user'] },
       { name: 'บันทึกรับเข้าพัสดุ', path: '/inventory-receive', icon: Download, roles: ['admin', 'staff'] },
       { name: 'ประวัติเคลื่อนไหว', path: '/inventory-history', icon: History, roles: ['admin', 'staff'] },
+      { name: 'ตรวจสอบพัสดุประจำปี', path: '/inventory-check', icon: ClipboardCheck, roles: ['admin', 'staff'] },
     ]
   },
   {
@@ -36,7 +37,6 @@ const menuGroups = [
       { name: 'ทะเบียนครุภัณฑ์', path: '/asset-list', icon: Database, roles: ['admin', 'staff', 'user'] },
       { name: 'จ่ายครุภัณฑ์ให้หน่วย', path: '/asset-distribution', icon: SendToBack, roles: ['admin', 'staff'] },
       { name: 'ประวัติซ่อม/เคลื่อนย้าย', path: '/asset-timeline', icon: CalendarClock, roles: ['admin', 'staff', 'user'] },
-      { name: 'ตรวจสอบพัสดุประจำปี', path: '/inventory-check', icon: ClipboardCheck, roles: ['admin', 'staff'] },
       { name: 'จำหน่ายพัสดุ/ครุภัณฑ์', path: '/asset-disposal', icon: Recycle, roles: ['admin', 'staff'] },
     ]
   },
@@ -62,6 +62,13 @@ const menuGroups = [
       { name: 'ออกรายงาน/ส่งออก', path: '/report-export', icon: FileText, roles: ['admin', 'staff'] },
       { name: 'ตั้งค่าปีงบประมาณ', path: '/fiscal-year-settings', icon: CalendarCheck, roles: ['admin'] },
     ]
+  },
+  {
+    title: 'เกี่ยวกับระบบ',
+    items: [
+      { name: 'คู่มือการใช้งาน', path: '/manual', icon: FileText, roles: ['admin', 'staff', 'user'] },
+      { name: 'ทีมผู้พัฒนาระบบ', path: '/team', icon: Users, roles: ['admin', 'staff', 'user'] }
+    ]
   }
 ]
 
@@ -84,12 +91,15 @@ const isActive = (path) => {
 
 <template>
   <aside class="w-64 bg-emerald-800 text-slate-100 flex flex-col transition-all duration-300">
-    <div
-      class="h-16 flex items-center px-6 border-b border-emerald-700/50 text-white font-bold text-lg tracking-wide shrink-0">
-      <div class="w-12 h-12 mr-3 flex items-center justify-center text-white">
-        <img src="../../public/logo1.png" />
+    <div class="py-4 flex items-center px-5 border-b border-emerald-700/50 text-white tracking-wide shrink-0">
+      <div class="w-12 h-12 mr-3 flex items-center justify-center text-white shrink-0">
+        <img src="../../public/logo1.png" class="w-full h-full object-contain" />
       </div>
-      LOEITECH-IAMS
+      <div class="flex flex-col">
+        <span class="font-bold text-xl leading-tight">IT-IAMS</span>
+        <span class="text-[10px] text-emerald-200 leading-tight mt-1">ระบบบริหารครุภัณฑ์</span>
+        <span class="text-[10px] text-emerald-200 leading-tight">แผนกเทคโนโลยีสารสนเทศ</span>
+      </div>
     </div>
 
     <!-- เพิ่มคลาสสำหรับซ่อน Scrollbar แท็บเลื่อนข้างซ้าย -->
@@ -115,7 +125,7 @@ const isActive = (path) => {
     <div class="p-4 border-t border-emerald-700/50">
       <div class="flex items-center space-x-3 text-sm">
         <div class="w-2 h-2 rounded-full bg-emerald-400"></div>
-        <span class="text-emerald-200">System Online</span>
+        <span class="text-emerald-200">&copy; IT_LOEITECH</span>
       </div>
     </div>
   </aside>

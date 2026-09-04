@@ -4,6 +4,7 @@ import {
   ArrowLeftRight, Plus, X, Check, Loader2, AlertTriangle, Bell,
   CheckCircle2, Ban, PackageCheck, Clock, ChevronRight, Search, Wrench
 } from 'lucide-vue-next'
+import ThaiDatePicker from '../components/ThaiDatePicker.vue'
 import * as inventoryApi from '../services/inventoryApi.js'
 import { useToast } from '../composables/useToast.js'
 
@@ -39,6 +40,11 @@ async function fetchData() {
 
 onMounted(fetchData)
 
+const filteredRecords = computed(() => {
+  if (canManage.value) return records.value
+  return records.value.filter(r => r.borrowerName === currentUserName.value)
+})
+
 const availableAssetsForBorrow = computed(() => {
   return assets.value.filter(a => a.status === 'Active' || a.status === 'active')
 })
@@ -52,9 +58,45 @@ function daysUntil(dateStr) {
   return diff
 }
 
+function getAssetLocation(asset) {
+  if (asset.distributions && asset.distributions.length > 0) {
+    const dist = asset.distributions[0];
+    const parts = [];
+    if (dist.department) parts.push(dist.department);
+    else if (asset.department) parts.push(asset.department);
+
+    if (dist.building || dist.room) {
+      let loc = '';
+      if (dist.building) loc += `อาคาร ${dist.building}`;
+      if (dist.room) loc += (loc ? ' ' : '') + `ห้อง ${dist.room}`;
+      parts.push(`(${loc})`);
+    }
+
+    if (parts.length > 0) return parts.join(' ');
+  }
+  return asset.department || 'ส่วนกลาง';
+}
+
 function formatThaiDate(dateStr) {
   if (!dateStr) return '-'
-  return new Date(dateStr).toLocaleDateString('th-TH', { dateStyle: 'medium' })
+  return new Date(dateStr).toLocaleDateString('th-TH', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric'
+  })
+}
+
+function formatThaiDateTime(dateStr) {
+  if (!dateStr) return '-'
+  const d = new Date(dateStr)
+  return d.toLocaleDateString('th-TH', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric'
+  }) + ' เวลา ' + d.toLocaleTimeString('th-TH', {
+    hour: '2-digit',
+    minute: '2-digit'
+  }) + ' น.'
 }
 
 function statusLabel(status) {
@@ -75,7 +117,7 @@ function statusStyle(status) {
 }
 
 const dueSoonOrOverdue = computed(() =>
-  records.value.filter((r) => (r.status === 'BORROWED') && r.dueDate)
+  filteredRecords.value.filter((r) => (r.status === 'BORROWED') && r.dueDate)
     .map((r) => ({ ...r, daysLeft: daysUntil(r.dueDate) }))
     .filter((r) => r.daysLeft <= 3)
     .sort((a, b) => a.daysLeft - b.daysLeft)
@@ -254,7 +296,7 @@ async function confirmReturn() {
     <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
       <!-- Toolbar -->
       <div class="flex items-center justify-between px-5 py-4 border-b border-slate-100">
-        <p class="text-sm text-slate-500">ทั้งหมด <span class="font-bold text-[#065f46]">{{ records.length }}</span> รายการ</p>
+        <p class="text-sm text-slate-500">ทั้งหมด <span class="font-bold text-[#065f46]">{{ filteredRecords.length }}</span> รายการ</p>
         <button type="button" @click="openForm"
           class="flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#065f46] to-[#047857] text-white px-5 py-2.5 text-sm font-bold shadow-md hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 transition-all cursor-pointer">
           <Plus class="w-4 h-4" />
@@ -267,9 +309,9 @@ async function confirmReturn() {
 
       <!-- List -->
       <div v-else class="divide-y divide-slate-100">
-        <div v-if="records.length === 0" class="py-16 text-center text-slate-400 text-sm">ยังไม่มีรายการยืม-คืน</div>
+        <div v-if="filteredRecords.length === 0" class="py-16 text-center text-slate-400 text-sm">ยังไม่มีรายการยืม-คืน</div>
 
-        <div v-for="r in records" :key="r.id" class="px-5 py-4 hover:bg-slate-50 transition-colors">
+        <div v-for="r in filteredRecords" :key="r.id" class="px-5 py-4 hover:bg-slate-50 transition-colors">
           <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <!-- Info -->
             <div class="min-w-0 flex-1">
@@ -363,8 +405,7 @@ async function confirmReturn() {
 
             <div>
               <label class="block text-sm font-semibold text-slate-700 mb-1.5">กำหนดวันส่งคืน <span class="text-red-500">*</span></label>
-              <input v-model="form.dueDate" type="datetime-local"
-                class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#065f46]/20 focus:border-[#065f46] transition" />
+              <ThaiDatePicker v-model="form.dueDate" type="datetime-local" />
             </div>
 
             <div v-if="formError" class="flex items-start gap-2 rounded-xl bg-red-50 border border-red-100 px-3 py-2.5">
@@ -564,7 +605,7 @@ async function confirmReturn() {
                 <p class="text-xs text-slate-400 mt-0.5">{{ asset.seq || '-' }} · {{ asset.category || 'ไม่ระบุ' }}</p>
               </div>
               <div class="pt-3 border-t border-slate-100 flex items-center justify-between">
-                <span class="text-xs text-slate-400">{{ asset.location?.name || 'ไม่ระบุสถานที่' }}</span>
+                <span class="text-xs text-slate-400 font-medium truncate pr-2" :title="getAssetLocation(asset)">{{ getAssetLocation(asset) }}</span>
                 <span class="text-xs font-bold text-[#065f46] bg-emerald-50 group-hover:bg-[#065f46] group-hover:text-white px-3 py-1 rounded-lg transition-all">
                   เลือก
                 </span>

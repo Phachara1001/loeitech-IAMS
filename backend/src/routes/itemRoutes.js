@@ -10,6 +10,9 @@ router.use(authenticate);
 // GET /api/items?search=...&category=...
 router.get('/', itemController.getItems);
 
+// GET /api/items/transactions/all
+router.get('/transactions/all', itemController.getAllTransactions);
+
 // GET /api/items/:id/transactions  (ต้องอยู่ก่อน /:id เพื่อไม่ให้ชนกัน)
 router.get('/:id/transactions', itemController.getItemTransactions);
 

@@ -85,6 +85,13 @@ export const getItemTransactions = async (id, options = {}) => {
 };
 
 /**
+ * ดึงประวัติ Running Balance ของวัสดุทั้งหมด
+ */
+export const getAllTransactions = async (options = {}) => {
+  return await itemRepository.findAllTransactions(options);
+};
+
+/**
  * บันทึกผลตรวจนับ Inventory Check (ADJUSTMENT)
  * อัปเดต quantity และสร้าง StockTransaction ประเภท ADJUSTMENT
  */

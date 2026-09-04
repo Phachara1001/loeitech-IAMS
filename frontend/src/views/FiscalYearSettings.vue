@@ -1,4 +1,4 @@
-<script setup>
+﻿<script setup>
 import { ref, onMounted } from 'vue'
 import { CalendarCheck, AlertTriangle, CheckCircle, Info, Lock, ArrowRight, X } from 'lucide-vue-next'
 

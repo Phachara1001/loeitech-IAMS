@@ -1,10 +1,11 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import {
-  Filter, Calendar, Building2, Package, FileSpreadsheet, FileText,
-  Download, CheckCircle2, Loader2, AlertTriangle, ShieldAlert,
+  FileText, Download, Calendar, Filter, FileSpreadsheet,
+  CheckCircle2, Loader2, AlertTriangle, ShieldAlert,
   ClipboardList, Boxes, Truck, Wrench, FileWarning, History, Check
 } from 'lucide-vue-next'
+import ThaiDatePicker from '../components/ThaiDatePicker.vue'
 import api from '../services/api'
 import { useToast } from '../composables/useToast'
 
@@ -256,16 +257,36 @@ onMounted(() => {
             </select>
           </div>
 
-          <div class="grid grid-cols-2 gap-2">
-            <div>
-              <label class="block text-sm font-medium text-slate-700 mb-1.5">ตั้งแต่วันที่</label>
-              <input v-model="filters.dateFrom" type="date" class="w-full px-3 py-2.5 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#065f46]/20 focus:border-[#065f46] transition" />
+            <div class="space-y-4">
+              <div>
+                <label class="block text-sm font-semibold text-slate-700 mb-1.5">ตั้งแต่วันที่</label>
+                <ThaiDatePicker v-model="filters.dateFrom" type="date" inputClass="w-full px-3 py-2.5 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#065f46]/20 focus:border-[#065f46] transition bg-white" />
+              </div>
+              <div>
+                <label class="block text-sm font-semibold text-slate-700 mb-1.5">ถึงวันที่</label>
+                <ThaiDatePicker v-model="filters.dateTo" type="date" inputClass="w-full px-3 py-2.5 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#065f46]/20 focus:border-[#065f46] transition bg-white" />
+              </div>
             </div>
-            <div>
-              <label class="block text-sm font-medium text-slate-700 mb-1.5">ถึงวันที่</label>
-              <input v-model="filters.dateTo" type="date" class="w-full px-3 py-2.5 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#065f46]/20 focus:border-[#065f46] transition" />
-            </div>
+        </div>
+      </div>
+
+      <!-- พิมพ์เอกสารด่วน -->
+      <div class="bg-white rounded-2xl border border-emerald-100 shadow-sm hover:shadow-md transition-shadow p-6 mb-6">
+        <div class="flex items-center gap-2 mb-5">
+          <div class="w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center ring-1 ring-emerald-100">
+            <FileText class="w-4 h-4 text-[#065f46]" />
           </div>
+          <h3 class="text-lg font-bold text-slate-900">พิมพ์เอกสารด่วน (Print)</h3>
+        </div>
+        <div class="flex flex-col sm:flex-row flex-wrap gap-4">
+          <router-link to="/print-asset-movement" class="flex items-center gap-2 px-4 py-3 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl font-semibold transition-colors">
+            <ClipboardList class="w-5 h-5" />
+            พิมพ์รายงานประวัติการเคลื่อนไหวของครุภัณฑ์
+          </router-link>
+          <router-link to="/print-item-movement" class="flex items-center gap-2 px-4 py-3 bg-blue-50 hover:bg-blue-100 text-blue-800 border border-blue-200 rounded-xl font-semibold transition-colors">
+            <Boxes class="w-5 h-5" />
+            พิมพ์รายงานประวัติการเคลื่อนไหวของพัสดุ
+          </router-link>
         </div>
       </div>
 

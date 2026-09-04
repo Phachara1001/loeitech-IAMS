@@ -5,6 +5,12 @@ import prisma from '../prisma/index.js';
  */
 export const findAll = async () => {
   return await prisma.asset.findMany({
+    include: {
+      distributions: {
+        where: { isCurrent: true },
+        include: { responsiblePerson: true }
+      }
+    },
     orderBy: { createdAt: 'desc' }
   });
 };

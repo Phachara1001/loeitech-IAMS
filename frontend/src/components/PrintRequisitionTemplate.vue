@@ -46,6 +46,12 @@ const currentUser = computed(() => {
   return storedUser.name || '....................................................................'
 })
 
+const toThaiNumerals = (num) => {
+  if (num == null) return ''
+  const thaiNums = ['๐', '๑', '๒', '๓', '๔', '๕', '๖', '๗', '๘', '๙']
+  return String(num).replace(/\d/g, (d) => thaiNums[d])
+}
+
 const numberThai = ['๑', '๒', '๓', '๔', '๕', '๖', '๗', '๘', '๙', '๑๐']
 </script>
 
@@ -57,25 +63,25 @@ const numberThai = ['๑', '๒', '๓', '๔', '๕', '๖', '๗', '๘', '๙
 
       <div class="flex justify-between mb-4 text-sm leading-relaxed">
         <div>
-          ใบเบิกเลขที่ {{ reqNumberParts.num }}/{{ reqNumberParts.year }}
+          ใบเบิกเลขที่ {{ toThaiNumerals(reqNumberParts.num) }}/{{ toThaiNumerals(reqNumberParts.year) }}
         </div>
         <div>
-          หน่วยงาน วิทยาลัยเทคนิคเลย
+          แผนกวิชาเทคโนโลยีสารสนเทศ
         </div>
       </div>
 
       <div class="flex justify-end mb-6 text-sm leading-relaxed">
         <div>
-          วันที่ {{ reqDate.day }} {{ reqDate.month }} พ.ศ. {{ reqDate.year }}
+          วันที่ {{ toThaiNumerals(reqDate.day) }} {{ reqDate.month }} พ.ศ. {{ toThaiNumerals(reqDate.year) }}
         </div>
       </div>
 
       <div class="text-sm leading-relaxed mb-6">
         <div>เรื่อง<span class="ml-4">ขออนุมัติเบิกวัสดุสิ่งของใช้ราชการ</span></div>
-        <div>เรียน<span class="ml-4">หัวหน้างานพัสดุ</span></div>
+        <div>เรียน<span class="ml-4">หัวหน้าแผนกวิชาเทคโนโลยีสารสนเทศ</span></div>
         <div class="indent-12 mt-2">
-          ด้วยข้าพเจ้า {{ requisition.requesterName || currentUser }} สังกัด วิทยาลัยเทคนิคเลย
-          มีความประสงค์จะขอเบิกพัสดุสิ่งของเพื่อไปใช้เพื่อ{{ requisition.reason }} ตามรายการต่อไปนี้คือ
+          ด้วยข้าพเจ้า {{ requisition.requesterName || currentUser }} สังกัดแผนกวิชาเทคโนโลยีสารสนเทศ
+          มีความประสงค์จะขอเบิกพัสดุสิ่งของเพื่อไปใช้เพื่อ{{ toThaiNumerals(requisition.reason) }} ตามรายการต่อไปนี้คือ
         </div>
       </div>
 
@@ -90,23 +96,18 @@ const numberThai = ['๑', '๒', '๓', '๔', '๕', '๖', '๗', '๘', '๙
         </thead>
         <tbody>
           <tr v-for="(item, index) in padItems" :key="index" class="h-8">
-            <td class="border border-black p-1.5 text-center">{{ numberThai[index] || index + 1 }}</td>
-            <td class="border border-black p-1.5 px-3 truncate">{{ item?.item?.name || '' }}</td>
-            <td class="border border-black p-1.5 text-center">{{ item ? `${item.requestedQty} ${item.item?.unit || ''}`
+            <td class="border border-black p-1.5 text-center">{{ toThaiNumerals(numberThai[index] || index + 1) }}</td>
+            <td class="border border-black p-1.5 px-3 truncate">{{ toThaiNumerals(item?.item?.name || '') }}</td>
+            <td class="border border-black p-1.5 text-center">{{ item ? toThaiNumerals(`${item.requestedQty} ${item.item?.unit || ''}`)
               : '' }}</td>
             <td class="border border-black p-1.5 text-center"></td>
           </tr>
         </tbody>
       </table>
 
-      <div class="indent-12 text-sm mb-8">จึงเรียนมาเพื่อโปรดพิจารณาอนุมัติ</div>
-
       <div class="grid grid-cols-2 gap-x-12 gap-y-12 text-sm text-center">
         <!-- Requester (ผู้เบิก) -->
         <div class="col-start-2">
-          <div class="flex items-end justify-center mb-1">
-            (ลงชื่อ)<span class="mx-2 border-b border-dotted border-black w-48 inline-block"></span>
-          </div>
           <div class="mb-1 text-center">
             {{ requisition.requesterName || currentUser }}
           </div>
@@ -115,47 +116,7 @@ const numberThai = ['๑', '๒', '๓', '๔', '๕', '๖', '๗', '๘', '๙
           </div>
         </div>
 
-        <!-- Examiner (ผู้ตรวจสอบ) -->
-        <div>
-          <div class="text-left mb-4">ได้ตรวจสอบสิ่งของแล้วพอมีจ่ายให้เบิกตามที่ขอมา</div>
-          <div class="flex items-end justify-start mb-1">
-            (ลงชื่อ)<span class="mx-2 border-b border-dotted border-black w-48 inline-block"></span>
-          </div>
-          <div class="mb-1">เจ้าหน้าที่ผู้ตรวจสอบ</div>
-          <div>........../............/..........</div>
-        </div>
 
-        <!-- Approver (ผู้อนุมัติ) -->
-        <div>
-          <div class="mb-4">อนุมัติให้จ่ายได้</div>
-          <div class="flex items-end justify-center mb-1">
-            (ลงชื่อ)<span class="mx-2 border-b border-dotted border-black w-48 inline-block"></span>
-          </div>
-          <div class="mb-1">( {{ requisition.approver?.name || requisition.approvedBy ||
-            '...................................................' }} )</div>
-          <div>หัวหน้างานพัสดุ</div>
-          <div>........../............/..........</div>
-        </div>
-
-        <!-- Receiver (ผู้รับของ) -->
-        <div>
-          <div class="mb-4">ได้รับของไปถูกต้องแล้ว</div>
-          <div class="flex items-end justify-start mb-1">
-            (ลงชื่อ)<span class="mx-2 border-b border-dotted border-black w-48 inline-block"></span>
-          </div>
-          <div class="mb-1">(...................................................)</div>
-          <div>........../............/..........</div>
-        </div>
-
-        <!-- Payer (ผู้จ่ายของ) -->
-        <div>
-          <div class="mb-4">ได้จ่ายสิ่งของไปและตัดยอดใบบัญชีแล้ว</div>
-          <div class="flex items-end justify-start mb-1">
-            (ลงชื่อ)<span class="mx-2 border-b border-dotted border-black w-48 inline-block"></span>
-          </div>
-          <div class="mb-1">(...................................................)</div>
-          <div>........../............/..........</div>
-        </div>
       </div>
 
     </div>

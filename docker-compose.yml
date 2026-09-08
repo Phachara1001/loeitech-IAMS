@@ -42,14 +42,19 @@ services:
     container_name: iams_backend
     restart: always
     environment:
+      - NODE_ENV=production
+      - PORT=3000
       - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-password}@postgres:5432/${POSTGRES_DB:-assetdb}?schema=public
-      - JWT_SECRET=${JWT_SECRET:-mysecretkey}
+      - JWT_SECRET=${JWT_SECRET:-iams_jwt_super_secret_key_2024}
+      - JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET:-iams_jwt_refresh_super_secret_key_2024}
       - MINIO_ENDPOINT=minio
       - MINIO_PORT=9000
       - MINIO_USE_SSL=false
       - MINIO_ACCESS_KEY=${MINIO_ROOT_USER:-admin}
       - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD:-password123}
       - MINIO_BUCKET=assets
+      - FRONTEND_URL=http://192.168.10.211
+      - SWAGGER_ENABLED=false
     ports:
       - "3000:3000"
     depends_on:

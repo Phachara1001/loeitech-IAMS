@@ -1,0 +1,114 @@
+import * as itemRepository from '../repositories/itemRepository.js';
+
+/**
+ * Generate SKU อัตโนมัติ เช่น CS-0001, CS-0002
+ */
+const generateSku = async () => {
+  const latest = await itemRepository.findLatestItem();
+  if (latest && latest.sku) {
+    // รูปแบบ CS-XXXX
+    const parts = latest.sku.split('-');
+    if (parts.length === 2 && !isNaN(parts[1])) {
+      const nextNum = parseInt(parts[1], 10) + 1;
+      return `${parts[0]}-${String(nextNum).padStart(4, '0')}`;
+    }
+  }
+  return 'CS-0001';
+};
+
+/**
+ * ดึงรายการวัสดุทั้งหมด
+ */
+export const getAllItems = async (filters) => {
+  return await itemRepository.findAll(filters);
+};
+
+/**
+ * ดึงวัสดุตาม ID
+ */
+export const getItemById = async (id) => {
+  const item = await itemRepository.findById(id);
+  if (!item) {
+    const err = new Error('ไม่พบรายการวัสดุ');
+    err.status = 404;
+    throw err;
+  }
+  return item;
+};
+
+/**
+ * สร้างวัสดุใหม่ (auto-generate SKU ถ้าไม่ส่งมา)
+ */
+export const createItem = async (data) => {
+  const sku = data.sku || (await generateSku());
+  return await itemRepository.create({
+    sku,
+    name: data.name,
+    description: data.description || null,
+    category: data.category || null,
+    unit: data.unit || null,
+    quantity: Number(data.quantity) || 0,
+    minThreshold: Number(data.minThreshold) || 0,
+    unitPrice: parseFloat(data.unitPrice) || 0
+  });
+};
+
+/**
+ * แก้ไขข้อมูลวัสดุ
+ */
+export const updateItem = async (id, data) => {
+  await getItemById(id); // ตรวจสอบว่ามีอยู่ก่อน
+  const updateData = { ...data };
+  if (data.quantity !== undefined) updateData.quantity = Number(data.quantity);
+  if (data.minThreshold !== undefined) updateData.minThreshold = Number(data.minThreshold);
+  if (data.unitPrice !== undefined) updateData.unitPrice = parseFloat(data.unitPrice);
+  return await itemRepository.update(id, updateData);
+};
+
+/**
+ * ลบวัสดุ (Soft Delete: ซ่อนออกจากรายการ แต่เก็บข้อมูล+ประวัติ stock transaction ไว้ครบ)
+ */
+export const deleteItem = async (id) => {
+  await getItemById(id); // ตรวจสอบว่ามีอยู่ก่อน (และยังไม่ถูกลบไปแล้ว)
+  return await itemRepository.softDelete(id);
+};
+
+/**
+ * ดึงประวัติ Running Balance ของวัสดุ
+ * @param {number|string} id
+ * @param {object} [options]
+ * @param {number|string} [options.year] - กรองเฉพาะปีที่ระบุ (ค.ศ.) ส่งต่อให้ repository กรองที่ database เลย
+ */
+export const getItemTransactions = async (id, options = {}) => {
+  await getItemById(id); // ตรวจสอบว่ามีอยู่ก่อน
+  return await itemRepository.findTransactionsByItemId(id, options);
+};
+
+/**
+ * ดึงประวัติ Running Balance ของวัสดุทั้งหมด
+ */
+export const getAllTransactions = async (options = {}) => {
+  return await itemRepository.findAllTransactions(options);
+};
+
+/**
+ * บันทึกผลตรวจนับ Inventory Check (ADJUSTMENT)
+ * อัปเดต quantity และสร้าง StockTransaction ประเภท ADJUSTMENT
+ */
+export const adjustItemQuantity = async (id, { actualQty, remark, operatorName }) => {
+  const item = await getItemById(id);
+  const diff = Number(actualQty) - item.quantity;
+
+  // อัปเดต quantity ใน Item
+  const updated = await itemRepository.update(id, { quantity: Number(actualQty) });
+
+  // บันทึก StockTransaction ประเภท ADJUSTMENT
+  await itemRepository.createAdjustmentTransaction({
+    itemId: Number(id),
+    quantity: diff,
+    remark: remark || `ตรวจนับ: ระบบ=${item.quantity}, นับจริง=${actualQty}, ผลต่าง=${diff > 0 ? '+' : ''}${diff}`,
+    operatorName: operatorName || 'ระบบ'
+  });
+
+  return updated;
+};

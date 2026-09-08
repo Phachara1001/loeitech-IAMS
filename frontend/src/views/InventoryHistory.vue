@@ -71,7 +71,7 @@ async function loadItems() {
   isLoadingItems.value = true
   itemsLoadError.value = ''
   try {
-    const { data } = await api.get('/api/items')
+    const { data } = await api.get('/items')
     // แปลงข้อมูลดิบจาก backend ให้ตรงกับ shape ที่หน้านี้ใช้แสดงผล
     inventoryItems.value = (data.data || data).map((it) => ({
       id: it.id,
@@ -108,7 +108,7 @@ async function loadTransactions() {
   isLoadingTransactions.value = true
   transactionsLoadError.value = ''
   try {
-    const { data } = await api.get(`/api/items/${selectedSkuId.value}/transactions`, {
+    const { data } = await api.get(`/items/${selectedSkuId.value}/transactions`, {
       params: selectedYear.value ? { year: selectedYear.value } : {}
     })
     const list = data.data || data.transactions || data

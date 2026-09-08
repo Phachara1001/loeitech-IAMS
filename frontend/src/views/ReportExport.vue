@@ -97,7 +97,7 @@ const isLoadingHistory = ref(true)
 async function loadExportHistory() {
   isLoadingHistory.value = true
   try {
-    const { data } = await api.get('/api/reports/export-history')
+    const { data } = await api.get('/reports/export-history')
     exportHistory.value = data.data || []
   } catch (err) {
     toast.error(err.message || 'โหลดประวัติการส่งออกไม่สำเร็จ')

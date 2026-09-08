@@ -23,7 +23,7 @@ const isLoadingAssets = ref(false)
 async function loadEligibleAssets() {
   isLoadingAssets.value = true
   try {
-    const { data } = await api.get('/api/disposal-requests/eligible-assets')
+    const { data } = await api.get('/disposal-requests/eligible-assets')
     eligibleAssets.value = (data.data || []).map((a) => ({
       id: a.id,
       name: a.name,
@@ -52,7 +52,7 @@ async function loadRequests() {
   isLoadingRequests.value = true
   loadError.value = ''
   try {
-    const { data } = await api.get('/api/disposal-requests', {
+    const { data } = await api.get('/disposal-requests', {
       params: searchQuery.value ? { search: searchQuery.value } : {}
     })
     requests.value = (data.data || []).map((r) => ({
@@ -178,7 +178,7 @@ async function saveForm() {
   formError.value = ''
 
   try {
-    await api.post('/api/disposal-requests', {
+    await api.post('/disposal-requests', {
       assetId: form.value.assetId,
       method: form.value.method,
       meetingDate: new Date(form.value.meetingDate).toISOString(),

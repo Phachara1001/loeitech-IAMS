@@ -18,7 +18,7 @@ async function main() {
   // ถ้ายังไม่มี จะสร้างบัญชีใหม่ให้ทั้งหมด
   const admin = await prisma.user.upsert({
     where: { email: ADMIN_EMAIL },
-    update: { role: 'ADMIN' },
+    update: { role: 'ADMIN', password: hashedPassword, accountStatus: 'ACTIVE' },
     create: {
       username: ADMIN_USERNAME,
       email: ADMIN_EMAIL,

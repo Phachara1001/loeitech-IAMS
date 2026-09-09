@@ -98,10 +98,8 @@ export const uploadImageToMinio = async (file) => {
     { 'Content-Type': file.mimetype }
   );
 
-  // Return public URL (assuming port 9000 and standard path style)
-  const port = process.env.MINIO_PORT || '9000';
-  const host = process.env.MINIO_ENDPOINT === 'minio' ? 'localhost' : (process.env.MINIO_ENDPOINT || 'localhost');
-  return `http://${host}:${port}/${bucketName}/${fileName}`;
+  // Return relative URL through Nginx proxy at /storage/
+  return `/storage/${bucketName}/${fileName}`;
 };
 
 export const getAssetTimeline = async (id) => {

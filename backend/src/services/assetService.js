@@ -2,8 +2,18 @@ import * as assetRepository from '../repositories/assetRepository.js';
 import { minioClient, bucketName } from '../config/minio.js';
 import crypto from 'crypto';
 
+// แปลง URL รูปภาพเก่าที่เก็บใน DB (http://localhost:9000/...) ให้เป็น /storage/
+const normalizeImageUrl = (url) => {
+  if (!url) return url;
+  return url
+    .replace(/^http:\/\/localhost:9000\//, '/storage/')
+    .replace(/^http:\/\/minio:9000\//, '/storage/')
+    .replace(/^http:\/\/[^/]+:9000\//, '/storage/');
+};
+
 export const getAllAssets = async () => {
-  return await assetRepository.findAll();
+  const assets = await assetRepository.findAll();
+  return assets.map(a => ({ ...a, image: normalizeImageUrl(a.image) }));
 };
 
 export const getAssetById = async (id) => {
@@ -11,7 +21,7 @@ export const getAssetById = async (id) => {
   if (!asset) {
     throw new Error('Asset not found');
   }
-  return asset;
+  return { ...asset, image: normalizeImageUrl(asset.image) };
 };
 
 export const createAsset = async (data) => {

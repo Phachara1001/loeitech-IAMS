@@ -1,4 +1,4 @@
-﻿<script setup>
+<script setup>
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import axios from 'axios'
@@ -41,7 +41,7 @@ async function fetchPendingUsers() {
   isLoadingPending.value = true
   try {
     const response = await axios.get(`${API_BASE}/users`, { headers: authHeaders() })
-    pendingUsers.value = response.data.data.filter((u) => u.accountStatus === 'PENDING')
+    pendingUsers.value = response.data.data.filter((u) => u.accountStatus === 'PENDING' || u.resetPasswordCode === 'PENDING')
   } catch (error) {
     // เงียบไว้ ไม่ต้องรบกวนผู้ใช้ด้วย error แจ้งเตือน แค่ไม่แสดงผลถ้าโหลดไม่สำเร็จ
   } finally {
@@ -60,7 +60,11 @@ function closeNotif() {
 async function approveFromNotif(pendingUser) {
   processingUserId.value = pendingUser.id
   try {
-    await axios.patch(`${API_BASE}/users/${pendingUser.id}/approve`, {}, { headers: authHeaders() })
+    if (pendingUser.resetPasswordCode === 'PENDING') {
+      await axios.patch(`${API_BASE}/users/${pendingUser.id}/approve-reset`, {}, { headers: authHeaders() })
+    } else {
+      await axios.patch(`${API_BASE}/users/${pendingUser.id}/approve`, {}, { headers: authHeaders() })
+    }
     pendingUsers.value = pendingUsers.value.filter((u) => u.id !== pendingUser.id)
   } catch (error) {
     // ปล่อยผ่านเงียบๆ ถ้าพลาด ผู้ใช้ยังเห็นรายชื่อค้างอยู่ ลองกดใหม่ได้
@@ -72,7 +76,11 @@ async function approveFromNotif(pendingUser) {
 async function rejectFromNotif(pendingUser) {
   processingUserId.value = pendingUser.id
   try {
-    await axios.patch(`${API_BASE}/users/${pendingUser.id}/reject`, {}, { headers: authHeaders() })
+    if (pendingUser.resetPasswordCode === 'PENDING') {
+      await axios.patch(`${API_BASE}/users/${pendingUser.id}/reject-reset`, {}, { headers: authHeaders() })
+    } else {
+      await axios.patch(`${API_BASE}/users/${pendingUser.id}/reject`, {}, { headers: authHeaders() })
+    }
     pendingUsers.value = pendingUsers.value.filter((u) => u.id !== pendingUser.id)
   } catch (error) {
     // ปล่อยผ่านเงียบๆ
@@ -230,7 +238,11 @@ onUnmounted(() => {
 
             <div v-else class="max-h-72 overflow-y-auto divide-y divide-slate-50">
               <div v-for="pu in pendingUsers" :key="pu.id" class="px-3.5 py-2.5">
-                <p class="text-sm font-medium text-slate-800 truncate">{{ pu.name }}</p>
+                <div class="flex items-center justify-between mb-0.5">
+                  <p class="text-sm font-medium text-slate-800 truncate pr-2">{{ pu.name }}</p>
+                  <span v-if="pu.resetPasswordCode === 'PENDING'" class="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 font-bold whitespace-nowrap">ขอรีเซ็ตรหัส</span>
+                  <span v-else class="text-[10px] px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 font-bold whitespace-nowrap">รอเปิดบัญชี</span>
+                </div>
                 <p class="text-xs text-slate-400 truncate mb-2">{{ pu.email }}</p>
                 <div class="flex items-center gap-2">
                   <button type="button" :disabled="processingUserId === pu.id" @click="approveFromNotif(pu)"

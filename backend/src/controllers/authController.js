@@ -99,11 +99,18 @@ export const login = async (req, res, next) => {
  */
 export const forgotPassword = async (req, res, next) => {
   try {
-    await authService.forgotPassword(req.body.email);
-    res.status(200).json({
-      status: 'success',
-      message: 'หากอีเมลนี้มีอยู่ในระบบ เราได้ส่งรหัสยืนยันไปให้แล้ว กรุณาตรวจสอบกล่องจดหมาย'
-    });
+    const status = await authService.forgotPassword(req.body.email);
+    if (status === 'ALREADY_APPROVED') {
+      res.status(200).json({
+        status: 'approved',
+        message: 'คำขอของคุณได้รับการอนุมัติแล้ว คุณสามารถตั้งรหัสผ่านใหม่ได้ทันที'
+      });
+    } else {
+      res.status(200).json({
+        status: 'success',
+        message: 'ส่งคำขอสำเร็จ กรุณารอผู้ดูแลระบบอนุมัติการรีเซ็ตรหัสผ่าน'
+      });
+    }
   } catch (error) {
     next(error);
   }
@@ -123,8 +130,6 @@ export const forgotPassword = async (req, res, next) => {
  *             type: object
  *             properties:
  *               email:
- *                 type: string
- *               code:
  *                 type: string
  *               newPassword:
  *                 type: string

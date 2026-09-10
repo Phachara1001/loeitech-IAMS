@@ -25,6 +25,8 @@ router.get('/', authorize('ADMIN', 'STAFF'), userController.listUsers);
 router.post('/', authorize('ADMIN'), validateCreateUserInput, userController.createUser);
 router.patch('/:id/approve', authorize('ADMIN'), userController.approveUserById);
 router.patch('/:id/reject', authorize('ADMIN'), userController.rejectUserById);
+router.patch('/:id/approve-reset', authorize('ADMIN'), userController.approvePasswordResetById);
+router.patch('/:id/reject-reset', authorize('ADMIN'), userController.rejectPasswordResetById);
 router.put('/:id', authorize('ADMIN'), validateUpdateUserByAdminInput, userController.updateUserById);
 router.delete('/:id', authorize('ADMIN'), userController.deleteUserById);
 

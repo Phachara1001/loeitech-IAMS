@@ -33,10 +33,10 @@ const generateUniqueUsername = async (email) => {
 };
 
 /**
- * ตัดข้อมูลที่ไม่ควรส่งกลับให้ client (รหัสผ่าน, รหัสยืนยัน) ออกจาก object ผู้ใช้งาน
+ * ตัดข้อมูลที่ไม่ควรส่งกลับให้ client (รหัสผ่าน) ออกจาก object ผู้ใช้งาน
  */
 const toSafeUser = (user) => {
-  const { password, resetPasswordCode, resetPasswordExpires, ...safeUser } = user;
+  const { password, resetPasswordExpires, ...safeUser } = user;
   return safeUser;
 };
 
@@ -114,58 +114,29 @@ export const login = async ({ username, password }) => {
 };
 
 /**
- * ขอรหัสยืนยันเพื่อตั้งรหัสผ่านใหม่ (ส่งอีเมล)
- * หมายเหตุ: ถ้าไม่พบอีเมลในระบบ จะไม่ throw error และไม่ส่งอีเมล
- * เพื่อป้องกันการสุ่มเช็คว่าอีเมลไหนมีอยู่ในระบบบ้าง (user enumeration)
+ * ขอตั้งรหัสผ่านใหม่
+ * เปลี่ยนสถานะเป็น PENDING เพื่อรอ Admin อนุมัติ (ไม่มีการส่งอีเมล)
  */
 export const forgotPassword = async (email) => {
   const user = await authRepository.findByEmail(email);
-  if (!user) return;
+  if (!user) return null; // ป้องกัน User Enumeration
 
-  const code = generateResetCode();
-  const expiresAt = new Date(Date.now() + RESET_CODE_EXPIRY_MINUTES * 60 * 1000);
+  if (user.resetPasswordCode === 'APPROVED') {
+    return 'ALREADY_APPROVED';
+  }
 
-  await authRepository.setResetCode(user.id, code, expiresAt);
-
-  await sendMail({
-    to: user.email,
-    subject: 'รหัสยืนยันสำหรับตั้งรหัสผ่านใหม่ - ระบบบริหารครุภัณฑ์ (TCAIMS)',
-    html: `
-      <div style="font-family: 'Segoe UI', sans-serif; padding: 24px; color: #1e293b; max-width: 480px; margin: 0 auto;">
-        <h2 style="color: #0F3D26; margin-bottom: 4px;">รีเซ็ตรหัสผ่าน</h2>
-        <p style="color: #64748b; margin-top: 0;">ระบบบริหารครุภัณฑ์ · วิทยาลัยเทคนิค</p>
-        <p>สวัสดีคุณ ${user.name || user.username},</p>
-        <p>คุณได้ทำรายการขอตั้งรหัสผ่านใหม่ กรุณากรอกรหัสยืนยันด้านล่างนี้ในระบบ:</p>
-        <p style="font-size: 32px; font-weight: bold; letter-spacing: 6px; color: #1B5E3C; text-align: center; background: #F6FAF7; padding: 16px; border-radius: 12px;">
-          ${code}
-        </p>
-        <p style="color: #64748b; font-size: 14px;">รหัสนี้จะหมดอายุภายใน ${RESET_CODE_EXPIRY_MINUTES} นาที</p>
-        <p style="color: #94a3b8; font-size: 13px;">หากคุณไม่ได้เป็นผู้ทำรายการนี้ กรุณาเพิกเฉยต่ออีเมลฉบับนี้ รหัสผ่านของคุณจะไม่ถูกเปลี่ยนแปลง</p>
-      </div>
-    `
-  });
+  await authRepository.setResetCode(user.id, 'PENDING', null);
+  return 'PENDING';
 };
 
 /**
- * ตั้งรหัสผ่านใหม่ด้วยรหัสยืนยันที่ได้รับทางอีเมล
+ * ตั้งรหัสผ่านใหม่ (ต้องได้รับการอนุมัติจาก Admin ก่อน คือ resetPasswordCode === 'APPROVED')
  */
-export const resetPassword = async ({ email, code, newPassword }) => {
+export const resetPassword = async ({ email, newPassword }) => {
   const user = await authRepository.findByEmail(email);
 
-  if (!user || !user.resetPasswordCode || !user.resetPasswordExpires) {
-    const err = new Error('รหัสยืนยันไม่ถูกต้องหรือหมดอายุ กรุณาขอรหัสใหม่');
-    err.status = 400;
-    throw err;
-  }
-
-  if (user.resetPasswordCode !== code) {
-    const err = new Error('รหัสยืนยันไม่ถูกต้อง');
-    err.status = 400;
-    throw err;
-  }
-
-  if (new Date() > new Date(user.resetPasswordExpires)) {
-    const err = new Error('รหัสยืนยันหมดอายุแล้ว กรุณาขอรหัสใหม่');
+  if (!user || user.resetPasswordCode !== 'APPROVED') {
+    const err = new Error('คำขอตั้งรหัสผ่านใหม่ของคุณยังไม่ได้รับการอนุมัติ หรือคำขอไม่ถูกต้อง');
     err.status = 400;
     throw err;
   }

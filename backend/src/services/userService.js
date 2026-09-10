@@ -8,10 +8,10 @@ const SALT_ROUNDS = 10;
 const INVITE_CODE_EXPIRY_HOURS = 24;
 
 /**
- * ตัดข้อมูลที่ไม่ควรส่งกลับให้ client (รหัสผ่าน, รหัสยืนยัน) ออกจาก object ผู้ใช้งาน
+ * ตัดข้อมูลที่ไม่ควรส่งกลับให้ client (รหัสผ่าน) ออกจาก object ผู้ใช้งาน
  */
 const toSafeUser = (user) => {
-  const { password, resetPasswordCode, resetPasswordExpires, ...safeUser } = user;
+  const { password, resetPasswordExpires, ...safeUser } = user;
   return safeUser;
 };
 
@@ -221,10 +221,26 @@ export const approveUser = async (id) => {
 };
 
 /**
- * Admin ไม่อนุมัติบัญชี (accountStatus → REJECTED) — เก็บประวัติไว้ ไม่ลบบัญชีทิ้ง
+ * Admin อนุมัติบัญชี (accountStatus → REJECTED) — เก็บประวัติไว้ ไม่ลบบัญชีทิ้ง
  */
 export const rejectUser = async (id) => {
   const updated = await userRepository.update(id, { accountStatus: 'REJECTED' });
+  return toSafeUser(updated);
+};
+
+/**
+ * Admin อนุมัติการตั้งรหัสผ่านใหม่ (resetPasswordCode → 'APPROVED')
+ */
+export const approvePasswordReset = async (id) => {
+  const updated = await userRepository.update(id, { resetPasswordCode: 'APPROVED', resetPasswordExpires: null });
+  return toSafeUser(updated);
+};
+
+/**
+ * Admin ปฏิเสธ/ยกเลิกการตั้งรหัสผ่านใหม่ (ล้างค่า resetPasswordCode)
+ */
+export const rejectPasswordReset = async (id) => {
+  const updated = await userRepository.update(id, { resetPasswordCode: null, resetPasswordExpires: null });
   return toSafeUser(updated);
 };
 

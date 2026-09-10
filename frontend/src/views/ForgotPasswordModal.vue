@@ -1,4 +1,4 @@
-﻿<script setup>
+<script setup>
 import { ref } from 'vue'
 import axios from 'axios'
 import { X, Mail, Lock, Eye, EyeOff, Loader2, CheckCircle2, KeyRound, ArrowLeft } from 'lucide-vue-next'
@@ -8,11 +8,10 @@ import { API_BASE } from '../config/api'
 const emit = defineEmits(['close'])
 const toast = useToast()
 
-// ขั้นตอน: 'email' (กรอกอีเมลขอรหัส) -> 'code' (กรอกรหัสยืนยัน+ตั้งรหัสผ่านใหม่) -> 'done' (สำเร็จ)
+// ขั้นตอน: 'email' (กรอกอีเมลขอรหัส) -> 'pending' (รอแอดมินอนุมัติ) -> 'newPassword' (ตั้งรหัสผ่านใหม่) -> 'done' (สำเร็จ)
 const step = ref('email')
 
 const email = ref('')
-const code = ref('')
 const newPassword = ref('')
 const confirmNewPassword = ref('')
 const showNewPassword = ref(false)
@@ -44,9 +43,14 @@ async function handleSendCode() {
 
   isLoading.value = true
   try {
-    await axios.post(`${API_BASE}/auth/forgot-password`, { email: email.value.trim() })
-    toast.success('ส่งรหัสยืนยันไปยังอีเมลของท่านแล้ว')
-    step.value = 'code'
+    const res = await axios.post(`${API_BASE}/auth/forgot-password`, { email: email.value.trim() })
+    if (res.data.status === 'approved') {
+      toast.success('คำขอได้รับการอนุมัติแล้ว กรุณาตั้งรหัสผ่านใหม่')
+      step.value = 'newPassword'
+    } else {
+      toast.success('ส่งคำขอสำเร็จ กรุณารอผู้ดูแลระบบอนุมัติ')
+      step.value = 'pending'
+    }
   } catch (error) {
     const msg = extractErrorMessage(error)
     errorMessage.value = msg
@@ -56,12 +60,12 @@ async function handleSendCode() {
   }
 }
 
-/* ขั้นที่ 2: กรอกรหัสยืนยัน + ตั้งรหัสผ่านใหม่ */
+/* ขั้นที่ 2: ตั้งรหัสผ่านใหม่ (เมื่อแอดมินอนุมัติแล้ว) */
 async function handleResetPassword() {
   errorMessage.value = ''
 
-  if (!code.value.trim() || !newPassword.value.trim() || !confirmNewPassword.value.trim()) {
-    errorMessage.value = 'กรุณากรอกข้อมูลให้ครบทุกช่อง'
+  if (!newPassword.value.trim() || !confirmNewPassword.value.trim()) {
+    errorMessage.value = 'กรุณากรอกรหัสผ่านใหม่ให้ครบทุกช่อง'
     return
   }
   if (newPassword.value.length < 8) {
@@ -77,7 +81,6 @@ async function handleResetPassword() {
   try {
     await axios.post(`${API_BASE}/auth/reset-password`, {
       email: email.value.trim(),
-      code: code.value.trim(),
       newPassword: newPassword.value,
       confirmPassword: confirmNewPassword.value
     })
@@ -92,10 +95,9 @@ async function handleResetPassword() {
   }
 }
 
-/* ย้อนกลับไปขอรหัสใหม่ (เช่น รหัสหมดอายุ) */
+/* ย้อนกลับไปหน้าแรก */
 function handleResendCode() {
   step.value = 'email'
-  code.value = ''
   newPassword.value = ''
   confirmNewPassword.value = ''
   errorMessage.value = ''
@@ -137,7 +139,7 @@ function handleClose() {
               </div>
               <h3 class="text-xl font-bold text-white">ลืมรหัสผ่าน</h3>
               <p class="text-white mt-1.5 text-sm leading-relaxed">
-                กรอกอีเมลที่ใช้ลงทะเบียนไว้ ระบบจะส่งรหัสยืนยันไปให้ทางอีเมล
+                กรอกอีเมลที่ใช้ลงทะเบียนไว้ ระบบจะส่งคำขอไปยังผู้ดูแลระบบเพื่อพิจารณาอนุมัติ
               </p>
             </div>
 
@@ -178,8 +180,31 @@ function handleClose() {
             </form>
           </template>
 
-          <!-- ขั้นที่ 2: กรอกรหัสยืนยัน + ตั้งรหัสผ่านใหม่ -->
-          <template v-else-if="step === 'code'">
+          <!-- ขั้นที่ 1.5: รอการอนุมัติ -->
+          <template v-else-if="step === 'pending'">
+            <div class="flex flex-col items-center text-center py-2">
+              <div class="w-14 h-14 rounded-full bg-amber-400/15 flex items-center justify-center mb-4 ring-1 ring-amber-300/30">
+                <Loader2 class="w-8 h-8 text-amber-200 animate-spin" />
+              </div>
+              <h3 class="text-xl font-bold text-white mb-1.5">คำขอถูกส่งแล้ว</h3>
+              <p class="text-white text-sm leading-relaxed">
+                คำขอรีเซ็ตรหัสผ่านของ <span class="font-semibold">{{ email }}</span> กำลังรอการอนุมัติจากผู้ดูแลระบบ
+              </p>
+              <p class="text-white/70 text-sm mt-2">
+                เมื่อผู้ดูแลระบบอนุมัติแล้ว คุณสามารถกลับมาที่หน้านี้ กรอกอีเมลเดิมเพื่อตั้งรหัสผ่านใหม่ได้ทันที
+              </p>
+              <button
+                type="button"
+                @click="handleClose"
+                class="mt-6 w-full rounded-xl bg-white py-3 text-base font-bold text-[#072415] shadow-lg hover:shadow-xl hover:scale-[1.01] active:scale-[0.99] transition-all duration-200"
+              >
+                เข้าใจแล้ว, กลับไปหน้าเข้าสู่ระบบ
+              </button>
+            </div>
+          </template>
+
+          <!-- ขั้นที่ 2: ตั้งรหัสผ่านใหม่ -->
+          <template v-else-if="step === 'newPassword'">
             <button
               type="button"
               @click="handleResendCode"
@@ -191,34 +216,15 @@ function handleClose() {
 
             <div class="flex flex-col items-center text-center mb-6">
               <div class="w-12 h-12 rounded-full bg-white/10 backdrop-blur-sm flex items-center justify-center mb-3 ring-1 ring-white/25">
-                <Mail class="w-6 h-6 text-emerald-200" />
+                <Lock class="w-6 h-6 text-emerald-200" />
               </div>
-              <h3 class="text-xl font-bold text-white">กรอกรหัสยืนยัน</h3>
+              <h3 class="text-xl font-bold text-white">ตั้งรหัสผ่านใหม่</h3>
               <p class="text-white mt-1.5 text-sm leading-relaxed">
-                เราได้ส่งรหัสยืนยัน 6 หลักไปที่ <span class="font-semibold">{{ email }}</span>
-                กรอกรหัสพร้อมตั้งรหัสผ่านใหม่ด้านล่าง
+                คำขอของคุณได้รับการอนุมัติแล้ว<br/> กรุณาตั้งรหัสผ่านใหม่สำหรับ <span class="font-semibold">{{ email }}</span>
               </p>
             </div>
 
             <form class="space-y-4" @submit.prevent="handleResetPassword" novalidate>
-              <!-- รหัสยืนยัน -->
-              <div>
-                <label for="reset-code" class="block text-sm font-semibold text-white/90 mb-1.5">
-                  รหัสยืนยัน (6 หลัก)
-                </label>
-                <div class="relative">
-                  <KeyRound class="w-4.5 h-4.5 text-[#0F3D26]/70 absolute left-4 top-1/2 -translate-y-1/2" />
-                  <input
-                    id="reset-code"
-                    v-model="code"
-                    type="text"
-                    inputmode="numeric"
-                    maxlength="6"
-                    placeholder="XXXXXX"
-                    class="frosted-input w-full pl-12 pr-5 py-3.5 rounded-xl text-[#0B2417] text-sm tracking-[0.3em] placeholder:text-[#0F3D26]/50 focus:outline-none transition"
-                  />
-                </div>
-              </div>
 
               <!-- รหัสผ่านใหม่ -->
               <div>
@@ -289,15 +295,6 @@ function handleClose() {
               >
                 <Loader2 v-if="isLoading" class="w-4.5 h-4.5 animate-spin" />
                 <span>{{ isLoading ? 'กำลังตั้งรหัสผ่านใหม่...' : 'ตั้งรหัสผ่านใหม่' }}</span>
-              </button>
-
-              <button
-                type="button"
-                @click="handleSendCode"
-                :disabled="isLoading"
-                class="w-full text-center text-sm text-white/70 hover:text-white underline underline-offset-2 transition"
-              >
-                ไม่ได้รับรหัส? ส่งรหัสอีกครั้ง
               </button>
             </form>
           </template>

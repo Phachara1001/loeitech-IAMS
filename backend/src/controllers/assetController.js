@@ -113,6 +113,26 @@ export const createAsset = async (req, res, next) => {
   }
 };
 
+export const createAssetsBatch = async (req, res, next) => {
+  try {
+    const assets = req.body;
+    const result = await assetService.createAssetsBatch(assets);
+
+    await logActivity({
+      req,
+      action: "INSERT_BATCH",
+      entityType: "ASSET",
+      entityId: "BATCH",
+      details: `ลงทะเบียนครุภัณฑ์แบบชุด จำนวน ${assets.length} รายการ`,
+      newValue: { count: assets.length }
+    });
+
+    res.status(201).json({ status: "success", data: result, message: `บันทึกครุภัณฑ์ทั้ง ${assets.length} รายการเรียบร้อยแล้ว` });
+  } catch (error) {
+    next(error);
+  }
+};
+
 /**
  * @swagger
  * /api/assets/{id}:

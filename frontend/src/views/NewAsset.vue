@@ -25,7 +25,8 @@ import {
   Wrench,
   ChevronLeft,
   Loader2,
-  ShoppingCart
+  ShoppingCart,
+  CopyPlus
 } from 'lucide-vue-next'
 import ThaiDatePicker from '../components/ThaiDatePicker.vue'
 import { useToast } from '../composables/useToast'
@@ -99,6 +100,34 @@ const formData = ref({
   remark: ''
 })
 
+// --- Batch Mode State ---
+const isBatchMode = ref(false)
+const batchData = ref({
+  prefix: '',
+  startNum: 1,
+  endNum: 5,
+  padLength: 3 // ความยาวของตัวเลข เช่น 001 คือ 3
+})
+
+// สรุปว่ากำลังจะสร้างอะไรบ้าง
+const batchPreview = computed(() => {
+  if (!isBatchMode.value) return null
+  const count = batchData.value.endNum - batchData.value.startNum + 1
+  if (count <= 0 || count > 100) return null // กันพังถ้าใส่เลขผิด หรือใส่มากเกินไป
+
+  const sample = []
+  for (let i = batchData.value.startNum; i <= Math.min(batchData.value.startNum + 2, batchData.value.endNum); i++) {
+    const numStr = String(i).padStart(batchData.value.padLength, '0')
+    sample.push(`${batchData.value.prefix}${numStr}`)
+  }
+  if (count > 3) {
+    sample.push('...')
+    const numStr = String(batchData.value.endNum).padStart(batchData.value.padLength, '0')
+    sample.push(`${batchData.value.prefix}${numStr}`)
+  }
+  return { count, sample }
+})
+
 const imageFile = ref(null)
 const imagePreview = ref(null)
 
@@ -139,25 +168,48 @@ const handleSaveAsset = async () => {
     }
 
     // Prepare payload
-    const payload = { ...formData.value }
+    const basePayload = { ...formData.value }
     if (categorySelection.value === 'OTHER') {
-      payload.category = customCategory.value || 'ไม่ระบุหมวดหมู่'
+      basePayload.category = customCategory.value || 'ไม่ระบุหมวดหมู่'
     } else {
-      payload.category = categorySelection.value
+      basePayload.category = categorySelection.value
     }
 
     if (imageUrl) {
-      payload.image = imageUrl
+      basePayload.image = imageUrl
     }
-    if (payload.acquiredDate) {
-      payload.acquiredDate = new Date(payload.acquiredDate).toISOString()
+    if (basePayload.acquiredDate) {
+      basePayload.acquiredDate = new Date(basePayload.acquiredDate).toISOString()
     }
 
-    // Send to backend API
-    const response = await axios.post(`${API_BASE}/assets`, payload, { headers: authHeaders() })
+    if (isBatchMode.value) {
+      // โหมดแบบชุด
+      const { startNum, endNum, padLength, prefix } = batchData.value
+      const count = endNum - startNum + 1
+      if (count <= 0) {
+        toast.error('เลขสิ้นสุดต้องมากกว่าหรือเท่ากับเลขเริ่มต้น')
+        isSubmitting.value = false
+        return
+      }
+
+      const payloads = []
+      for (let i = startNum; i <= endNum; i++) {
+        const numStr = String(i).padStart(padLength, '0')
+        payloads.push({
+          ...basePayload,
+          seq: `${prefix}${numStr}`
+        })
+      }
+
+      await axios.post(`${API_BASE}/assets/batch`, payloads, { headers: authHeaders() })
+      newAssetSeq.value = `สร้าง ${count} รายการ (${prefix}${String(startNum).padStart(padLength, '0')} ถึง ${prefix}${String(endNum).padStart(padLength, '0')})`
+    } else {
+      // โหมดปกติ
+      const response = await axios.post(`${API_BASE}/assets`, basePayload, { headers: authHeaders() })
+      newAssetSeq.value = response.data.data.seq
+    }
 
     // Set returned data to display in success modal
-    newAssetSeq.value = response.data.data.seq
     showSuccessModal.value = true
     toast.success('บันทึกข้อมูลครุภัณฑ์เรียบร้อยแล้ว')
   } catch (error) {
@@ -251,15 +303,81 @@ const resetFormAndContinue = () => {
       <form @submit.prevent="handleSaveAsset"
         class="bg-white rounded-3xl p-6 sm:p-8 shadow-sm border border-slate-200/80 space-y-8">
 
+
         <!-- Section 1: ข้อมูลทั่วไป -->
         <div>
           <h2 class="text-xl font-extrabold text-slate-900 border-b border-slate-100 pb-3 flex items-center gap-2 mb-6">
             <span class="w-3 h-3 rounded-full bg-emerald-500"></span>
             1. ข้อมูลทั่วไป (General Information)
           </h2>
-
+          <!-- สวิตช์เปิดโหมด Batch -->
+          <div
+            class="bg-white p-4 mb-4 rounded-2xl shadow-sm border border-slate-200 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <div class="p-2 bg-emerald-50 text-emerald-600 rounded-lg">
+                <CopyPlus class="w-5 h-5" />
+              </div>
+              <div>
+                <h3 class="text-sm font-bold text-slate-800">ลงทะเบียนแบบชุด</h3>
+                <p class="text-xs text-slate-500 mt-0.5">เปิดโหมดนี้เพื่อลงทะเบียนครุภัณฑ์ที่เลขเรียงต่อกันในครั้งเดียว
+                </p>
+              </div>
+            </div>
+            <label class="relative inline-flex items-center cursor-pointer">
+              <input type="checkbox" v-model="isBatchMode" class="sr-only peer">
+              <div
+                class="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500">
+              </div>
+            </label>
+          </div>
           <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div class="md:col-span-2">
+
+            <!-- Batch Mode: เลขครุภัณฑ์แบบชุด -->
+            <div v-if="isBatchMode"
+              class="md:col-span-2 space-y-4 bg-emerald-50/50 p-4 rounded-xl border border-emerald-100">
+              <div class="flex flex-col md:flex-row gap-4">
+                <div class="flex-1">
+                  <label class="block text-sm font-bold text-slate-700 mb-1.5">รหัสครุภัณฑ์นำหน้า <span
+                      class="text-xs text-slate-500 font-normal">(เช่น 644-)</span></label>
+                  <input v-model="batchData.prefix" type="text"
+                    class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-colors text-sm"
+                    placeholder="644-">
+                </div>
+                <div class="w-24 shrink-0">
+                  <label class="block text-sm font-bold text-slate-700 mb-1.5">จำนวนหลัก</label>
+                  <input v-model.number="batchData.padLength" type="number" min="1" max="10"
+                    class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-colors text-sm"
+                    placeholder="3">
+                </div>
+                <div class="flex-1">
+                  <label class="block text-sm font-bold text-slate-700 mb-1.5">เลขเริ่มต้น</label>
+                  <input v-model.number="batchData.startNum" type="number" min="1"
+                    class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-colors text-sm"
+                    placeholder="1">
+                </div>
+                <div class="flex-1">
+                  <label class="block text-sm font-bold text-slate-700 mb-1.5">เลขสิ้นสุด</label>
+                  <input v-model.number="batchData.endNum" type="number" min="1"
+                    class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-colors text-sm"
+                    placeholder="5">
+                </div>
+              </div>
+
+              <div v-if="batchPreview && batchPreview.count > 0"
+                class="text-xs bg-white p-3 rounded-lg border border-emerald-100 shadow-sm flex items-start gap-2">
+                <AlertCircle class="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
+                <div>
+                  <span class="font-bold text-emerald-700">ตัวอย่าง ({{ batchPreview.count }} รายการ):</span>
+                  <div class="text-slate-600 mt-1 flex flex-wrap gap-1.5">
+                    <span v-for="(p, i) in batchPreview.sample" :key="i"
+                      class="bg-slate-100 px-1.5 py-0.5 rounded text-slate-700 border border-slate-200">{{ p }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Normal Mode: เลขครุภัณฑ์ (Auto/Manual) -->
+            <div v-else class="md:col-span-2">
               <label class="block text-base font-extrabold text-slate-800 mb-2 flex items-center gap-2">
                 <Barcode class="w-5 h-5 text-emerald-600" /> รหัสครุภัณฑ์ (เลขครุภัณฑ์)
               </label>
@@ -362,13 +480,15 @@ const resetFormAndContinue = () => {
 
             <div>
               <label class="block text-base font-extrabold text-slate-800 mb-2 flex items-center gap-2">
-                <ShoppingCart class="w-5 h-5 text-emerald-600" /> วิธีการได้มา
+                <ShoppingCart class="w-5 h-5 text-emerald-600" />
               </label>
               <select v-model="formData.acquisitionMethod"
                 class="w-full bg-slate-50 border-2 border-slate-200 rounded-2xl p-4 text-slate-900 font-bold text-base focus:outline-none focus:border-emerald-600 focus:bg-white transition-all cursor-pointer">
                 <option value="ตกลงราคา">ตกลงราคา</option>
                 <option value="สอบราคา">สอบราคา</option>
                 <option value="ประกวดราคา">ประกวดราคา</option>
+                <option value="งบประมาณ">งบประมาณ</option>
+                <option value="บำรุงการศึกษา">บำรุงการศึกษา</option>
                 <option value="ประกวดราคา e-bidding">ประกวดราคา e-bidding</option>
                 <option value="วิธีเฉพาะเจาะจง">วิธีเฉพาะเจาะจง</option>
                 <option value="รับบริจาค / รับมอบ">รับบริจาค / รับมอบ</option>

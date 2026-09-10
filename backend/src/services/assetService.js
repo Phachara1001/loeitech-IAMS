@@ -48,6 +48,40 @@ export const createAsset = async (data) => {
   return await assetRepository.create(newAssetData);
 };
 
+export const createAssetsBatch = async (dataArray) => {
+  if (!Array.isArray(dataArray) || dataArray.length === 0) {
+    throw new Error('No data provided for batch creation');
+  }
+
+  // ป้องกันรหัสครุภัณฑ์ซ้ำ
+  const existingAssets = await assetRepository.findAll();
+  const existingSeqs = existingAssets.map(a => a.seq);
+
+  const duplicate = dataArray.find(item => existingSeqs.includes(item.seq));
+  if (duplicate) {
+    const err = new Error(`พบหมายเลขครุภัณฑ์ซ้ำในระบบ: ${duplicate.seq}`);
+    err.status = 409;
+    throw err;
+  }
+
+  // Sanitize and format data
+  const processedData = dataArray.map(item => {
+    const processedItem = {
+      ...item,
+      acquiredDate: new Date(item.acquiredDate),
+      unitPrice: parseFloat(item.unitPrice)
+    };
+
+    if ('qty' in processedItem) {
+      delete processedItem.qty;
+    }
+    return processedItem;
+  });
+
+  const result = await assetRepository.createBatch(processedData);
+  return result;
+};
+
 export const updateAsset = async (id, data) => {
   // เช็คก่อนว่ามีอยู่จริงไหม
   await getAssetById(id);

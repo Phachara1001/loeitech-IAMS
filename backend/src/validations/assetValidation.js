@@ -26,3 +26,23 @@ export const validateAssetInput = (req, res, next) => {
 
   next();
 };
+
+export const validateAssetBatchInput = (req, res, next) => {
+  if (!Array.isArray(req.body) || req.body.length === 0) {
+    return res.status(400).json({
+      status: 'error',
+      message: 'รูปแบบข้อมูลไม่ถูกต้อง ต้องเป็น Array ที่มีข้อมูล'
+    });
+  }
+
+  // Check the first item just to be sure required fields exist
+  const firstItem = req.body[0];
+  if (!firstItem.name || !firstItem.category || !firstItem.seq) {
+    return res.status(400).json({
+      status: 'error',
+      message: 'ข้อมูลใน Array ไม่ครบถ้วนหรือไม่ถูกต้อง'
+    });
+  }
+
+  next();
+};

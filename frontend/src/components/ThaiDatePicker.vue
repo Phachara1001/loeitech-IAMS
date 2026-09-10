@@ -225,8 +225,13 @@ onUnmounted(() => document.removeEventListener('mousedown', handleClickOutside))
       
       <!-- Header: Month/Year and Arrows -->
       <div class="flex items-center justify-between mb-6 px-1">
-        <div class="font-bold text-slate-900 text-[1.1rem]">
-          {{ currentMonthName }} {{ currentYearThai }}
+        <div class="flex gap-1 font-bold text-slate-900 text-[1.05rem]">
+          <select :value="currentViewDate.getMonth()" @change="(e) => { currentViewDate = new Date(currentViewDate.getFullYear(), Number(e.target.value), 1) }" class="bg-transparent focus:outline-none cursor-pointer hover:bg-slate-100 rounded px-1 pb-1">
+            <option v-for="(m, i) in THAI_MONTHS" :key="i" :value="i">{{ m }}</option>
+          </select>
+          <select :value="currentViewDate.getFullYear()" @change="(e) => { currentViewDate = new Date(Number(e.target.value), currentViewDate.getMonth(), 1) }" class="bg-transparent focus:outline-none cursor-pointer hover:bg-slate-100 rounded px-1 pb-1 text-center">
+            <option v-for="i in 101" :key="i" :value="new Date().getFullYear() - 51 + i">{{ new Date().getFullYear() - 51 + i + 543 }}</option>
+          </select>
         </div>
         <div class="flex gap-2">
           <button type="button" @click.stop="prevMonth" class="p-1 rounded hover:bg-slate-100 text-slate-800 transition-colors">

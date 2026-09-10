@@ -74,6 +74,7 @@ const todayStr = new Date(now.getTime() - (now.getTimezoneOffset() * 60000)).toI
 
 const formData = ref({
   // ข้อมูลทั่วไป
+  seq: '',
   name: '',
   category: 'ครุภัณฑ์สำนักงาน',
   department: 'ส่วนกลาง',
@@ -165,9 +166,10 @@ const goBack = () => {
 const resetFormAndContinue = () => {
   showSuccessModal.value = false
   formData.value = {
+    seq: '',
     name: '',
     category: 'ครุภัณฑ์สำนักงาน',
-    department: 'ส่วนกลาง',
+    department: 'แผนกเทคโนโลยีสารสนเทศ',
     brand: '',
     serialNumber: '',
     specifications: '',
@@ -248,6 +250,15 @@ const resetFormAndContinue = () => {
           <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div class="md:col-span-2">
               <label class="block text-base font-extrabold text-slate-800 mb-2 flex items-center gap-2">
+                <Barcode class="w-5 h-5 text-emerald-600" /> รหัสครุภัณฑ์ (เลขครุภัณฑ์)
+              </label>
+              <input v-model="formData.seq" type="text"
+                placeholder="ปล่อยว่างเพื่อสร้างอัตโนมัติ หรือกรอกเลขครุภัณฑ์เอง เช่น 561-001"
+                class="w-full bg-slate-50 border-2 border-slate-200 rounded-2xl p-4 text-slate-900 font-bold text-lg focus:outline-none focus:border-emerald-600 focus:bg-white transition-all" />
+            </div>
+
+            <div class="md:col-span-2">
+              <label class="block text-base font-extrabold text-slate-800 mb-2 flex items-center gap-2">
                 ชื่อครุภัณฑ์ <span class="text-rose-500">*</span>
               </label>
               <input v-model="formData.name" type="text" required
@@ -259,15 +270,16 @@ const resetFormAndContinue = () => {
               <label class="block text-base font-extrabold text-slate-800 mb-2 flex items-center gap-2">
                 <Boxes class="w-5 h-5 text-emerald-600" /> ประเภท/หมวดหมู่
               </label>
-              <select v-model="formData.category"
-                class="w-full bg-slate-50 border-2 border-slate-200 rounded-2xl p-4 text-slate-900 font-bold text-base focus:outline-none focus:border-emerald-600 focus:bg-white transition-all cursor-pointer">
-                <option value="ครุภัณฑ์สำนักงาน">ครุภัณฑ์สำนักงาน</option>
-                <option value="ครุภัณฑ์การศึกษา">ครุภัณฑ์การศึกษา</option>
-                <option value="ครุภัณฑ์ยานพาหนะ">ครุภัณฑ์ยานพาหนะและขนส่ง</option>
-                <option value="ครุภัณฑ์คอมพิวเตอร์">ครุภัณฑ์คอมพิวเตอร์</option>
-                <option value="ครุภัณฑ์งานบ้านงานครัว">ครุภัณฑ์งานบ้านงานครัว</option>
-                <option value="ครุภัณฑ์ก่อสร้าง">ครุภัณฑ์ก่อสร้าง</option>
-              </select>
+              <input list="asset-categories" v-model="formData.category" placeholder="เลือกหรือพิมพ์ประเภทครุภัณฑ์เอง"
+                class="w-full bg-slate-50 border-2 border-slate-200 rounded-2xl p-4 text-slate-900 font-bold text-base focus:outline-none focus:border-emerald-600 focus:bg-white transition-all cursor-text" />
+              <datalist id="asset-categories">
+                <option value="ครุภัณฑ์สำนักงาน"></option>
+                <option value="ครุภัณฑ์การศึกษา"></option>
+                <option value="ครุภัณฑ์ยานพาหนะ"></option>
+                <option value="ครุภัณฑ์คอมพิวเตอร์"></option>
+                <option value="ครุภัณฑ์งานบ้านงานครัว"></option>
+                <option value="ครุภัณฑ์ก่อสร้าง"></option>
+              </datalist>
             </div>
 
             <div>
@@ -327,7 +339,8 @@ const resetFormAndContinue = () => {
               <label class="block text-base font-extrabold text-slate-800 mb-2 flex items-center gap-2">
                 <Calendar class="w-5 h-5 text-emerald-600" /> วันที่ได้มา <span class="text-rose-500">*</span>
               </label>
-              <ThaiDatePicker v-model="formData.acquiredDate" type="datetime-local" required inputClass="w-full bg-slate-50 border-2 border-slate-200 rounded-2xl p-4 text-slate-900 font-bold text-lg focus:outline-none focus:border-emerald-600 focus:bg-white transition-all cursor-pointer" />
+              <ThaiDatePicker v-model="formData.acquiredDate" type="datetime-local" required
+                inputClass="w-full bg-slate-50 border-2 border-slate-200 rounded-2xl p-4 text-slate-900 font-bold text-lg focus:outline-none focus:border-emerald-600 focus:bg-white transition-all cursor-pointer" />
             </div>
 
             <div>

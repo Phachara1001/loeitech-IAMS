@@ -47,9 +47,15 @@ export const update = async (id, data) => {
  * ลบข้อมูลครุภัณฑ์
  */
 export const remove = async (id) => {
-  return await prisma.asset.delete({
-    where: { id: Number(id) }
-  });
+  const assetId = Number(id);
+  // ลบข้อมูลที่เกี่ยวข้องใน transaction เดียวกันเพื่อป้องกันปัญหา Foreign key constraint
+  return await prisma.$transaction([
+    prisma.assetDistribution.deleteMany({ where: { assetId } }),
+    prisma.borrowTransaction.deleteMany({ where: { assetId } }),
+    prisma.repairRequest.deleteMany({ where: { assetId } }),
+    prisma.disposalRequest.deleteMany({ where: { assetId } }),
+    prisma.asset.delete({ where: { id: assetId } })
+  ]);
 };
 
 /**

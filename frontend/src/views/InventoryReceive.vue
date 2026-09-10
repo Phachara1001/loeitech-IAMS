@@ -235,9 +235,9 @@ const availableCategories = computed(() => {
 // กรองวัสดุตามหมวดหมู่และช่องค้นหา
 const filteredItems = computed(() => {
   return items.value.filter(item => {
-    const matchesSearch = item.name.toLowerCase().includes(searchQuery.value.toLowerCase()) || 
-                          (item.sku && item.sku.toLowerCase().includes(searchQuery.value.toLowerCase()))
-    
+    const matchesSearch = item.name.toLowerCase().includes(searchQuery.value.toLowerCase()) ||
+      (item.sku && item.sku.toLowerCase().includes(searchQuery.value.toLowerCase()))
+
     if (selectedCategory.value === 'ทั้งหมด') {
       return matchesSearch
     }
@@ -346,6 +346,9 @@ function selectItemFromModal(item) {
                   <option value="ตกลงราคา">ตกลงราคา</option>
                   <option value="สอบราคา">สอบราคา</option>
                   <option value="ประกวดราคา">ประกวดราคา</option>
+                  <option value="งบประมาณ">งบประมาณ</option>
+                  <option value="บำรุงการศึกษา">บำรุงการศึกษา</option>
+                  <option value="ประกวดราคา e-bidding">ประกวดราคา e-bidding</option>
                   <option value="วิธีเฉพาะเจาะจง">วิธีเฉพาะเจาะจง</option>
                   <option value="รับบริจาค / รับมอบ">รับบริจาค / รับมอบ</option>
                 </select>
@@ -415,17 +418,19 @@ function selectItemFromModal(item) {
               <label class="block text-base font-extrabold text-slate-800 mb-2 flex items-center gap-2">
                 <Boxes class="w-5 h-5 text-emerald-600" /> เลือกรายการพัสดุเดิม <span class="text-rose-500">*</span>
               </label>
-              
+
               <!-- ปุ่มเปิด Modal เลือกพัสดุ (คลีน ไม่มีไอคอน / ไม่มีกล่องเขียวด้านล่าง) -->
               <button type="button" @click="openItemSelectorModal"
                 class="w-full bg-slate-50 border-2 border-slate-200 hover:border-emerald-500 rounded-2xl p-4 text-left font-bold text-lg md:text-xl transition-all cursor-pointer shadow-sm flex items-center justify-between text-slate-700 hover:bg-emerald-50/20">
                 <span v-if="selectedExistingItem" class="text-emerald-800">
-                  {{ selectedExistingItem.name }} (มีอยู่แล้ว {{ selectedExistingItem.quantity }} {{ selectedExistingItem.unit || 'หน่วย' }})
+                  {{ selectedExistingItem.name }} (มีอยู่แล้ว {{ selectedExistingItem.quantity }} {{
+                    selectedExistingItem.unit || 'หน่วย' }})
                 </span>
                 <span v-else class="text-slate-400">
                   -- คลิกเพื่อค้นหาและเลือกรายการพัสดุเดิม --
                 </span>
-                <span class="text-xs bg-slate-200 text-slate-600 hover:bg-slate-300 px-3 py-1.5 rounded-full transition-all">ค้นหาพัสดุ</span>
+                <span
+                  class="text-xs bg-slate-200 text-slate-600 hover:bg-slate-300 px-3 py-1.5 rounded-full transition-all">ค้นหาพัสดุ</span>
               </button>
             </div>
 
@@ -474,13 +479,11 @@ function selectItemFromModal(item) {
                 <label class="block text-base font-extrabold text-slate-800 mb-2 flex items-center gap-2">
                   ราคาต่อหน่วย (บาท) <span class="text-rose-500">*</span>
                   <span v-if="itemSourceType === 'EXISTING' && selectedExistingItem"
-                    class="ml-1 text-xs font-semibold bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full">ดึงอัตโนมัติ ✓</span>
+                    class="ml-1 text-xs font-semibold bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full">ดึงอัตโนมัติ
+                    ✓</span>
                 </label>
-                <input
-                  v-model="formData.unitPrice"
-                  type="number" step="0.01" min="0" required placeholder="0.00"
-                  :readonly="itemSourceType === 'EXISTING' && !!selectedExistingItem"
-                  :class="[
+                <input v-model="formData.unitPrice" type="number" step="0.01" min="0" required placeholder="0.00"
+                  :readonly="itemSourceType === 'EXISTING' && !!selectedExistingItem" :class="[
                     'w-full border-2 rounded-2xl p-4 font-extrabold text-xl focus:outline-none transition-all',
                     itemSourceType === 'EXISTING' && selectedExistingItem
                       ? 'bg-emerald-50 border-emerald-300 text-emerald-800 cursor-not-allowed'
@@ -513,7 +516,8 @@ function selectItemFromModal(item) {
           </div>
 
           <!-- Error State -->
-          <div v-if="saveError" class="mt-3 flex items-center gap-2 text-red-600 bg-red-50 rounded-xl px-4 py-3 text-sm">
+          <div v-if="saveError"
+            class="mt-3 flex items-center gap-2 text-red-600 bg-red-50 rounded-xl px-4 py-3 text-sm">
             <span>⚠️ {{ saveError }}</span>
           </div>
 
@@ -573,7 +577,7 @@ function selectItemFromModal(item) {
                 <div class="flex items-center justify-between">
                   <span class="text-slate-300 font-bold">สต๊อกรวมใหม่:</span>
                   <span class="font-mono font-extrabold text-2xl text-teal-300">{{ projectedStock }} {{ displayUnit
-                    }}</span>
+                  }}</span>
                 </div>
               </div>
 
@@ -595,7 +599,8 @@ function selectItemFromModal(item) {
 
             <div class="space-y-3 max-h-[250px] overflow-y-auto">
               <div v-if="isLoadingHistory" class="py-4 text-center text-slate-400 text-sm">โหลดประวัติ...</div>
-              <div v-else-if="stockTransactions.length === 0" class="py-4 text-center text-slate-400 text-sm">ยังไม่มีประวัติ</div>
+              <div v-else-if="stockTransactions.length === 0" class="py-4 text-center text-slate-400 text-sm">
+                ยังไม่มีประวัติ</div>
               <div v-for="tx in stockTransactions.slice(0, 3)" :key="tx.id"
                 class="p-3.5 bg-slate-50 rounded-2xl border border-slate-200/60 text-sm">
                 <div class="flex justify-between items-start font-bold text-slate-900">
@@ -644,8 +649,9 @@ function selectItemFromModal(item) {
     <!-- ✅ Modal เลือกพัสดุเดิม (Item Selector Modal) ตามดีไซน์รูปภาพ -->
     <div v-if="isItemSelectorOpen"
       class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm transition-all duration-300">
-      <div class="bg-slate-50 rounded-3xl w-full max-w-5xl h-[85vh] shadow-2xl border border-slate-100 flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-        
+      <div
+        class="bg-slate-50 rounded-3xl w-full max-w-5xl h-[85vh] shadow-2xl border border-slate-100 flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+
         <!-- Header -->
         <div class="bg-white p-6 border-b border-slate-100 flex items-center justify-between shrink-0">
           <div>
@@ -653,7 +659,8 @@ function selectItemFromModal(item) {
               <Boxes class="w-7 h-7 text-emerald-600" />
               ค้นหาและเลือกรายการพัสดุเดิมในคลัง
             </h3>
-            <p class="text-sm font-semibold text-slate-500 mt-1">คลิกเลือกรายการที่ต้องการรับเข้าคลังเพื่อดึงข้อมูลราคาต่อหน่วย</p>
+            <p class="text-sm font-semibold text-slate-500 mt-1">
+              คลิกเลือกรายการที่ต้องการรับเข้าคลังเพื่อดึงข้อมูลราคาต่อหน่วย</p>
           </div>
           <button @click="closeItemSelectorModal" type="button"
             class="w-10 h-10 rounded-full bg-slate-100 hover:bg-rose-50 text-slate-500 hover:text-rose-600 flex items-center justify-center transition-all cursor-pointer">
@@ -667,31 +674,22 @@ function selectItemFromModal(item) {
           <div class="relative">
             <span class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
               <svg class="h-5 w-5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
+                  d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
             </span>
-            <input
-              v-model="searchQuery"
-              type="text"
-              placeholder="ค้นหาชื่อพัสดุ หรือรหัสวัสดุ..."
-              class="w-full bg-slate-50 border-2 border-slate-200 focus:border-emerald-500 rounded-2xl pl-12 pr-4 py-4 text-slate-900 font-bold text-lg focus:bg-white focus:outline-none transition-all shadow-sm"
-            />
+            <input v-model="searchQuery" type="text" placeholder="ค้นหาชื่อพัสดุ หรือรหัสวัสดุ..."
+              class="w-full bg-slate-50 border-2 border-slate-200 focus:border-emerald-500 rounded-2xl pl-12 pr-4 py-4 text-slate-900 font-bold text-lg focus:bg-white focus:outline-none transition-all shadow-sm" />
           </div>
 
           <!-- Category Chips -->
           <div class="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-thin">
-            <button
-              v-for="cat in availableCategories"
-              :key="cat"
-              type="button"
-              @click="selectedCategory = cat"
-              :class="[
-                'px-5 py-2.5 rounded-full text-sm font-black whitespace-nowrap transition-all cursor-pointer active:scale-95',
-                selectedCategory === cat
-                  ? 'bg-emerald-800 text-white shadow-md shadow-emerald-800/20'
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-800'
-              ]"
-            >
+            <button v-for="cat in availableCategories" :key="cat" type="button" @click="selectedCategory = cat" :class="[
+              'px-5 py-2.5 rounded-full text-sm font-black whitespace-nowrap transition-all cursor-pointer active:scale-95',
+              selectedCategory === cat
+                ? 'bg-emerald-800 text-white shadow-md shadow-emerald-800/20'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-800'
+            ]">
               {{ cat }}
             </button>
           </div>
@@ -705,31 +703,27 @@ function selectItemFromModal(item) {
           </div>
 
           <div v-else class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
-            <div
-              v-for="item in filteredItems"
-              :key="item.id"
-              @click="selectItemFromModal(item)"
-              class="bg-white rounded-2xl p-5 border-2 border-slate-200/80 hover:border-emerald-500 hover:shadow-lg transition-all cursor-pointer flex flex-col justify-between relative group"
-            >
+            <div v-for="item in filteredItems" :key="item.id" @click="selectItemFromModal(item)"
+              class="bg-white rounded-2xl p-5 border-2 border-slate-200/80 hover:border-emerald-500 hover:shadow-lg transition-all cursor-pointer flex flex-col justify-between relative group">
               <!-- Stock Badge -->
-              <span
-                :class="[
-                  'absolute top-4 right-4 text-xs font-black px-3 py-1 rounded-full',
-                  item.quantity > 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-600'
-                ]"
-              >
+              <span :class="[
+                'absolute top-4 right-4 text-xs font-black px-3 py-1 rounded-full',
+                item.quantity > 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-600'
+              ]">
                 {{ item.quantity > 0 ? `คงเหลือ ${item.quantity} ${item.unit || 'หน่วย'}` : 'หมดสต็อก' }}
               </span>
 
               <!-- Icon & Meta -->
               <div class="space-y-4">
-                <div class="w-12 h-12 rounded-xl bg-emerald-50 flex items-center justify-center group-hover:bg-emerald-600 transition-colors">
+                <div
+                  class="w-12 h-12 rounded-xl bg-emerald-50 flex items-center justify-center group-hover:bg-emerald-600 transition-colors">
                   <Package class="w-6 h-6 text-emerald-600 group-hover:text-white transition-colors" />
                 </div>
 
                 <!-- Product Detail -->
                 <div>
-                  <h4 class="font-extrabold text-slate-900 text-lg line-clamp-2 group-hover:text-emerald-700 transition-colors">
+                  <h4
+                    class="font-extrabold text-slate-900 text-lg line-clamp-2 group-hover:text-emerald-700 transition-colors">
                     {{ item.name }}
                   </h4>
                   <p class="text-xs font-bold text-slate-400 mt-1">
@@ -746,8 +740,9 @@ function selectItemFromModal(item) {
                     ฿{{ (item.unitPrice ?? item.price ?? 0).toLocaleString('th-TH', { minimumFractionDigits: 2 }) }}
                   </span>
                 </div>
-                
-                <span class="text-sm font-black text-emerald-700 bg-emerald-50 group-hover:bg-emerald-600 group-hover:text-white px-4 py-2 rounded-xl transition-all flex items-center gap-1">
+
+                <span
+                  class="text-sm font-black text-emerald-700 bg-emerald-50 group-hover:bg-emerald-600 group-hover:text-white px-4 py-2 rounded-xl transition-all flex items-center gap-1">
                   เลือกพัสดุ
                 </span>
               </div>
@@ -757,11 +752,8 @@ function selectItemFromModal(item) {
 
         <!-- Footer -->
         <div class="bg-white p-5 border-t border-slate-100 flex justify-end shrink-0">
-          <button
-            type="button"
-            @click="closeItemSelectorModal"
-            class="px-6 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold rounded-xl text-base transition-all cursor-pointer"
-          >
+          <button type="button" @click="closeItemSelectorModal"
+            class="px-6 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold rounded-xl text-base transition-all cursor-pointer">
             ปิดหน้าต่าง
           </button>
         </div>

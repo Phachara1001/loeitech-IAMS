@@ -34,6 +34,16 @@ export const create = async (data) => {
 };
 
 /**
+ * สร้างครุภัณฑ์แบบชุด (Batch)
+ */
+export const createBatch = async (dataArray) => {
+  return await prisma.asset.createMany({
+    data: dataArray,
+    skipDuplicates: true // ป้องกัน error ถ้ารหัสซ้ำบางรายการ (แล้วแต่ policy แต่ใส่ไว้ปลอดภัยกว่า)
+  });
+};
+
+/**
  * อัปเดตข้อมูลครุภัณฑ์
  */
 export const update = async (id, data) => {

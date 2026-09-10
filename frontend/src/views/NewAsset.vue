@@ -72,12 +72,15 @@ const currentUserName = computed(() => {
 const now = new Date()
 const todayStr = new Date(now.getTime() - (now.getTimezoneOffset() * 60000)).toISOString().slice(0, 16)
 
+const categorySelection = ref('ครุภัณฑ์สำนักงาน')
+const customCategory = ref('')
+
 const formData = ref({
   // ข้อมูลทั่วไป
   seq: '',
   name: '',
   category: 'ครุภัณฑ์สำนักงาน',
-  department: 'ส่วนกลาง',
+  department: 'แผนกเทคโนโลยีสารสนเทศ',
 
   // ข้อมูลทางเทคนิค
   brand: '',
@@ -137,6 +140,12 @@ const handleSaveAsset = async () => {
 
     // Prepare payload
     const payload = { ...formData.value }
+    if (categorySelection.value === 'OTHER') {
+      payload.category = customCategory.value || 'ไม่ระบุหมวดหมู่'
+    } else {
+      payload.category = categorySelection.value
+    }
+
     if (imageUrl) {
       payload.image = imageUrl
     }
@@ -165,6 +174,8 @@ const goBack = () => {
 
 const resetFormAndContinue = () => {
   showSuccessModal.value = false
+  categorySelection.value = 'ครุภัณฑ์สำนักงาน'
+  customCategory.value = ''
   formData.value = {
     seq: '',
     name: '',
@@ -270,16 +281,22 @@ const resetFormAndContinue = () => {
               <label class="block text-base font-extrabold text-slate-800 mb-2 flex items-center gap-2">
                 <Boxes class="w-5 h-5 text-emerald-600" /> ประเภท/หมวดหมู่
               </label>
-              <input list="asset-categories" v-model="formData.category" placeholder="เลือกหรือพิมพ์ประเภทครุภัณฑ์เอง"
-                class="w-full bg-slate-50 border-2 border-slate-200 rounded-2xl p-4 text-slate-900 font-bold text-base focus:outline-none focus:border-emerald-600 focus:bg-white transition-all cursor-text" />
-              <datalist id="asset-categories">
-                <option value="ครุภัณฑ์สำนักงาน"></option>
-                <option value="ครุภัณฑ์การศึกษา"></option>
-                <option value="ครุภัณฑ์ยานพาหนะ"></option>
-                <option value="ครุภัณฑ์คอมพิวเตอร์"></option>
-                <option value="ครุภัณฑ์งานบ้านงานครัว"></option>
-                <option value="ครุภัณฑ์ก่อสร้าง"></option>
-              </datalist>
+              <select v-model="categorySelection"
+                class="w-full bg-slate-50 border-2 border-slate-200 rounded-2xl p-4 text-slate-900 font-bold text-base focus:outline-none focus:border-emerald-600 focus:bg-white transition-all cursor-pointer"
+                value="ครุภัณฑ์สำนักงาน">
+                <option value="ครุภัณฑ์สำนักงาน">ครุภัณฑ์สำนักงาน</option>
+                <option value="ครุภัณฑ์การศึกษา">ครุภัณฑ์การศึกษา</option>
+                <option value="ครุภัณฑ์ยานพาหนะ">ครุภัณฑ์ยานพาหนะและขนส่ง</option>
+                <option value="ครุภัณฑ์คอมพิวเตอร์">ครุภัณฑ์คอมพิวเตอร์</option>
+                <option value="ครุภัณฑ์งานบ้านงานครัว">ครุภัณฑ์งานบ้านงานครัว</option>
+                <option value="ครุภัณฑ์ก่อสร้าง">ครุภัณฑ์ก่อสร้าง</option>
+                <option value="OTHER">อื่นๆ (กรอกเอง)</option>
+              </select>
+
+              <div v-if="categorySelection === 'OTHER'" class="mt-4 animate-in fade-in slide-in-from-top-2">
+                <input v-model="customCategory" type="text" placeholder="พิมพ์ประเภทครุภัณฑ์ที่ต้องการ..."
+                  class="w-full bg-slate-50 border-2 border-slate-200 rounded-2xl p-4 text-slate-900 font-bold text-base focus:outline-none focus:border-emerald-600 focus:bg-white transition-all" />
+              </div>
             </div>
 
             <div>

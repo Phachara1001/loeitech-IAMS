@@ -1,4 +1,4 @@
-﻿<script setup>
+<script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import axios from 'axios'
@@ -178,6 +178,35 @@ async function rejectUser(user) {
     if (!handleUnauthorized(error)) toast.error(extractErrorMessage(error))
   } finally {
     approvingUserId.value = null
+  }
+}
+
+/* ---------------- อนุมัติ / ไม่อนุมัติ รีเซ็ตรหัสผ่าน ---------------- */
+const resettingUserId = ref(null)
+
+async function approvePasswordReset(user) {
+  resettingUserId.value = user.id
+  try {
+    await axios.patch(`${API_BASE}/users/${user.id}/approve-reset`, {}, { headers: authHeaders() })
+    user.resetPasswordCode = 'APPROVED'
+    toast.success(`อนุมัติการตั้งรหัสผ่านใหม่ของ ${user.name} เรียบร้อยแล้ว`)
+  } catch (error) {
+    if (!handleUnauthorized(error)) toast.error(extractErrorMessage(error))
+  } finally {
+    resettingUserId.value = null
+  }
+}
+
+async function rejectPasswordReset(user) {
+  resettingUserId.value = user.id
+  try {
+    await axios.patch(`${API_BASE}/users/${user.id}/reject-reset`, {}, { headers: authHeaders() })
+    user.resetPasswordCode = null
+    toast.info(`ปฏิเสธคำขอตั้งรหัสผ่านใหม่ของ ${user.name} แล้ว`)
+  } catch (error) {
+    if (!handleUnauthorized(error)) toast.error(extractErrorMessage(error))
+  } finally {
+    resettingUserId.value = null
   }
 }
 
@@ -509,7 +538,7 @@ const deleteItemLabel = computed(() => {
             <p class="text-sm text-slate-500">ทั้งหมด <span class="font-bold text-[#065f46]">{{ filteredUsers.length }}</span> ผู้ใช้งาน</p>
             <span v-if="pendingUsersCount > 0" class="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-amber-50 text-amber-700 border border-amber-100">
               <Clock class="w-3 h-3" />
-              รออนุมัติ {{ pendingUsersCount }} บัญชี
+              รออนุมัติบัญชี {{ pendingUsersCount }} รายการ
             </span>
           </div>
           <Loader2 v-if="isLoadingUsers" class="w-4 h-4 text-[#065f46] animate-spin" />
@@ -534,6 +563,12 @@ const deleteItemLabel = computed(() => {
                   <span :class="['inline-flex px-2.5 py-1 rounded-full text-xs font-semibold border', accountStatusStyle[user.accountStatus] || accountStatusStyle.ACTIVE]">
                     {{ accountStatusLabel[user.accountStatus] || user.accountStatus }}
                   </span>
+                  <div v-if="user.resetPasswordCode === 'PENDING'" class="mt-1.5 flex items-center gap-1 text-amber-600 text-[11px] font-bold">
+                    <AlertTriangle class="w-3 h-3" /> ขอรีเซ็ตรหัสผ่าน
+                  </div>
+                  <div v-else-if="user.resetPasswordCode === 'APPROVED'" class="mt-1.5 flex items-center gap-1 text-emerald-600 text-[11px] font-bold">
+                    <Check class="w-3 h-3" /> อนุมัติรีเซ็ตแล้ว
+                  </div>
                 </td>
                 <td class="px-4 py-3">
                   <div class="relative inline-flex items-center">
@@ -549,7 +584,29 @@ const deleteItemLabel = computed(() => {
                 </td>
                 <td class="px-4 py-3">
                   <div class="flex items-center justify-end gap-1.5">
-                    <template v-if="user.accountStatus === 'PENDING'">
+                    <template v-if="user.resetPasswordCode === 'PENDING'">
+                      <button
+                        type="button"
+                        :disabled="resettingUserId === user.id"
+                        @click="approvePasswordReset(user)"
+                        title="อนุมัติการรีเซ็ตรหัสผ่าน"
+                        class="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-emerald-50 text-emerald-700 hover:bg-emerald-100 hover:shadow-sm transition-all disabled:opacity-60 border border-emerald-200"
+                      >
+                        <Loader2 v-if="resettingUserId === user.id" class="w-3.5 h-3.5 animate-spin" />
+                        <Check v-else class="w-3.5 h-3.5" />
+                        อนุมัติรีเซ็ต
+                      </button>
+                      <button
+                        type="button"
+                        :disabled="resettingUserId === user.id"
+                        @click="rejectPasswordReset(user)"
+                        title="ไม่อนุมัติการรีเซ็ตรหัสผ่าน"
+                        class="p-2 rounded-lg text-slate-500 hover:text-red-600 hover:bg-red-50 hover:shadow-sm hover:scale-110 active:scale-95 transition-all disabled:opacity-60"
+                      >
+                        <Ban class="w-4 h-4" />
+                      </button>
+                    </template>
+                    <template v-else-if="user.accountStatus === 'PENDING'">
                       <button
                         type="button"
                         :disabled="approvingUserId === user.id"
@@ -559,7 +616,7 @@ const deleteItemLabel = computed(() => {
                       >
                         <Loader2 v-if="approvingUserId === user.id" class="w-3.5 h-3.5 animate-spin" />
                         <Check v-else class="w-3.5 h-3.5" />
-                        อนุมัติ
+                        อนุมัติบัญชี
                       </button>
                       <button
                         type="button"
@@ -571,12 +628,14 @@ const deleteItemLabel = computed(() => {
                         <Ban class="w-4 h-4" />
                       </button>
                     </template>
-                    <button type="button" @click="openEditForm(user)" title="แก้ไข" class="p-2 rounded-lg text-slate-500 hover:text-amber-600 hover:bg-amber-50 hover:shadow-sm hover:scale-110 active:scale-95 transition-all">
-                      <Pencil class="w-4 h-4" />
-                    </button>
-                    <button type="button" @click="confirmDelete(user)" title="ลบ" class="p-2 rounded-lg text-slate-500 hover:text-red-600 hover:bg-red-50 hover:shadow-sm hover:scale-110 active:scale-95 transition-all">
-                      <Trash2 class="w-4 h-4" />
-                    </button>
+                    <template v-else>
+                      <button type="button" @click="openEditForm(user)" title="แก้ไข" class="p-2 rounded-lg text-slate-500 hover:text-amber-600 hover:bg-amber-50 hover:shadow-sm hover:scale-110 active:scale-95 transition-all">
+                        <Pencil class="w-4 h-4" />
+                      </button>
+                      <button type="button" @click="confirmDelete(user)" title="ลบ" class="p-2 rounded-lg text-slate-500 hover:text-red-600 hover:bg-red-50 hover:shadow-sm hover:scale-110 active:scale-95 transition-all">
+                        <Trash2 class="w-4 h-4" />
+                      </button>
+                    </template>
                   </div>
                 </td>
               </tr>

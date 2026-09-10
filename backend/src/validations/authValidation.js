@@ -51,11 +51,10 @@ export const validateForgotPasswordInput = (req, res, next) => {
 };
 
 export const validateResetPasswordInput = (req, res, next) => {
-  const { email, code, newPassword, confirmPassword } = req.body;
+  const { email, newPassword, confirmPassword } = req.body;
   const errors = [];
 
   if (!email) errors.push('อีเมล (email) เป็นข้อมูลที่จำเป็น');
-  if (!code) errors.push('รหัสยืนยัน (code) เป็นข้อมูลที่จำเป็น');
 
   if (!newPassword) errors.push('รหัสผ่านใหม่ (newPassword) เป็นข้อมูลที่จำเป็น');
   else if (newPassword.length < 8) errors.push('รหัสผ่านต้องมีความยาวอย่างน้อย 8 ตัวอักษร');

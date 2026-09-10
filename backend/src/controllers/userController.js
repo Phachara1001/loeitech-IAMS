@@ -332,6 +332,78 @@ export const rejectUserById = async (req, res, next) => {
 
 /**
  * @swagger
+ * /api/users/{id}/approve-reset:
+ *   patch:
+ *     summary: Admin อนุมัติคำขอรีเซ็ตรหัสผ่าน
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: อนุมัติสำเร็จ
+ */
+export const approvePasswordResetById = async (req, res, next) => {
+  try {
+    const user = await userService.approvePasswordReset(req.params.id);
+
+    await logActivity({
+      req,
+      action: 'UPDATE',
+      entityType: 'USER',
+      entityId: user.id,
+      details: `อนุมัติคำขอตั้งรหัสผ่านใหม่ของผู้ใช้งาน "${user.name}" (${user.email})`
+    });
+
+    res.status(200).json({ status: 'success', data: user, message: 'อนุมัติการตั้งรหัสผ่านใหม่แล้ว' });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @swagger
+ * /api/users/{id}/reject-reset:
+ *   patch:
+ *     summary: Admin ปฏิเสธคำขอรีเซ็ตรหัสผ่าน
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: ปฏิเสธสำเร็จ
+ */
+export const rejectPasswordResetById = async (req, res, next) => {
+  try {
+    const user = await userService.rejectPasswordReset(req.params.id);
+
+    await logActivity({
+      req,
+      action: 'UPDATE',
+      entityType: 'USER',
+      entityId: user.id,
+      details: `ปฏิเสธคำขอตั้งรหัสผ่านใหม่ของผู้ใช้งาน "${user.name}" (${user.email})`
+    });
+
+    res.status(200).json({ status: 'success', data: user, message: 'ปฏิเสธคำขอตั้งรหัสผ่านใหม่แล้ว' });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @swagger
  * /api/users/{id}:
  *   delete:
  *     summary: Admin ลบผู้ใช้งาน

@@ -50,9 +50,27 @@ app.use('/api/reports', reportRoutes);
 // Error Handling Middleware (triggers reload)
 app.use((err, req, res, next) => {
   console.error(err.stack);
-  res.status(err.status || 500).json({
+
+  let status = err.status || 500;
+  let message = err.message || 'เกิดข้อผิดพลาดที่เซิร์ฟเวอร์';
+
+  // Handle Prisma Known Request Errors
+  if (err.code === 'P2002') {
+    status = 409; // Conflict
+    let target = 'ข้อมูล';
+    if (err.meta && err.meta.target) {
+      if (err.meta.target.includes('seq')) target = 'รหัสครุภัณฑ์';
+      else if (err.meta.target.includes('email')) target = 'อีเมล';
+      else if (err.meta.target.includes('username')) target = 'ชื่อผู้ใช้';
+      else if (err.meta.target.includes('sku')) target = 'รหัสวัสดุ';
+      else target = err.meta.target.join(', ');
+    }
+    message = `${target}นี้มีในระบบแล้ว กรุณาตรวจสอบและไม่ใช้ข้อมูลซ้ำ`;
+  }
+
+  res.status(status).json({
     status: 'error',
-    message: err.message || 'เกิดข้อผิดพลาดที่เซิร์ฟเวอร์'
+    message: message
   });
 });
 

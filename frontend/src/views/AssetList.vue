@@ -374,8 +374,6 @@ const handlePrint = () => {
               </th>
               <th class="px-6 py-3.5 font-semibold text-[11px] uppercase tracking-wide text-emerald-50">ชื่อพัสดุ /
                 เลขพัสดุหลัก</th>
-              <th class="px-6 py-3.5 font-semibold text-[11px] uppercase tracking-wide text-emerald-50">
-                เลขทะเบียน/Serial</th>
               <th class="px-6 py-3.5 font-semibold text-[11px] uppercase tracking-wide text-emerald-50">ข้อมูลจัดซื้อ
               </th>
               <th class="px-6 py-3.5 font-semibold text-[11px] uppercase tracking-wide text-emerald-50">แผนก/หน่วยงาน
@@ -404,7 +402,6 @@ const handlePrint = () => {
                 <div class="text-xs text-slate-500 mt-0.5" v-if="asset.brand">ยี่ห้อ: {{ asset.brand }}</div>
                 <div class="text-xs text-slate-500 mt-0.5">{{ asset.referenceCode }}</div>
               </td>
-              <td class="px-6 py-4 text-slate-500">{{ asset.serialNumber }}</td>
               <td class="px-6 py-4">
                 <div class="font-medium text-slate-800">฿{{ asset.unitPrice?.toLocaleString() || '-' }}</div>
                 <div class="text-[11px] text-slate-500 mt-0.5">{{ formatThaiDate(asset.acquiredDate) }} ({{
@@ -447,7 +444,7 @@ const handlePrint = () => {
               </td>
             </tr>
             <tr v-if="filteredAssets.length === 0">
-              <td colspan="8" class="px-6 py-12 text-center text-slate-500">
+              <td colspan="7" class="px-6 py-12 text-center text-slate-500">
                 <div v-if="isLoading" class="flex flex-col items-center justify-center space-y-3">
                   <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-[#065f46]"></div>
                   <span>กำลังดึงข้อมูลครุภัณฑ์...</span>
@@ -505,7 +502,8 @@ const handlePrint = () => {
         <p class="text-xs text-slate-500 mt-1">บันทึกผ่าน MinIO Storage (JPG, PNG)</p>
       </div>
 
-      <div v-else class="border-2 border-dashed border-slate-300 rounded-lg p-10 flex flex-col items-center justify-center bg-slate-50">
+      <div v-else
+        class="border-2 border-dashed border-slate-300 rounded-lg p-10 flex flex-col items-center justify-center bg-slate-50">
         <ImageIcon class="w-10 h-10 text-slate-400 mb-3" />
         <p class="text-sm font-medium text-slate-500">ยังไม่มีรูปภาพครุภัณฑ์</p>
       </div>
@@ -616,7 +614,8 @@ const handlePrint = () => {
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           <div>
             <label class="block text-sm font-medium text-slate-700 mb-1">วันที่ได้มา</label>
-            <ThaiDatePicker v-model="tempAsset.acquiredDate" type="datetime-local" inputClass="w-full border border-slate-300 rounded-lg py-2 px-3 text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#065f46]/20 focus:border-[#065f46] bg-white" />
+            <ThaiDatePicker v-model="tempAsset.acquiredDate" type="datetime-local"
+              inputClass="w-full border border-slate-300 rounded-lg py-2 px-3 text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#065f46]/20 focus:border-[#065f46] bg-white" />
           </div>
           <div>
             <label class="block text-sm font-medium text-slate-700 mb-1">วิธีการได้มา</label>
@@ -625,6 +624,8 @@ const handlePrint = () => {
               <option value="ตกลงราคา">ตกลงราคา</option>
               <option value="สอบราคา">สอบราคา</option>
               <option value="ประกวดราคา">ประกวดราคา</option>
+              <option value="งบประมาณ">งบประมาณ</option>
+              <option value="บำรุงการศึกษา">บำรุงการศึกษา</option>
               <option value="ประกวดราคา e-bidding">ประกวดราคา e-bidding</option>
               <option value="วิธีเฉพาะเจาะจง">วิธีเฉพาะเจาะจง</option>
               <option value="รับบริจาค / รับมอบ">รับบริจาค / รับมอบ</option>

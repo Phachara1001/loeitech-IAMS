@@ -1,4 +1,4 @@
-﻿<script setup>
+<script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import axios from 'axios'
@@ -100,6 +100,7 @@ onMounted(() => {
 // --- ป้ายกำกับ/สีของแต่ละประเภทคำสั่ง ---
 const ACTION_LABEL = {
   INSERT: 'เพิ่มข้อมูล',
+  INSERT_BATCH: 'เพิ่มข้อมูล (Batch)',
   UPDATE: 'แก้ไขข้อมูล',
   DELETE: 'ลบข้อมูล',
   LOGIN: 'เข้าสู่ระบบ'
@@ -107,12 +108,26 @@ const ACTION_LABEL = {
 
 const getActionBadgeClass = (action) => {
   switch (action) {
-    case 'INSERT': return 'bg-emerald-50 text-emerald-700 border-emerald-200'
+    case 'INSERT': 
+    case 'INSERT_BATCH':
+      return 'bg-emerald-50 text-emerald-700 border-emerald-200'
     case 'UPDATE': return 'bg-blue-50 text-blue-700 border-blue-200'
     case 'DELETE': return 'bg-rose-50 text-rose-700 border-rose-200'
     case 'LOGIN': return 'bg-violet-50 text-violet-700 border-violet-200'
     default: return 'bg-slate-50 text-slate-700 border-slate-200'
   }
+}
+
+const isSimpleObject = (val) => {
+  if (!val || typeof val !== 'object') return false
+  if (Array.isArray(val)) return false
+  return Object.keys(val).length > 0
+}
+
+const formatLogValue = (val) => {
+  if (val === null || val === undefined) return '-'
+  if (typeof val === 'object') return JSON.stringify(val)
+  return String(val)
 }
 
 // ข้อมูลที่เกี่ยวข้อง (entityType) ตามที่ backend บันทึกจริง
@@ -387,11 +402,30 @@ const closeModal = () => {
                 <span class="w-2 h-2 rounded-full bg-rose-500"></span>
                 ค่าเดิม (Old Value)
               </span>
-              <div class="bg-slate-900 text-rose-300 font-mono text-xs p-4 rounded-2xl overflow-x-auto min-h-[160px]">
-                <pre v-if="selectedLogData?.oldValue">{{ JSON.stringify(selectedLogData.oldValue, null, 2) }}</pre>
-                <div v-else class="h-full flex items-center justify-center text-slate-500 italic">
-                  - ไม่มีข้อมูลเดิม -
+              <div v-if="selectedLogData?.oldValue" class="bg-slate-50 border border-slate-200 p-4 rounded-2xl min-h-[160px]">
+                <div v-if="isSimpleObject(selectedLogData.oldValue)" class="flex flex-col gap-2">
+                  <div v-for="(val, key) in selectedLogData.oldValue" :key="key" class="bg-white border border-slate-200 px-3 py-2 rounded-xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+                    <span class="font-bold text-slate-500 text-xs tracking-wider uppercase">{{ key }}</span>
+                    <span class="font-medium text-rose-700 bg-rose-50 px-2.5 py-1 rounded-lg text-sm break-all max-w-full">{{ formatLogValue(val) }}</span>
+                  </div>
                 </div>
+                <div v-else-if="Array.isArray(selectedLogData.oldValue)" class="flex flex-col gap-3 max-h-[300px] overflow-y-auto pr-1">
+                  <div v-for="(item, index) in selectedLogData.oldValue" :key="index" class="bg-white border border-rose-200 p-3 rounded-xl shadow-sm">
+                    <div class="text-xs font-bold text-slate-400 mb-2 border-b border-slate-100 pb-1">รายการที่ {{ index + 1 }}</div>
+                    <div class="flex flex-col gap-1.5">
+                      <div v-for="(val, key) in item" :key="key" class="flex justify-between items-start gap-2">
+                        <span class="font-semibold text-slate-500 text-[10px] tracking-wider uppercase">{{ key }}</span>
+                        <span class="text-rose-700 font-medium text-xs break-all text-right">{{ formatLogValue(val) }}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div v-else class="bg-slate-900 text-rose-300 font-mono text-xs p-4 rounded-2xl overflow-x-auto">
+                  <pre>{{ JSON.stringify(selectedLogData.oldValue, null, 2) }}</pre>
+                </div>
+              </div>
+              <div v-else class="bg-slate-900 h-[160px] flex items-center justify-center rounded-2xl text-slate-500 italic text-xs">
+                - ไม่มีข้อมูลเดิม -
               </div>
             </div>
 
@@ -400,11 +434,30 @@ const closeModal = () => {
                 <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
                 ค่าใหม่ (New Value)
               </span>
-              <div class="bg-slate-900 text-emerald-300 font-mono text-xs p-4 rounded-2xl overflow-x-auto min-h-[160px]">
-                <pre v-if="selectedLogData?.newValue">{{ JSON.stringify(selectedLogData.newValue, null, 2) }}</pre>
-                <div v-else class="h-full flex items-center justify-center text-slate-500 italic">
-                  - ไม่มีข้อมูลใหม่ -
+              <div v-if="selectedLogData?.newValue" class="bg-slate-50 border border-slate-200 p-4 rounded-2xl min-h-[160px]">
+                <div v-if="isSimpleObject(selectedLogData.newValue)" class="flex flex-col gap-2">
+                  <div v-for="(val, key) in selectedLogData.newValue" :key="key" class="bg-white border border-slate-200 px-3 py-2 rounded-xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+                    <span class="font-bold text-slate-500 text-xs tracking-wider uppercase">{{ key }}</span>
+                    <span class="font-medium text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg text-sm break-all max-w-full">{{ formatLogValue(val) }}</span>
+                  </div>
                 </div>
+                <div v-else-if="Array.isArray(selectedLogData.newValue)" class="flex flex-col gap-3 max-h-[300px] overflow-y-auto pr-1">
+                  <div v-for="(item, index) in selectedLogData.newValue" :key="index" class="bg-white border border-emerald-200 p-3 rounded-xl shadow-sm">
+                    <div class="text-xs font-bold text-slate-400 mb-2 border-b border-slate-100 pb-1">รายการที่ {{ index + 1 }}</div>
+                    <div class="flex flex-col gap-1.5">
+                      <div v-for="(val, key) in item" :key="key" class="flex justify-between items-start gap-2">
+                        <span class="font-semibold text-slate-500 text-[10px] tracking-wider uppercase">{{ key }}</span>
+                        <span class="text-emerald-700 font-medium text-xs break-all text-right">{{ formatLogValue(val) }}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div v-else class="bg-slate-900 text-emerald-300 font-mono text-xs p-4 rounded-2xl overflow-x-auto">
+                  <pre>{{ JSON.stringify(selectedLogData.newValue, null, 2) }}</pre>
+                </div>
+              </div>
+              <div v-else class="bg-slate-900 h-[160px] flex items-center justify-center rounded-2xl text-slate-500 italic text-xs">
+                - ไม่มีข้อมูลใหม่ -
               </div>
             </div>
           </div>

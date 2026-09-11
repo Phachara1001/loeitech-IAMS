@@ -1,4 +1,4 @@
-﻿<script setup>
+<script setup>
 import { ref, computed, onMounted } from 'vue'
 import {
   Wrench, Plus, X, Check, Loader2, AlertTriangle, Image as ImageIcon,
@@ -118,7 +118,9 @@ const filteredAssets = computed(() => {
   })
 })
 
-const selectedAsset = computed(() => assets.value.find(a => a.id === Number(form.value.assetId)) || null)
+const selectedFormAssets = computed(() => {
+  return assets.value.filter(a => form.value.assetIds.includes(a.id.toString()))
+})
 
 function openAssetSelector() {
   assetSearchQuery.value = ''
@@ -126,13 +128,23 @@ function openAssetSelector() {
   assetSelectorOpen.value = true
 }
 
-function pickAsset(asset) {
-  form.value.assetId = asset.id.toString()
+function toggleSelectAsset(asset) {
+  const strId = asset.id.toString()
+  const idx = form.value.assetIds.indexOf(strId)
+  if (idx !== -1) {
+    form.value.assetIds.splice(idx, 1)
+  } else {
+    form.value.assetIds.push(strId)
+  }
+}
+
+function confirmAssetSelection() {
   assetSelectorOpen.value = false
+  assetSearchQuery.value = ''
 }
 
 /* ---------------- ฟอร์มแจ้งซ่อม ---------------- */
-const form = ref({ assetId: '', detail: '', urgency: 'NORMAL', photoPreview: null })
+const form = ref({ assetIds: [], detail: '', urgency: 'NORMAL', photoPreview: null })
 const fileInputRef = ref(null)
 const formError = ref('')
 const isSubmitting = ref(false)
@@ -155,7 +167,7 @@ function handlePhotoChange(event) {
 }
 
 async function submitRepairRequest() {
-  if (!form.value.assetId || !form.value.detail.trim()) {
+  if (form.value.assetIds.length === 0 || !form.value.detail.trim()) {
     formError.value = 'กรุณาเลือกครุภัณฑ์และระบุอาการชำรุดให้ครบถ้วน'
     return
   }
@@ -163,16 +175,19 @@ async function submitRepairRequest() {
   formError.value = ''
 
   try {
-    const payload = {
-      assetId: Number(form.value.assetId),
-      reporterName: currentUserName.value,
-      description: form.value.detail.trim(),
-      urgency: form.value.urgency
-    }
+    const promises = form.value.assetIds.map(assetId => {
+      const payload = {
+        assetId: Number(assetId),
+        reporterName: currentUserName.value,
+        description: form.value.detail.trim(),
+        urgency: form.value.urgency
+      }
+      return inventoryApi.createRepair(payload)
+    })
 
-    await inventoryApi.createRepair(payload)
-    toast.success('ยื่นเรื่องแจ้งซ่อมครุภัณฑ์สำเร็จ!')
-    form.value = { assetId: '', detail: '', urgency: 'NORMAL', photoPreview: null }
+    await Promise.all(promises)
+    toast.success(`ยื่นเรื่องแจ้งซ่อมครุภัณฑ์ ${form.value.assetIds.length} รายการสำเร็จ!`)
+    form.value = { assetIds: [], detail: '', urgency: 'NORMAL', photoPreview: null }
     showSubmitSuccess.value = true
     activeTab.value = 'list'
     await fetchData()
@@ -390,33 +405,51 @@ async function completeRepair() {
             <!-- Timeline Node -->
             <div class="relative z-10 shrink-0 w-14 h-14 bg-white rounded-full flex items-center justify-center border-4 border-slate-50 shadow-sm mt-1">
               <div :class="['w-10 h-10 rounded-full flex items-center justify-center text-white font-bold transition-all duration-300 shadow-md',
-                selectedAsset ? 'bg-emerald-500 shadow-emerald-500/30' : 'bg-slate-800 shadow-slate-800/30']">
-                <Check v-if="selectedAsset" class="w-5 h-5" />
+                selectedFormAssets.length > 0 ? 'bg-emerald-500 shadow-emerald-500/30' : 'bg-slate-800 shadow-slate-800/30']">
+                <Check v-if="selectedFormAssets.length > 0" class="w-5 h-5" />
                 <span v-else>1</span>
               </div>
             </div>
             <!-- Content -->
-            <div class="flex-1">
+            <div class="flex-1 min-w-0">
               <h3 class="text-lg font-bold text-slate-800 mb-1">เลือกครุภัณฑ์</h3>
               <p class="text-sm text-slate-500 mb-4">ค้นหาและเลือกครุภัณฑ์ที่ต้องการแจ้งซ่อม</p>
               
               <button type="button" @click="openAssetSelector"
                 :class="['w-full flex items-center gap-4 px-5 py-4 rounded-2xl border-2 transition-all cursor-pointer text-left',
-                  selectedAsset ? 'border-emerald-400 bg-emerald-50/60 hover:bg-emerald-50' : 'border-dashed border-slate-300 hover:border-slate-400 bg-white hover:bg-slate-50']">
+                  selectedFormAssets.length > 0 ? 'border-emerald-400 bg-emerald-50/60 hover:bg-emerald-50' : 'border-dashed border-slate-300 hover:border-slate-400 bg-white hover:bg-slate-50']">
                 <div :class="['w-12 h-12 rounded-xl flex items-center justify-center shrink-0 transition-all shadow-sm',
-                  selectedAsset ? 'bg-white' : 'bg-slate-100']">
-                  <Wrench :class="['w-6 h-6', selectedAsset ? 'text-emerald-500' : 'text-slate-400']" />
+                  selectedFormAssets.length > 0 ? 'bg-white' : 'bg-slate-100']">
+                  <Wrench :class="['w-6 h-6', selectedFormAssets.length > 0 ? 'text-emerald-500' : 'text-slate-400']" />
                 </div>
                 <div class="flex-1 min-w-0">
-                  <p v-if="selectedAsset" class="text-base font-bold text-slate-800 truncate">{{ selectedAsset.name }}</p>
-                  <p v-if="selectedAsset" class="text-sm text-slate-500 mt-1 font-mono bg-slate-100 inline-block px-2 py-0.5 rounded-md">{{ selectedAsset.seq || '-' }}</p>
+                  <p v-if="selectedFormAssets.length > 0" class="text-base font-bold text-slate-800 truncate">เลือกแล้ว {{ selectedFormAssets.length }} รายการ</p>
                   <p v-else class="text-sm font-medium text-slate-500">คลิกเพื่อค้นหาและเลือกจากรายการ...</p>
                 </div>
                 <span :class="['shrink-0 px-4 py-2 rounded-xl text-sm font-bold transition-all',
-                  selectedAsset ? 'bg-white border border-emerald-100 text-emerald-700 shadow-sm hover:bg-emerald-50' : 'bg-gradient-to-r from-[#072415] to-[#065f46] text-white shadow-md hover:shadow-lg']">
-                  {{ selectedAsset ? 'เปลี่ยนครุภัณฑ์' : 'ค้นหาครุภัณฑ์' }}
+                  selectedFormAssets.length > 0 ? 'bg-white border border-emerald-100 text-emerald-700 shadow-sm hover:bg-emerald-50' : 'bg-gradient-to-r from-[#072415] to-[#065f46] text-white shadow-md hover:shadow-lg']">
+                  {{ selectedFormAssets.length > 0 ? 'จัดการรายการ' : 'ค้นหาครุภัณฑ์' }}
                 </span>
               </button>
+
+              <!-- Selected Assets List -->
+              <div v-if="selectedFormAssets.length > 0" class="mt-3 flex flex-col gap-2 max-h-48 overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+                <div v-for="(asset, index) in selectedFormAssets" :key="asset.id" 
+                  class="flex items-center gap-3 bg-white p-2.5 rounded-xl border border-emerald-200 shadow-sm group">
+                  <div class="w-6 h-6 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-xs font-bold shrink-0">
+                    {{ index + 1 }}
+                  </div>
+                  <div class="flex-1 min-w-0 text-left">
+                    <div class="text-xs font-bold text-emerald-700 font-mono truncate mb-0.5">{{ asset.seq || '-' }}</div>
+                    <div class="text-sm font-semibold text-slate-800 truncate">{{ asset.name }}</div>
+                  </div>
+                  <button type="button" @click="toggleSelectAsset(asset)" 
+                    class="p-1.5 text-rose-500 bg-rose-50 hover:text-white hover:bg-rose-500 rounded-lg transition-colors cursor-pointer shrink-0"
+                    title="นำออก">
+                    <X class="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -721,7 +754,7 @@ async function completeRepair() {
     <div v-if="assetSelectorOpen"
       class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4"
       @click.self="assetSelectorOpen = false">
-      <div class="bg-white rounded-2xl w-full max-w-3xl h-[80vh] flex flex-col overflow-hidden shadow-2xl">
+      <div class="bg-white rounded-2xl w-full max-w-5xl h-[80vh] flex flex-col overflow-hidden shadow-2xl">
         <!-- Header -->
         <div class="px-6 py-5 border-b border-slate-100 shrink-0">
           <div class="flex items-center justify-between mb-4">
@@ -759,8 +792,9 @@ async function completeRepair() {
           </div>
           <div v-else class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
             <div v-for="asset in filteredAssets" :key="asset.id"
-              @click="pickAsset(asset)"
-              class="bg-white rounded-xl border-2 border-slate-200 hover:border-[#047857] hover:shadow-md transition-all cursor-pointer p-4 flex flex-col gap-3 group">
+              @click="toggleSelectAsset(asset)"
+              :class="form.assetIds.includes(asset.id.toString()) ? 'border-emerald-500 bg-emerald-50 shadow-md ring-2 ring-emerald-500/20' : 'bg-white border-slate-200 hover:border-[#047857] hover:shadow-md'"
+              class="rounded-xl border-2 transition-all cursor-pointer p-4 flex flex-col gap-3 group relative overflow-hidden text-left">
               <div class="flex items-start justify-between">
                 <div class="w-10 h-10 rounded-xl bg-emerald-50 group-hover:bg-[#065f46] flex items-center justify-center transition-colors shrink-0">
                   <Wrench class="w-5 h-5 text-[#065f46] group-hover:text-white transition-colors" />
@@ -770,24 +804,46 @@ async function completeRepair() {
                 </span>
               </div>
               <div class="flex-1">
-                <h4 class="text-sm font-semibold text-slate-900 group-hover:text-[#065f46] transition-colors line-clamp-2">{{ asset.name }}</h4>
-                <p class="text-xs text-slate-400 mt-0.5">{{ asset.seq || '-' }} · {{ asset.category || 'ไม่ระบุ' }}</p>
+                <div class="flex items-center gap-2 bg-slate-50/80 border border-slate-100 rounded-lg p-1.5 mb-2 mt-1">
+                  <div class="bg-white border border-slate-200 rounded-md p-1.5 shadow-sm shrink-0">
+                    <svg class="w-3 h-3 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+                    </svg>
+                  </div>
+                  <div class="flex flex-col min-w-0">
+                    <span class="text-[9px] font-bold text-slate-400 uppercase tracking-wide mb-0.5">รหัสครุภัณฑ์</span>
+                    <span class="text-xs font-bold text-[#065f46] font-mono truncate" :title="asset.seq">{{ asset.seq || '-' }}</span>
+                  </div>
+                </div>
+                <h4 class="text-sm font-semibold text-slate-900 group-hover:text-[#065f46] transition-colors line-clamp-2 mt-2">{{ asset.name }}</h4>
+                <p class="text-xs text-slate-400 mt-0.5">{{ asset.category || 'ไม่ระบุ' }}</p>
               </div>
               <div class="pt-3 border-t border-slate-100 flex items-center justify-between">
                 <span class="text-xs text-slate-400">{{ asset.location?.name || 'ไม่ระบุสถานที่' }}</span>
-                <span class="text-xs font-bold text-[#065f46] bg-emerald-50 group-hover:bg-[#065f46] group-hover:text-white px-3 py-1 rounded-lg transition-all">
-                  เลือก
+                <span
+                  :class="form.assetIds.includes(asset.id.toString()) ? 'text-white bg-emerald-600' : 'text-[#065f46] bg-emerald-50 group-hover:bg-[#065f46] group-hover:text-white'"
+                  class="text-xs font-bold px-3 py-1 rounded-lg transition-all shrink-0">
+                  {{ form.assetIds.includes(asset.id.toString()) ? '✓ เลือกแล้ว' : 'เลือก' }}
                 </span>
               </div>
             </div>
           </div>
         </div>
         <!-- Footer -->
-        <div class="px-6 py-4 border-t border-slate-100 shrink-0 flex justify-end">
-          <button type="button" @click="assetSelectorOpen = false"
-            class="px-6 py-2.5 rounded-xl border border-slate-200 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition-colors cursor-pointer">
-            ปิดหน้าต่าง
-          </button>
+        <div class="px-6 py-4 border-t border-slate-100 shrink-0 flex justify-between items-center bg-slate-50/50 rounded-b-2xl">
+          <div class="text-sm font-medium text-slate-600">
+            เลือกแล้ว <span class="text-emerald-700 font-bold text-lg">{{ form.assetIds.length }}</span> รายการ
+          </div>
+          <div class="flex gap-2">
+            <button type="button" @click="assetSelectorOpen = false"
+              class="px-5 py-2.5 rounded-xl border border-slate-200 text-sm font-semibold text-slate-600 hover:bg-white transition-colors cursor-pointer">
+              ปิด
+            </button>
+            <button type="button" @click="confirmAssetSelection"
+              class="px-6 py-2.5 rounded-xl bg-[#065f46] text-white text-sm font-semibold hover:bg-[#047857] shadow-sm transition-colors cursor-pointer flex items-center gap-2">
+              <Check class="w-4 h-4" /> ยืนยัน
+            </button>
+          </div>
         </div>
       </div>
     </div>

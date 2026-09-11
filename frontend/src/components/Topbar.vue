@@ -2,8 +2,10 @@
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import axios from 'axios'
-import { Bell, Search, User, ChevronDown, UserCircle, LogOut, X, AlertTriangle, Check, Ban, UserPlus } from 'lucide-vue-next'
+import { Bell, Search, User, ChevronDown, UserCircle, LogOut, X, AlertTriangle, Check, Ban, UserPlus, Menu } from 'lucide-vue-next'
 import { API_BASE } from '../config/api'
+
+const emit = defineEmits(['toggle-mobile-menu'])
 
 const router = useRouter()
 const route = useRoute()
@@ -196,13 +198,21 @@ onUnmounted(() => {
 
 <template>
   <header
-    class="print:hidden h-16 bg-white border-b border-slate-200 flex items-center justify-between px-6 shrink-0 shadow-sm z-10">
+    class="relative print:hidden h-16 bg-white border-b border-slate-200 flex items-center justify-between px-6 shrink-0 shadow-sm z-50">
     <div class="flex items-center">
+      <!-- Hamburger Menu (Mobile) -->
+      <button 
+        @click="emit('toggle-mobile-menu')"
+        class="p-2 -ml-2 mr-2 rounded-lg text-slate-500 hover:bg-slate-100 lg:hidden transition-colors"
+      >
+        <Menu class="w-6 h-6" />
+      </button>
+
       <h1 class="text-xl font-semibold text-slate-900 hidden sm:block">
         ระบบบริหารครุภัณฑ์
       </h1>
       <div
-        class="ml-4 px-2.5 py-1 rounded-md bg-emerald-50 text-emerald-700 text-xs font-bold border border-emerald-100 transition-all">
+        class="sm:ml-4 px-2.5 py-1 rounded-md bg-emerald-50 text-emerald-700 text-xs font-bold border border-emerald-100 transition-all">
         ปีงบประมาณ {{ fiscalYear }}
       </div>
     </div>
@@ -311,8 +321,8 @@ onUnmounted(() => {
               <span>ข้อมูลส่วนตัว</span>
             </button>
 
-            <!-- แสดงปุ่มออกจากระบบเฉพาะเมื่อ "ไม่ใช่" หน้าข้อมูลส่วนตัว (v-if="!isProfilePage") -->
-            <button v-if="!isProfilePage" type="button" @click="openLogoutConfirm"
+            <!-- ปุ่มออกจากระบบ (เปิดให้เห็นทุกหน้า) -->
+            <button type="button" @click="openLogoutConfirm"
               class="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm text-red-600 hover:bg-red-50 transition-colors border-t border-slate-100 mt-1">
               <LogOut class="w-4 h-4" />
               <span>ออกจากระบบ</span>

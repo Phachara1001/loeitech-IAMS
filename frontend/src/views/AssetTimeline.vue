@@ -357,8 +357,7 @@ const handleAddLog = () => {
                 <th class="px-6 py-4 text-center">รูปภาพ</th>
                 <th class="px-6 py-4">เลขลำดับครุภัณฑ์</th>
                 <th class="px-6 py-4">ชื่อพัสดุ / เลขพัสดุหลัก</th>
-                <th class="px-6 py-4">เลขทะเบียน / Serial</th>
-                <th class="px-6 py-4">สถานที่ / แผนก</th>
+
                 <th class="px-6 py-4">ผู้ดูแล</th>
                 <th class="px-6 py-4">สถานะ</th>
                 <th class="px-6 py-4 text-center">ดูประวัติ / จัดการ</th>
@@ -378,10 +377,7 @@ const handleAddLog = () => {
                 <td class="px-6 py-4">
                   <div class="font-extrabold text-slate-900 text-base">{{ asset.name }}</div>
                 </td>
-                <td class="px-6 py-4 text-slate-600 font-mono">{{ asset.serial }}</td>
-                <td class="px-6 py-4 text-slate-700">
-                  <div class="font-bold">{{ asset.currentLocation }}</div>
-                </td>
+
                 <td class="px-6 py-4 text-slate-700">{{ asset.ownerName }}</td>
                 <td class="px-6 py-4">
                   <span :class="['px-3 py-1 text-xs font-bold rounded-full border inline-block', getStatusBadge(asset.status)]">
@@ -410,7 +406,7 @@ const handleAddLog = () => {
               </tr>
 
               <tr v-if="filteredAssets.length === 0">
-                <td colspan="8" class="px-6 py-12 text-center text-slate-400 font-medium">
+                <td colspan="6" class="px-6 py-12 text-center text-slate-400 font-medium">
                   ไม่พบรายการครุภัณฑ์ที่ตรงกับการค้นหา
                 </td>
               </tr>

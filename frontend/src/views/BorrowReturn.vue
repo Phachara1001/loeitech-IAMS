@@ -127,7 +127,7 @@ const dueSoonOrOverdue = computed(() =>
 const isFormOpen = ref(false)
 const isSaving = ref(false)
 const formError = ref('')
-const form = ref({ assetId: '', purpose: '', dueDate: '' })
+const form = ref({ assetIds: [], purpose: '', dueDate: '' })
 
 /* ---------------- Modal: เลือกครุภัณฑ์ ---------------- */
 const assetSelectorOpen = ref(false)
@@ -148,7 +148,9 @@ const filteredAssets = computed(() => {
   })
 })
 
-const selectedAsset = computed(() => assets.value.find(a => a.id === Number(form.value.assetId)) || null)
+const selectedFormAssets = computed(() => {
+  return assets.value.filter(a => form.value.assetIds.includes(a.id.toString()))
+})
 
 function openAssetSelector() {
   assetSearchQuery.value = ''
@@ -156,20 +158,30 @@ function openAssetSelector() {
   assetSelectorOpen.value = true
 }
 
-function pickAsset(asset) {
-  form.value.assetId = asset.id.toString()
+function toggleSelectAsset(asset) {
+  const strId = asset.id.toString()
+  const idx = form.value.assetIds.indexOf(strId)
+  if (idx !== -1) {
+    form.value.assetIds.splice(idx, 1)
+  } else {
+    form.value.assetIds.push(strId)
+  }
+}
+
+function confirmAssetSelection() {
   assetSelectorOpen.value = false
+  assetSearchQuery.value = ''
 }
 
 function openForm() {
   formError.value = ''
-  form.value = { assetId: '', purpose: '', dueDate: '' }
+  form.value = { assetIds: [], purpose: '', dueDate: '' }
   isFormOpen.value = true
 }
 function closeForm() { isFormOpen.value = false }
 
 async function saveForm() {
-  if (!form.value.assetId || !form.value.purpose.trim() || !form.value.dueDate) {
+  if (form.value.assetIds.length === 0 || !form.value.purpose.trim() || !form.value.dueDate) {
     formError.value = 'กรุณาเลือกรายการ ระบุวัตถุประสงค์ และกำหนดวันส่งคืนให้ครบถ้วน'
     return
   }
@@ -177,15 +189,18 @@ async function saveForm() {
   formError.value = ''
   try {
     const fullDateTime = new Date().toISOString()
-    await inventoryApi.createBorrow({
-      assetId: Number(form.value.assetId),
-      borrowerName: currentUserName.value,
-      borrowerDept: 'งานพัสดุกลาง',
-      borrowDate: fullDateTime,
-      dueDate: new Date(form.value.dueDate).toISOString(),
-      purpose: form.value.purpose.trim()
+    const promises = form.value.assetIds.map(assetId => {
+      return inventoryApi.createBorrow({
+        assetId: Number(assetId),
+        borrowerName: currentUserName.value,
+        borrowerDept: 'งานพัสดุกลาง',
+        borrowDate: fullDateTime,
+        dueDate: new Date(form.value.dueDate).toISOString(),
+        purpose: form.value.purpose.trim()
+      })
     })
-    toast.success('ยื่นคำขอยืมครุภัณฑ์สำเร็จ!')
+    await Promise.all(promises)
+    toast.success(`ยื่นคำขอยืมครุภัณฑ์ ${form.value.assetIds.length} รายการสำเร็จ!`)
     isFormOpen.value = false
     await fetchData()
   } catch (err) {
@@ -387,14 +402,32 @@ async function confirmReturn() {
               <!-- ปุ่มเปิด Modal เลือกครุภัณฑ์ -->
               <button type="button" @click="openAssetSelector"
                 class="w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 transition-all cursor-pointer"
-                :class="selectedAsset ? 'border-[#047857] bg-emerald-50/50' : 'border-slate-200 bg-white hover:border-slate-300'">
-                <div v-if="selectedAsset" class="text-left min-w-0">
-                  <p class="text-sm font-bold text-[#065f46] truncate">{{ selectedAsset.name }}</p>
-                  <p class="text-xs text-slate-500">เลขครุภัณฑ์: {{ selectedAsset.seq || '-' }}</p>
+                :class="selectedFormAssets.length > 0 ? 'border-[#047857] bg-emerald-50/50' : 'border-slate-200 bg-white hover:border-slate-300'">
+                <div class="text-left min-w-0">
+                  <span v-if="selectedFormAssets.length > 0" class="text-sm font-bold text-[#065f46] truncate">เลือกแล้ว {{ selectedFormAssets.length }} รายการ</span>
+                  <span v-else class="text-sm text-slate-400">-- คลิกเพื่อค้นหาและเลือกครุภัณฑ์ --</span>
                 </div>
-                <span v-else class="text-sm text-slate-400">-- คลิกเพื่อค้นหาและเลือกครุภัณฑ์ --</span>
-                <span class="ml-3 shrink-0 px-3 py-1 rounded-lg bg-slate-100 text-slate-600 text-xs font-semibold">{{ selectedAsset ? 'เปลี่ยน' : 'ค้นหา' }}</span>
+                <span class="ml-3 shrink-0 px-3 py-1 rounded-lg bg-slate-100 text-slate-600 text-xs font-semibold">{{ selectedFormAssets.length > 0 ? 'จัดการรายการ' : 'ค้นหา' }}</span>
               </button>
+              
+              <!-- Selected Assets List -->
+              <div v-if="selectedFormAssets.length > 0" class="mt-3 flex flex-col gap-2 max-h-48 overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+                <div v-for="(asset, index) in selectedFormAssets" :key="asset.id" 
+                  class="flex items-center gap-3 bg-white p-2.5 rounded-xl border border-slate-200 shadow-sm group">
+                  <div class="w-6 h-6 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center text-xs font-bold shrink-0">
+                    {{ index + 1 }}
+                  </div>
+                  <div class="flex-1 min-w-0 text-left">
+                    <div class="text-xs font-bold text-emerald-700 font-mono truncate mb-0.5">{{ asset.seq || '-' }}</div>
+                    <div class="text-sm font-semibold text-slate-800 truncate">{{ asset.name }}</div>
+                  </div>
+                  <button type="button" @click="toggleSelectAsset(asset)" 
+                    class="p-1.5 text-rose-500 bg-rose-50 hover:text-white hover:bg-rose-500 rounded-lg transition-colors cursor-pointer shrink-0"
+                    title="นำออก">
+                    <X class="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
             </div>
 
             <div>
@@ -552,7 +585,7 @@ async function confirmReturn() {
     <div v-if="assetSelectorOpen"
       class="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4"
       @click.self="assetSelectorOpen = false">
-      <div class="bg-white rounded-2xl w-full max-w-3xl h-[80vh] flex flex-col overflow-hidden shadow-2xl">
+      <div class="bg-white rounded-2xl w-full max-w-5xl h-[80vh] flex flex-col overflow-hidden shadow-2xl">
         <!-- Header -->
         <div class="px-6 py-5 border-b border-slate-100 shrink-0">
           <div class="flex items-center justify-between mb-4">
@@ -590,8 +623,9 @@ async function confirmReturn() {
           </div>
           <div v-else class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
             <div v-for="asset in filteredAssets" :key="asset.id"
-              @click="pickAsset(asset)"
-              class="bg-white rounded-xl border-2 border-slate-200 hover:border-[#047857] hover:shadow-md transition-all cursor-pointer p-4 flex flex-col gap-3 group">
+              @click="toggleSelectAsset(asset)"
+              :class="form.assetIds.includes(asset.id.toString()) ? 'border-emerald-500 bg-emerald-50 shadow-md ring-2 ring-emerald-500/20' : 'bg-white border-slate-200 hover:border-[#047857] hover:shadow-md'"
+              class="rounded-xl border-2 transition-all cursor-pointer p-4 flex flex-col gap-3 group relative overflow-hidden text-left">
               <div class="flex items-start justify-between">
                 <div class="w-10 h-10 rounded-xl bg-emerald-50 group-hover:bg-[#065f46] flex items-center justify-center transition-colors shrink-0">
                   <Wrench class="w-5 h-5 text-[#065f46] group-hover:text-white transition-colors" />
@@ -601,24 +635,46 @@ async function confirmReturn() {
                 </span>
               </div>
               <div class="flex-1">
-                <h4 class="text-sm font-semibold text-slate-900 group-hover:text-[#065f46] transition-colors line-clamp-2">{{ asset.name }}</h4>
-                <p class="text-xs text-slate-400 mt-0.5">{{ asset.seq || '-' }} · {{ asset.category || 'ไม่ระบุ' }}</p>
+                <div class="flex items-center gap-2 bg-slate-50/80 border border-slate-100 rounded-lg p-1.5 mb-2 mt-1">
+                  <div class="bg-white border border-slate-200 rounded-md p-1.5 shadow-sm shrink-0">
+                    <svg class="w-3 h-3 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+                    </svg>
+                  </div>
+                  <div class="flex flex-col min-w-0">
+                    <span class="text-[9px] font-bold text-slate-400 uppercase tracking-wide mb-0.5">รหัสครุภัณฑ์</span>
+                    <span class="text-xs font-bold text-[#065f46] font-mono truncate" :title="asset.seq">{{ asset.seq || '-' }}</span>
+                  </div>
+                </div>
+                <h4 class="text-sm font-semibold text-slate-900 group-hover:text-[#065f46] transition-colors line-clamp-2 mt-2">{{ asset.name }}</h4>
+                <p class="text-xs text-slate-400 mt-0.5">{{ asset.category || 'ไม่ระบุ' }}</p>
               </div>
               <div class="pt-3 border-t border-slate-100 flex items-center justify-between">
                 <span class="text-xs text-slate-400 font-medium truncate pr-2" :title="getAssetLocation(asset)">{{ getAssetLocation(asset) }}</span>
-                <span class="text-xs font-bold text-[#065f46] bg-emerald-50 group-hover:bg-[#065f46] group-hover:text-white px-3 py-1 rounded-lg transition-all">
-                  เลือก
+                <span
+                  :class="form.assetIds.includes(asset.id.toString()) ? 'text-white bg-emerald-600' : 'text-[#065f46] bg-emerald-50 group-hover:bg-[#065f46] group-hover:text-white'"
+                  class="text-xs font-bold px-3 py-1 rounded-lg transition-all shrink-0">
+                  {{ form.assetIds.includes(asset.id.toString()) ? '✓ เลือกแล้ว' : 'เลือก' }}
                 </span>
               </div>
             </div>
           </div>
         </div>
         <!-- Footer -->
-        <div class="px-6 py-4 border-t border-slate-100 shrink-0 flex justify-end">
-          <button type="button" @click="assetSelectorOpen = false"
-            class="px-6 py-2.5 rounded-xl border border-slate-200 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition-colors cursor-pointer">
-            ปิดหน้าต่าง
-          </button>
+        <div class="px-6 py-4 border-t border-slate-100 shrink-0 flex justify-between items-center bg-slate-50/50 rounded-b-2xl">
+          <div class="text-sm font-medium text-slate-600">
+            เลือกแล้ว <span class="text-emerald-700 font-bold text-lg">{{ form.assetIds.length }}</span> รายการ
+          </div>
+          <div class="flex gap-2">
+            <button type="button" @click="assetSelectorOpen = false"
+              class="px-5 py-2.5 rounded-xl border border-slate-200 text-sm font-semibold text-slate-600 hover:bg-white transition-colors cursor-pointer">
+              ปิด
+            </button>
+            <button type="button" @click="confirmAssetSelection"
+              class="px-6 py-2.5 rounded-xl bg-[#065f46] text-white text-sm font-semibold hover:bg-[#047857] shadow-sm transition-colors cursor-pointer flex items-center gap-2">
+              <Check class="w-4 h-4" /> ยืนยัน
+            </button>
+          </div>
         </div>
       </div>
     </div>

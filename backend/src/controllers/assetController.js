@@ -124,7 +124,7 @@ export const createAssetsBatch = async (req, res, next) => {
       entityType: "ASSET",
       entityId: "BATCH",
       details: `ลงทะเบียนครุภัณฑ์แบบชุด จำนวน ${assets.length} รายการ`,
-      newValue: { count: assets.length }
+      newValue: result // Save the actual inserted array with generated IDs etc.
     });
 
     res.status(201).json({ status: "success", data: result, message: `บันทึกครุภัณฑ์ทั้ง ${assets.length} รายการเรียบร้อยแล้ว` });

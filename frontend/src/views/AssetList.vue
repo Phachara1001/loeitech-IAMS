@@ -77,9 +77,15 @@ onMounted(() => {
 
 const searchQuery = ref('')
 const statusFilter = ref('')
+const sortBy = ref('name') // name, unitPrice
+const sortOrder = ref('asc') // asc, desc
+
+function toggleSortOrder() {
+  sortOrder.value = sortOrder.value === 'asc' ? 'desc' : 'asc'
+}
 
 const filteredAssets = computed(() => {
-  return assets.value.filter(asset => {
+  let result = assets.value.filter(asset => {
     const matchesSearch = (asset.name || '').includes(searchQuery.value) ||
       (asset.seq || '').includes(searchQuery.value) ||
       (asset.referenceCode || '').includes(searchQuery.value) ||
@@ -89,6 +95,20 @@ const filteredAssets = computed(() => {
 
     return matchesSearch && matchesStatus
   })
+
+  // Sorting
+  result.sort((a, b) => {
+    let comparison = 0
+    if (sortBy.value === 'name') {
+      comparison = (a.name || '').localeCompare(b.name || '')
+    } else if (sortBy.value === 'unitPrice') {
+      comparison = (a.unitPrice || 0) - (b.unitPrice || 0)
+    }
+    
+    return sortOrder.value === 'asc' ? comparison : -comparison
+  })
+
+  return result
 })
 
 const getStatusBadge = (status) => {
@@ -341,17 +361,19 @@ const handlePrint = () => {
 
     <div class="bg-white rounded-2xl shadow-sm border border-emerald-100 overflow-hidden">
       <!-- Toolbar -->
-      <div class="p-4 border-b border-emerald-50 bg-emerald-50/20 flex flex-col sm:flex-row justify-between gap-4">
-        <div class="relative w-full sm:w-72">
+      <div class="p-4 border-b border-emerald-50 bg-emerald-50/20 flex flex-col xl:flex-row justify-between gap-4">
+        <!-- Search -->
+        <div class="relative w-full xl:w-72 shrink-0">
           <Search class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
           <input v-model="searchQuery" type="text" placeholder="ค้นหาชื่อ, เลขลำดับ, ทะเบียน..."
             class="pl-9 pr-4 py-2 w-full bg-white border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#065f46]/20 focus:border-[#065f46] text-slate-900" />
         </div>
 
-        <div class="flex items-center space-x-3">
-          <div class="relative">
+        <div class="flex flex-col sm:flex-row items-center gap-3 w-full xl:w-auto xl:justify-end">
+          <!-- Status Filter -->
+          <div class="relative w-full sm:w-40 shrink-0">
             <select v-model="statusFilter"
-              class="appearance-none pl-4 pr-10 py-2 bg-white border border-slate-300 rounded-lg text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#065f46]/20 focus:border-[#065f46]">
+              class="w-full appearance-none pl-4 pr-10 py-2 bg-white border border-slate-300 rounded-lg text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#065f46]/20 focus:border-[#065f46]">
               <option value="">ทุกสถานะ</option>
               <option value="Active">ใช้งานปกติ</option>
               <option value="Repaired">ส่งซ่อม</option>
@@ -359,6 +381,28 @@ const handlePrint = () => {
               <option value="Scrapped">แทงจำหน่าย</option>
             </select>
             <Filter class="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+          </div>
+
+          <!-- Sort By -->
+          <div class="flex items-center gap-2 w-full sm:w-auto">
+            <div class="relative w-full sm:w-40 shrink-0">
+              <select v-model="sortBy"
+                class="w-full appearance-none pl-4 pr-10 py-2 bg-white border border-slate-300 rounded-lg text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#065f46]/20 focus:border-[#065f46]">
+                <option value="name">เรียงตามชื่อ</option>
+                <option value="unitPrice">เรียงตามราคา</option>
+              </select>
+              <Filter class="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+            </div>
+
+            <!-- Sort Order Button -->
+            <button
+              @click="toggleSortOrder"
+              class="px-3 py-2 border border-slate-300 rounded-lg text-slate-600 bg-white hover:bg-slate-50 transition-colors flex items-center justify-center shrink-0 w-11"
+              :title="sortOrder === 'asc' ? 'น้อยไปมาก' : 'มากไปน้อย'"
+            >
+              <svg v-if="sortOrder === 'asc'" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 16 4 4 4-4"/><path d="M7 20V4"/><path d="M11 4h4"/><path d="M11 8h7"/><path d="M11 12h10"/></svg>
+              <svg v-else xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 8 4-4 4 4"/><path d="M7 4v16"/><path d="M11 12h4"/><path d="M11 16h7"/><path d="M11 20h10"/></svg>
+            </button>
           </div>
         </div>
       </div>

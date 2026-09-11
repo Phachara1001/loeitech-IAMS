@@ -7,9 +7,10 @@ import {
   Database, SendToBack, CalendarClock,
   ClipboardList, FilePlus,
   Settings, Activity, FileText,
-  Recycle, ClipboardCheck, ArrowLeftRight, Wrench, CalendarCheck, Users
+  Recycle, ClipboardCheck, ArrowLeftRight, Wrench, CalendarCheck, Users, X
 } from 'lucide-vue-next'
 
+const emit = defineEmits(['close-mobile'])
 const route = useRoute()
 
 // สิทธิ์การเข้าถึงเมนู: ดึงจาก role จริงที่ตั้งไว้ตอน login (admin/staff/user)
@@ -91,15 +92,22 @@ const isActive = (path) => {
 
 <template>
   <aside class="w-64 bg-emerald-800 text-slate-100 flex flex-col transition-all duration-300">
-    <div class="py-4 flex items-center px-5 border-b border-emerald-700/50 text-white tracking-wide shrink-0">
-      <div class="w-12 h-12 mr-3 flex items-center justify-center text-white shrink-0">
-        <img src="../../public/logo1.png" class="w-full h-full object-contain" />
+    <div class="py-4 flex items-center justify-between px-5 border-b border-emerald-700/50 text-white tracking-wide shrink-0">
+      <div class="flex items-center">
+        <div class="w-12 h-12 mr-3 flex items-center justify-center text-white shrink-0">
+          <img src="../../public/logo1.png" class="w-full h-full object-contain" />
+        </div>
+        <div class="flex flex-col">
+          <span class="font-bold text-xl leading-tight">IT-IAMS</span>
+          <span class="text-[10px] text-emerald-200 leading-tight mt-1">ระบบบริหารครุภัณฑ์</span>
+          <span class="text-[10px] text-emerald-200 leading-tight">แผนกเทคโนโลยีสารสนเทศ</span>
+        </div>
       </div>
-      <div class="flex flex-col">
-        <span class="font-bold text-xl leading-tight">IT-IAMS</span>
-        <span class="text-[10px] text-emerald-200 leading-tight mt-1">ระบบบริหารครุภัณฑ์</span>
-        <span class="text-[10px] text-emerald-200 leading-tight">แผนกเทคโนโลยีสารสนเทศ</span>
-      </div>
+      
+      <!-- Close button for mobile -->
+      <button @click="emit('close-mobile')" class="p-2 lg:hidden rounded-lg hover:bg-emerald-700 text-emerald-200 hover:text-white transition-colors">
+        <X class="w-5 h-5" />
+      </button>
     </div>
 
     <!-- เพิ่มคลาสสำหรับซ่อน Scrollbar แท็บเลื่อนข้างซ้าย -->
@@ -110,6 +118,7 @@ const isActive = (path) => {
         </div>
         <nav class="space-y-1">
           <router-link v-for="item in group.items" :key="item.path" :to="item.path"
+            @click="emit('close-mobile')"
             class="flex items-center px-3 py-2.5 rounded-lg transition-colors group relative"
             :class="isActive(item.path) ? 'bg-emerald-700 text-white font-medium shadow-sm' : 'hover:bg-emerald-700 hover:text-white text-slate-200'">
             <component :is="item.icon" class="w-5 h-5 mr-3 flex-shrink-0 transition-colors"

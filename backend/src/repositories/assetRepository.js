@@ -79,7 +79,7 @@ export const findLatestAsset = async () => {
 
 export const findTimelineData = async (id) => {
   const assetId = Number(id);
-  const [asset, distributions, borrows, repairs] = await Promise.all([
+  const [asset, distributions, borrows, repairs, disposals, activityLogs] = await Promise.all([
     prisma.asset.findUnique({ where: { id: assetId } }),
     prisma.assetDistribution.findMany({
       where: { assetId },
@@ -93,9 +93,18 @@ export const findTimelineData = async (id) => {
     prisma.repairRequest.findMany({
       where: { assetId },
       orderBy: { createdAt: 'asc' }
+    }),
+    prisma.disposalRequest.findMany({
+      where: { assetId },
+      orderBy: { createdAt: 'asc' }
+    }),
+    prisma.activityLog.findMany({
+      where: { entityId: String(assetId), entityType: 'ASSET', action: 'UPDATE' },
+      include: { user: { select: { name: true } } },
+      orderBy: { createdAt: 'asc' }
     })
   ]);
 
-  return { asset, distributions, borrows, repairs };
+  return { asset, distributions, borrows, repairs, disposals, activityLogs };
 };
 

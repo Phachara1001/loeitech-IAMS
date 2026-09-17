@@ -55,6 +55,34 @@ export const createDisposalRequest = async (data, currentUserId) => {
   });
 };
 
+export const createDisposalRequestBatch = async (data, currentUserId) => {
+  const disposalCode = await generateDisposalCode();
+
+  let requestedBy = null;
+  if (currentUserId) {
+    const user = await userRepository.findById(currentUserId);
+    requestedBy = user?.name || user?.username || null;
+  }
+
+  if (!data.assetIds || !Array.isArray(data.assetIds) || data.assetIds.length === 0) {
+    throw new Error('กรุณาระบุรายการครุภัณฑ์ที่ต้องการแทงจำหน่าย');
+  }
+
+  const requestsData = data.assetIds.map(assetId => ({
+    disposalCode,
+    assetId: Number(assetId),
+    method: data.method,
+    meetingDate: new Date(data.meetingDate),
+    committee: data.committee,
+    resolution: data.resolution,
+    status: 'PENDING',
+    requestedBy
+  }));
+
+  await disposalRepository.createMany(requestsData);
+  return disposalCode;
+};
+
 export const approveRequest = async (id, approverName) => {
   return await disposalRepository.updateStatus(id, {
     status: 'APPROVED',
@@ -63,11 +91,46 @@ export const approveRequest = async (id, approverName) => {
   });
 };
 
+export const approveRequestBatch = async (disposalCode, approverName) => {
+  // 1. อัปเดตสถานะคำขอเป็น APPROVED + ตัดยอด Asset เป็น Scrapped ทันทีตาม Requirement
+  const requests = await disposalRepository.findByDisposalCode(disposalCode);
+  if (requests.length === 0) {
+    throw new Error('ไม่พบคำขอจำหน่ายรหัสนี้');
+  }
+
+  // อนุมัติและแทงจำหน่ายเลย
+  const assetIds = requests.map(r => r.assetId);
+  await disposalRepository.updateStatusByDisposalCode(disposalCode, {
+    status: 'DISPOSED',
+    approvedBy: approverName || null,
+    approvedAt: new Date(),
+    disposedAt: new Date()
+  });
+
+  // อัปเดต asset 
+  for (const assetId of assetIds) {
+    // Cannot use markDisposedBatchWithAssetUpdate because it overrides updateStatusByDisposalCode,
+    // Actually, I can just update assets directly here
+    const { update } = await import('../repositories/assetRepository.js');
+    await update(assetId, { status: 'Scrapped' });
+  }
+
+  return requests;
+};
+
 export const rejectRequest = async (id, remark) => {
   return await disposalRepository.updateStatus(id, {
     status: 'REJECTED',
     remark: remark || null
   });
+};
+
+export const rejectRequestBatch = async (disposalCode, remark) => {
+  await disposalRepository.updateStatusByDisposalCode(disposalCode, {
+    status: 'REJECTED',
+    remark: remark || null
+  });
+  return await disposalRepository.findByDisposalCode(disposalCode);
 };
 
 export const markDisposed = async (id) => {

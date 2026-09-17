@@ -38,7 +38,7 @@ const menuGroups = [
       { name: 'ทะเบียนครุภัณฑ์', path: '/asset-list', icon: Database, roles: ['admin', 'staff', 'user'] },
       { name: 'จ่ายครุภัณฑ์ให้หน่วย', path: '/asset-distribution', icon: SendToBack, roles: ['admin', 'staff'] },
       { name: 'ประวัติซ่อม/เคลื่อนย้าย', path: '/asset-timeline', icon: CalendarClock, roles: ['admin', 'staff', 'user'] },
-      { name: 'จำหน่ายพัสดุ/ครุภัณฑ์', path: '/asset-disposal', icon: Recycle, roles: ['admin', 'staff'] },
+      { name: 'จำหน่ายครุภัณฑ์', path: '/asset-disposal', icon: Recycle, roles: ['admin', 'staff'] },
     ]
   },
   {
@@ -92,7 +92,8 @@ const isActive = (path) => {
 
 <template>
   <aside class="w-64 bg-emerald-800 text-slate-100 flex flex-col transition-all duration-300">
-    <div class="py-4 flex items-center justify-between px-5 border-b border-emerald-700/50 text-white tracking-wide shrink-0">
+    <div
+      class="py-4 flex items-center justify-between px-5 border-b border-emerald-700/50 text-white tracking-wide shrink-0">
       <div class="flex items-center">
         <div class="w-12 h-12 mr-3 flex items-center justify-center text-white shrink-0">
           <img src="../../public/logo1.png" class="w-full h-full object-contain" />
@@ -103,9 +104,10 @@ const isActive = (path) => {
           <span class="text-[10px] text-emerald-200 leading-tight">แผนกเทคโนโลยีสารสนเทศ</span>
         </div>
       </div>
-      
+
       <!-- Close button for mobile -->
-      <button @click="emit('close-mobile')" class="p-2 lg:hidden rounded-lg hover:bg-emerald-700 text-emerald-200 hover:text-white transition-colors">
+      <button @click="emit('close-mobile')"
+        class="p-2 lg:hidden rounded-lg hover:bg-emerald-700 text-emerald-200 hover:text-white transition-colors">
         <X class="w-5 h-5" />
       </button>
     </div>
@@ -117,8 +119,7 @@ const isActive = (path) => {
           {{ group.title }}
         </div>
         <nav class="space-y-1">
-          <router-link v-for="item in group.items" :key="item.path" :to="item.path"
-            @click="emit('close-mobile')"
+          <router-link v-for="item in group.items" :key="item.path" :to="item.path" @click="emit('close-mobile')"
             class="flex items-center px-3 py-2.5 rounded-lg transition-colors group relative"
             :class="isActive(item.path) ? 'bg-emerald-700 text-white font-medium shadow-sm' : 'hover:bg-emerald-700 hover:text-white text-slate-200'">
             <component :is="item.icon" class="w-5 h-5 mr-3 flex-shrink-0 transition-colors"

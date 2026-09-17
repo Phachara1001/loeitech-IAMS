@@ -226,6 +226,53 @@ export const getAssetTimeline = async (id) => {
     }
   });
 
+  // Helper สำหรับแปลสถานะ
+  const getThaiStatus = (status) => {
+    switch (status) {
+      case 'Active': return 'ใช้งานปกติ';
+      case 'Repaired': return 'ส่งซ่อม';
+      case 'Broken': return 'ชำรุด';
+      case 'Scrapped': return 'แทงจำหน่าย';
+      default: return status;
+    }
+  };
+
+  // 5. ประวัติการขอจำหน่าย
+  if (data.disposals) {
+    data.disposals.forEach((d) => {
+      timeline.push({
+        id: `disp-${d.id}`,
+        type: 'DISPOSE',
+        title: `บันทึกขอจำหน่ายครุภัณฑ์ (${d.disposalCode})`,
+        date: d.createdAt,
+        operator: d.requestedBy || 'ไม่ระบุ',
+        details: `วิธี: ${d.method} (สถานะคำขอ: ${d.status === 'APPROVED' ? 'อนุมัติแล้ว' : d.status === 'REJECTED' ? 'ไม่อนุมัติ' : 'รออนุมัติ'})`,
+        location: '',
+        responsiblePerson: '',
+        cost: 0
+      });
+    });
+  }
+
+  // 6. ประวัติการปรับเปลี่ยนสถานะ (Manual Status Toggle)
+  if (data.activityLogs) {
+    data.activityLogs.forEach((log) => {
+      if (log.oldValue && log.newValue && log.oldValue.status !== log.newValue.status) {
+        timeline.push({
+          id: `log-${log.id}`,
+          type: 'STATUS_CHANGE',
+          title: `ปรับปรุงสถานะครุภัณฑ์`,
+          date: log.createdAt,
+          operator: log.user?.name || 'แอดมินระบบ',
+          details: `เปลี่ยนสถานะจาก '${getThaiStatus(log.oldValue.status)}' เป็น '${getThaiStatus(log.newValue.status)}'`,
+          location: '',
+          responsiblePerson: '',
+          cost: 0
+        });
+      }
+    });
+  }
+
   // เรียงลำดับจากล่าสุดไปหาเก่าสุด
   timeline.sort((a, b) => new Date(b.date) - new Date(a.date));
 

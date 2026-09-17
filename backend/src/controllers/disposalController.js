@@ -55,6 +55,34 @@ export const createRequest = async (req, res, next) => {
 };
 
 /**
+ * POST /api/disposal-requests/batch
+ * body: { assetIds: [], method, meetingDate, committee, resolution }
+ */
+export const createRequestBatch = async (req, res, next) => {
+  try {
+    const { assetIds, method, meetingDate, committee, resolution } = req.body;
+    if (!assetIds || !Array.isArray(assetIds) || assetIds.length === 0 || !meetingDate || !committee?.trim() || !resolution?.trim()) {
+      return res.status(400).json({ status: 'error', message: 'กรุณากรอกข้อมูลให้ครบถ้วน' });
+    }
+
+    const disposalCode = await disposalService.createDisposalRequestBatch(req.body, req.user?.id);
+
+    await logActivity({
+      req,
+      action: 'INSERT',
+      entityType: 'DISPOSAL',
+      entityId: disposalCode,
+      newValue: { disposalCode, assetIds },
+      details: `สร้างคำขอจำหน่ายแบบกลุ่ม จำนวน ${assetIds.length} รายการ (${disposalCode})`
+    });
+
+    res.status(201).json({ status: 'success', data: { disposalCode }, message: 'สร้างคำขอจำหน่ายสำเร็จ' });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
  * PATCH /api/disposal-requests/:id/approve
  */
 export const approveRequest = async (req, res, next) => {
@@ -80,6 +108,29 @@ export const approveRequest = async (req, res, next) => {
 };
 
 /**
+ * PATCH /api/disposal-requests/batch/:disposalCode/approve
+ */
+export const approveRequestBatch = async (req, res, next) => {
+  try {
+    const { disposalCode } = req.params;
+    const approverName = req.body?.approverName || req.user?.name || req.user?.username || null;
+    const updated = await disposalService.approveRequestBatch(disposalCode, approverName);
+
+    await logActivity({
+      req,
+      action: 'UPDATE',
+      entityType: 'DISPOSAL',
+      entityId: disposalCode,
+      details: `อนุมัติคำขอจำหน่ายแบบกลุ่ม (${disposalCode})`
+    });
+
+    res.status(200).json({ status: 'success', data: updated, message: 'อนุมัติคำขอสำเร็จ' });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
  * PATCH /api/disposal-requests/:id/reject
  * body: { remark? }
  */
@@ -96,6 +147,28 @@ export const rejectRequest = async (req, res, next) => {
       oldValue: before,
       newValue: updated,
       details: `ไม่อนุมัติคำขอจำหน่าย "${updated.asset.name}" (${updated.disposalCode})`
+    });
+
+    res.status(200).json({ status: 'success', data: updated, message: 'บันทึกการไม่อนุมัติแล้ว' });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * PATCH /api/disposal-requests/batch/:disposalCode/reject
+ */
+export const rejectRequestBatch = async (req, res, next) => {
+  try {
+    const { disposalCode } = req.params;
+    const updated = await disposalService.rejectRequestBatch(disposalCode, req.body?.remark);
+
+    await logActivity({
+      req,
+      action: 'UPDATE',
+      entityType: 'DISPOSAL',
+      entityId: disposalCode,
+      details: `ไม่อนุมัติคำขอจำหน่ายแบบกลุ่ม (${disposalCode})`
     });
 
     res.status(200).json({ status: 'success', data: updated, message: 'บันทึกการไม่อนุมัติแล้ว' });

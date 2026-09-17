@@ -30,8 +30,32 @@ const isProfilePage = computed(() => route.path === '/profile')
 const isNotifOpen = ref(false)
 const notifRef = ref(null)
 const pendingUsers = ref([])
+const pendingDisposals = ref([])
 const isLoadingPending = ref(false)
 const processingUserId = ref(null)
+
+const groupedPendingDisposals = computed(() => {
+  const groups = {}
+  pendingDisposals.value.forEach(d => {
+    if (!groups[d.disposalCode]) {
+      groups[d.disposalCode] = { 
+        code: d.disposalCode, 
+        count: 0, 
+        items: [], 
+        method: d.method, 
+        requestedBy: d.requestedBy, 
+        createdAt: d.createdAt 
+      }
+    }
+    groups[d.disposalCode].count++
+    groups[d.disposalCode].items.push(d)
+  })
+  return Object.values(groups).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+})
+
+const notifCount = computed(() => pendingUsers.value.length + groupedPendingDisposals.value.length)
+
+const activeNotifTab = ref('users') // 'users' or 'disposals'
 
 function authHeaders() {
   const token = localStorage.getItem('tcaims_auth_token')
@@ -45,18 +69,62 @@ async function fetchPendingUsers() {
     const response = await axios.get(`${API_BASE}/users`, { headers: authHeaders() })
     pendingUsers.value = response.data.data.filter((u) => u.accountStatus === 'PENDING' || u.resetPasswordCode === 'PENDING')
   } catch (error) {
-    // เงียบไว้ ไม่ต้องรบกวนผู้ใช้ด้วย error แจ้งเตือน แค่ไม่แสดงผลถ้าโหลดไม่สำเร็จ
+    // เงียบไว้
   } finally {
     isLoadingPending.value = false
   }
 }
 
+async function fetchPendingDisposals() {
+  if (user.value.role !== 'admin') return
+  try {
+    const response = await axios.get(`${API_BASE}/disposal-requests`, { headers: authHeaders() })
+    if (response.data?.data) {
+      pendingDisposals.value = response.data.data.filter(r => r.status === 'PENDING')
+    }
+  } catch (error) {
+    // เงียบไว้
+  }
+}
+
 function toggleNotif() {
   isNotifOpen.value = !isNotifOpen.value
-  if (isNotifOpen.value) fetchPendingUsers()
+  if (isNotifOpen.value) {
+    fetchPendingUsers()
+    fetchPendingDisposals()
+  }
 }
 function closeNotif() {
   isNotifOpen.value = false
+}
+
+// Disposal Approval Methods
+const showDisposalDetailsModal = ref(false)
+const selectedDisposalGroup = ref(null)
+
+function openDisposalDetails(group) {
+  selectedDisposalGroup.value = group
+  showDisposalDetailsModal.value = true
+}
+
+async function approveDisposalGroup(group) {
+  try {
+    await axios.patch(`${API_BASE}/disposal-requests/batch/${group.code}/approve`, {}, { headers: authHeaders() })
+    pendingDisposals.value = pendingDisposals.value.filter(d => d.disposalCode !== group.code)
+    showDisposalDetailsModal.value = false
+  } catch (error) {
+    console.error('Error approving disposal:', error)
+  }
+}
+
+async function rejectDisposalGroup(group) {
+  try {
+    await axios.patch(`${API_BASE}/disposal-requests/batch/${group.code}/reject`, { remark: 'ไม่อนุมัติโดย Admin' }, { headers: authHeaders() })
+    pendingDisposals.value = pendingDisposals.value.filter(d => d.disposalCode !== group.code)
+    showDisposalDetailsModal.value = false
+  } catch (error) {
+    console.error('Error rejecting disposal:', error)
+  }
 }
 
 async function approveFromNotif(pendingUser) {
@@ -109,7 +177,10 @@ function loadUserData() {
     // ignore
   }
 
-  if (user.value.role === 'admin') fetchPendingUsers()
+  if (user.value.role === 'admin') {
+    fetchPendingUsers()
+    fetchPendingDisposals()
+  }
 }
 
 function handleProfileUpdate(e) {
@@ -224,9 +295,9 @@ onUnmounted(() => {
         <button type="button" @click="toggleNotif"
           class="relative p-2 rounded-lg hover:bg-slate-50 transition-colors" title="บัญชีรออนุมัติ">
           <Bell class="w-5 h-5 text-slate-500" />
-          <span v-if="pendingUsers.length > 0"
+          <span v-if="notifCount > 0"
             class="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center ring-2 ring-white">
-            {{ pendingUsers.length > 9 ? '9+' : pendingUsers.length }}
+            {{ notifCount > 9 ? '9+' : notifCount }}
           </span>
         </button>
 
@@ -235,43 +306,66 @@ onUnmounted(() => {
           leave-from-class="opacity-100 translate-y-0" leave-to-class="opacity-0 -translate-y-1">
           <div v-if="isNotifOpen"
             class="absolute right-0 mt-2 w-80 bg-white rounded-xl border border-slate-200 shadow-lg py-1.5 z-20">
-            <div class="px-3.5 py-2.5 border-b border-slate-100 flex items-center gap-2">
-              <UserPlus class="w-4 h-4 text-amber-600" />
-              <span class="text-sm font-semibold text-slate-800">บัญชีที่รออนุมัติ</span>
+            <div class="flex border-b border-slate-100">
+              <button @click="activeNotifTab = 'users'" class="flex-1 py-2.5 text-xs font-semibold text-center border-b-2 transition-colors" :class="activeNotifTab === 'users' ? 'border-amber-500 text-amber-700 bg-amber-50/50' : 'border-transparent text-slate-500 hover:bg-slate-50'">
+                บัญชีรออนุมัติ ({{ pendingUsers.length }})
+              </button>
+              <button @click="activeNotifTab = 'disposals'" class="flex-1 py-2.5 text-xs font-semibold text-center border-b-2 transition-colors" :class="activeNotifTab === 'disposals' ? 'border-rose-500 text-rose-700 bg-rose-50/50' : 'border-transparent text-slate-500 hover:bg-slate-50'">
+                คำขอแทงจำหน่าย ({{ groupedPendingDisposals.length }})
+              </button>
             </div>
 
             <div v-if="isLoadingPending" class="px-3.5 py-6 text-center text-xs text-slate-400">กำลังโหลด...</div>
 
-            <div v-else-if="pendingUsers.length === 0" class="px-3.5 py-6 text-center text-xs text-slate-400">
-              ไม่มีบัญชีที่รออนุมัติในตอนนี้
-            </div>
-
-            <div v-else class="max-h-72 overflow-y-auto divide-y divide-slate-50">
-              <div v-for="pu in pendingUsers" :key="pu.id" class="px-3.5 py-2.5">
-                <div class="flex items-center justify-between mb-0.5">
-                  <p class="text-sm font-medium text-slate-800 truncate pr-2">{{ pu.name }}</p>
-                  <span v-if="pu.resetPasswordCode === 'PENDING'" class="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 font-bold whitespace-nowrap">ขอรีเซ็ตรหัส</span>
-                  <span v-else class="text-[10px] px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 font-bold whitespace-nowrap">รอเปิดบัญชี</span>
-                </div>
-                <p class="text-xs text-slate-400 truncate mb-2">{{ pu.email }}</p>
-                <div class="flex items-center gap-2">
-                  <button type="button" :disabled="processingUserId === pu.id" @click="approveFromNotif(pu)"
-                    class="flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg text-xs font-semibold bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors disabled:opacity-60">
-                    <Check class="w-3.5 h-3.5" />
-                    อนุมัติ
-                  </button>
-                  <button type="button" :disabled="processingUserId === pu.id" @click="rejectFromNotif(pu)"
-                    class="flex items-center justify-center p-1.5 rounded-lg text-slate-500 hover:text-red-600 hover:bg-red-50 transition-colors disabled:opacity-60">
-                    <Ban class="w-3.5 h-3.5" />
-                  </button>
+            <!-- TAB: Users -->
+            <template v-else-if="activeNotifTab === 'users'">
+              <div v-if="pendingUsers.length === 0" class="px-3.5 py-6 text-center text-xs text-slate-400">
+                ไม่มีบัญชีที่รออนุมัติในตอนนี้
+              </div>
+              <div v-else class="max-h-72 overflow-y-auto divide-y divide-slate-50">
+                <div v-for="pu in pendingUsers" :key="pu.id" class="px-3.5 py-2.5">
+                  <div class="flex items-center justify-between mb-0.5">
+                    <p class="text-sm font-medium text-slate-800 truncate pr-2">{{ pu.name }}</p>
+                    <span v-if="pu.resetPasswordCode === 'PENDING'" class="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 font-bold whitespace-nowrap">ขอรีเซ็ตรหัส</span>
+                    <span v-else class="text-[10px] px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 font-bold whitespace-nowrap">รอเปิดบัญชี</span>
+                  </div>
+                  <p class="text-xs text-slate-400 truncate mb-2">{{ pu.email }}</p>
+                  <div class="flex items-center gap-2">
+                    <button type="button" :disabled="processingUserId === pu.id" @click="approveFromNotif(pu)"
+                      class="flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg text-xs font-semibold bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors disabled:opacity-60">
+                      <Check class="w-3.5 h-3.5" />
+                      อนุมัติ
+                    </button>
+                    <button type="button" :disabled="processingUserId === pu.id" @click="rejectFromNotif(pu)"
+                      class="flex items-center justify-center p-1.5 rounded-lg text-slate-500 hover:text-red-600 hover:bg-red-50 transition-colors disabled:opacity-60">
+                      <Ban class="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 </div>
               </div>
-            </div>
+              <button type="button" @click="closeNotif(); router.push('/master-data')"
+                class="w-full text-center px-3.5 py-2.5 text-xs font-semibold text-[#065f46] hover:bg-emerald-50 transition-colors border-t border-slate-100 mt-1">
+                ดูทั้งหมดในหน้าจัดการข้อมูลพื้นฐาน
+              </button>
+            </template>
 
-            <button type="button" @click="closeNotif(); router.push('/master-data')"
-              class="w-full text-center px-3.5 py-2.5 text-xs font-semibold text-[#065f46] hover:bg-emerald-50 transition-colors border-t border-slate-100 mt-1">
-              ดูทั้งหมดในหน้าจัดการข้อมูลพื้นฐาน
-            </button>
+            <!-- TAB: Disposals -->
+            <template v-else-if="activeNotifTab === 'disposals'">
+              <div v-if="groupedPendingDisposals.length === 0" class="px-3.5 py-6 text-center text-xs text-slate-400">
+                ไม่มีคำขอแทงจำหน่ายในตอนนี้
+              </div>
+              <div v-else class="max-h-72 overflow-y-auto divide-y divide-slate-50">
+                <div v-for="group in groupedPendingDisposals" :key="group.code" class="px-3.5 py-2.5 hover:bg-slate-50 cursor-pointer transition-colors" @click="openDisposalDetails(group)">
+                  <div class="flex items-center justify-between mb-1">
+                    <p class="text-xs font-bold text-slate-800 truncate pr-2">{{ group.code }}</p>
+                    <span class="text-[10px] px-1.5 py-0.5 rounded bg-rose-100 text-rose-700 font-bold whitespace-nowrap">{{ group.count }} รายการ</span>
+                  </div>
+                  <p class="text-[11px] text-slate-500 truncate">วิธี: {{ group.method }}</p>
+                  <p class="text-[11px] text-slate-500 truncate mb-1">ผู้ขอ: {{ group.requestedBy || 'ไม่ระบุ' }}</p>
+                  <div class="text-[10px] text-slate-400 mt-1 text-right">คลิกเพื่อดูรายละเอียด</div>
+                </div>
+              </div>
+            </template>
           </div>
         </Transition>
       </div>

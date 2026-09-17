@@ -1,13 +1,20 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
 import { getAssets } from '../services/inventoryApi.js'
+import api from '../services/api.js'
 import { Loader2, Printer } from 'lucide-vue-next'
 
 const assets = ref([])
 const isLoading = ref(false)
 const error = ref('')
 
+const route = useRoute()
+const disposalCode = ref(route.query.code || null)
+const requestStatus = ref('')
+
 const selectedYear = ref(new Date().getFullYear())
+const selectedStatusType = ref(disposalCode.value ? 'all' : 'pending') // 'pending' = Broken/Repairing, 'approved' = Scrapped
 
 const years = computed(() => {
   const currentYear = new Date().getFullYear()
@@ -22,8 +29,28 @@ const fetchData = async () => {
   isLoading.value = true
   try {
     const assetsData = await getAssets()
-    // เก็บรายการทั้งหมดเพื่อนำไปใช้นับ 'เต็มตามบัญชี'
-    assets.value = assetsData
+    
+    if (disposalCode.value) {
+      // ดึงข้อมูลคำขอจำหน่ายตามรหัสที่ระบุ
+      const { data } = await api.get(`/api/disposal-requests?search=${disposalCode.value}`)
+      const targetAssetIds = data.data.filter(r => r.disposalCode === disposalCode.value).map(r => r.assetId)
+      
+      // กรองเฉพาะครุภัณฑ์ที่อยู่ในคำขอนี้
+      assets.value = assetsData.filter(a => targetAssetIds.includes(a.id))
+      
+      // ตั้งค่าปีงบประมาณตามคำขอแรก (ถ้ามี)
+      if (data.data.length > 0) {
+        const reqData = data.data.find(r => r.disposalCode === disposalCode.value) || data.data[0]
+        requestStatus.value = reqData.status
+        
+        const reqDate = new Date(reqData.createdAt)
+        const fiscalYear = reqDate.getMonth() >= 9 ? reqDate.getFullYear() + 1 : reqDate.getFullYear()
+        selectedYear.value = fiscalYear
+      }
+    } else {
+      // เก็บรายการทั้งหมดเพื่อนำไปใช้นับ 'เต็มตามบัญชี'
+      assets.value = assetsData
+    }
   } catch (err) {
     error.value = 'ไม่สามารถดึงข้อมูลครุภัณฑ์ได้'
   } finally {
@@ -43,22 +70,30 @@ const filteredAssets = computed(() => {
     const baseSeq = match ? match[1] : (asset.seq || asset.id)
     const suffix = match ? match[2] : null
     const itemPrice = parseFloat(asset.unitPrice) || parseFloat(asset.price) || 0
-    const isBroken = asset.status === 'Broken' || asset.status === 'Repairing'
+    
+    let isTargetStatus = false
+    if (disposalCode.value) {
+      isTargetStatus = true // ถ้ามารหัสคำขอ เอาทุกรายการในคำขอนั้นเลย
+    } else if (selectedStatusType.value === 'pending') {
+      isTargetStatus = asset.status === 'Broken' || asset.status === 'Repaired' || asset.status === 'Repairing'
+    } else if (selectedStatusType.value === 'approved') {
+      isTargetStatus = asset.status === 'Scrapped' || asset.status === 'DISPOSED'
+    }
 
     if (!groups[baseSeq]) {
       groups[baseSeq] = {
         ...asset,
         baseSeq: baseSeq,
-        brokenSuffixes: (suffix && isBroken) ? [suffix] : [],
+        brokenSuffixes: (suffix && isTargetStatus) ? [suffix] : [],
         totalQuantity: 1, // เต็มตามบัญชี
-        brokenQuantity: isBroken ? 1 : 0, // ชำรุด
+        brokenQuantity: isTargetStatus ? 1 : 0, // ตามสถานะที่เลือก
         unitPrice: itemPrice,
-        totalPrice: isBroken ? itemPrice : 0 // คิดเฉพาะที่ชำรุด
+        totalPrice: isTargetStatus ? itemPrice : 0 // คิดเฉพาะที่ตรงตามสถานะ
       }
     } else {
-      if (suffix && isBroken) groups[baseSeq].brokenSuffixes.push(suffix)
+      if (suffix && isTargetStatus) groups[baseSeq].brokenSuffixes.push(suffix)
       groups[baseSeq].totalQuantity += 1
-      if (isBroken) {
+      if (isTargetStatus) {
         groups[baseSeq].brokenQuantity += 1
         groups[baseSeq].totalPrice += itemPrice
       }
@@ -223,12 +258,26 @@ const printDocument = () => {
   <div class="print-container font-sarabun text-black bg-white min-h-screen">
 
     <!-- Non-print utility bar -->
-    <div class="p-4 bg-slate-100 print:hidden flex flex-col gap-4 border-b">
+    <div class="p-4 bg-slate-100 print:hidden flex flex-col sm:flex-row gap-4 border-b justify-between items-center">
       <div class="flex flex-wrap items-center gap-4">
-        <label class="font-bold text-slate-700">ประจำปีงบประมาณ พ.ศ.:</label>
-        <select v-model="selectedYear" class="px-3 py-2 rounded-lg border border-gray-300">
-          <option v-for="y in years" :key="y.value" :value="y.value">{{ y.label }}</option>
-        </select>
+        <div class="flex items-center gap-2">
+          <label class="font-bold text-slate-700">ประจำปีงบประมาณ พ.ศ.:</label>
+          <select v-model="selectedYear" class="px-3 py-2 rounded-lg border border-gray-300 outline-none focus:border-emerald-500">
+            <option v-for="y in years" :key="y.value" :value="y.value">{{ y.label }}</option>
+          </select>
+        </div>
+        <div v-if="!disposalCode" class="flex items-center gap-2">
+          <label class="font-bold text-slate-700">สถานะครุภัณฑ์:</label>
+          <select v-model="selectedStatusType" class="px-3 py-2 rounded-lg border border-gray-300 outline-none focus:border-emerald-500">
+            <option value="pending">รอขออนุมัติ (ชำรุด/ส่งซ่อม)</option>
+            <option value="approved">อนุมัติแล้ว (แทงจำหน่าย)</option>
+          </select>
+        </div>
+        <div v-else class="flex items-center gap-2">
+          <span class="text-sm font-bold text-emerald-700 bg-emerald-100 px-3 py-1.5 rounded-lg border border-emerald-200">
+            พิมพ์เอกสารคำขอ: {{ disposalCode }}
+          </span>
+        </div>
       </div>
 
       <div class="flex gap-2 justify-end">
@@ -255,8 +304,16 @@ const printDocument = () => {
 
     <!-- Landscape Paper size container -->
     <div v-for="(page, pageIndex) in paginatedAssets" :key="pageIndex"
-      class="a4-landscape print-page bg-white shadow-xl print:shadow-none px-10 py-6 mx-auto relative print:mb-0 mb-8">
-      <div class="text-center mb-4 relative">
+      class="a4-landscape print-page bg-white shadow-xl print:shadow-none px-10 py-6 mx-auto relative print:mb-0 mb-8 overflow-hidden">
+      
+      <!-- Reject Stamp -->
+      <div v-if="requestStatus === 'REJECTED'" class="absolute inset-0 flex items-center justify-center pointer-events-none z-50">
+        <div class="border-8 border-rose-500 text-rose-500 rounded-3xl px-16 py-8 text-8xl font-black transform -rotate-12 tracking-widest opacity-30 shadow-sm bg-white/10 backdrop-blur-[1px]">
+          ไม่อนุมัติ
+        </div>
+      </div>
+
+      <div class="text-center mb-4 relative z-10">
         <h1 class="font-bold text-[18px] mb-4">วิทยาลัยเทคนิคเลย</h1>
         <div class="flex justify-between items-end text-[14px]">
           <div class="flex gap-2 w-full justify-center">

@@ -15,7 +15,9 @@ import {
   X,
   AlertTriangle,
   Loader2,
-  Printer
+  Printer,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-vue-next'
 import ThaiDatePicker from '../components/ThaiDatePicker.vue'
 import BaseModal from '../components/BaseModal.vue'
@@ -104,11 +106,105 @@ const filteredAssets = computed(() => {
     } else if (sortBy.value === 'unitPrice') {
       comparison = (a.unitPrice || 0) - (b.unitPrice || 0)
     }
-    
+
     return sortOrder.value === 'asc' ? comparison : -comparison
   })
 
   return result
+})
+
+const expandedGroups = ref(new Set())
+
+const toggleGroup = (prefix) => {
+  const newSet = new Set(expandedGroups.value)
+  if (newSet.has(prefix)) {
+    newSet.delete(prefix)
+  } else {
+    newSet.add(prefix)
+  }
+  expandedGroups.value = newSet
+}
+
+const groupedAssets = computed(() => {
+  const groupsMap = {}
+
+  filteredAssets.value.forEach(asset => {
+    const seq = asset.seq || ''
+    // Match format ending with -XXX (e.g. 77440-0001-00001/604-001 -> prefix: 77440-0001-00001/604)
+    const match = seq.match(/^(.*?)-\d+$/)
+    const prefix = match ? match[1] : seq
+
+    if (!groupsMap[prefix]) {
+      groupsMap[prefix] = {
+        prefix,
+        items: [],
+        asset: { ...asset }
+      }
+    }
+    groupsMap[prefix].items.push(asset)
+  })
+
+  return Object.values(groupsMap).map(group => {
+    group.isGroup = group.items.length > 1
+
+    if (group.isGroup) {
+      // Sort items sequentially (e.g. 001, 002, 003)
+      group.items.sort((a, b) => (a.seq || '').localeCompare(b.seq || '', undefined, { numeric: true }))
+
+      const allSameStatus = group.items.every(item => item.status === group.items[0].status)
+      group.status = allSameStatus ? group.items[0].status : 'Mixed'
+
+      if (group.status === 'Mixed') {
+        const counts = {}
+        group.items.forEach(item => {
+          counts[item.status] = (counts[item.status] || 0) + 1
+        })
+        group.statusBreakdown = Object.entries(counts).map(([status, count]) => {
+          return { status, text: getStatusText(status), count }
+        })
+      }
+    } else {
+      group.status = group.asset.status
+    }
+
+    return group
+  })
+})
+
+const currentPage = ref(1)
+const itemsPerPage = ref(10)
+
+const totalPages = computed(() => {
+  return Math.ceil(groupedAssets.value.length / itemsPerPage.value) || 1
+})
+
+const paginatedGroups = computed(() => {
+  const start = (currentPage.value - 1) * itemsPerPage.value
+  const end = start + itemsPerPage.value
+  return groupedAssets.value.slice(start, end)
+})
+
+const flattenedRows = computed(() => {
+  const rows = []
+  paginatedGroups.value.forEach(group => {
+    rows.push({
+      type: 'header',
+      key: 'header-' + group.prefix,
+      group: group
+    })
+
+    if (group.isGroup && expandedGroups.value.has(group.prefix)) {
+      group.items.forEach(asset => {
+        rows.push({
+          type: 'item',
+          key: 'item-' + asset.id,
+          asset: asset,
+          group: group
+        })
+      })
+    }
+  })
+  return rows
 })
 
 const getStatusBadge = (status) => {
@@ -117,6 +213,7 @@ const getStatusBadge = (status) => {
     case 'Repaired': return 'bg-amber-50 text-amber-700 border-amber-200'
     case 'Broken': return 'bg-rose-50 text-rose-700 border-rose-200'
     case 'Scrapped': return 'bg-rose-100 text-rose-800 border-rose-300'
+    case 'Mixed': return 'bg-slate-100 text-slate-700 border-slate-300'
     default: return 'bg-blue-50 text-blue-700 border-blue-200'
   }
 }
@@ -127,6 +224,7 @@ const getStatusText = (status) => {
     case 'Repaired': return 'ส่งซ่อม'
     case 'Broken': return 'ชำรุด'
     case 'Scrapped': return 'แทงจำหน่าย'
+    case 'Mixed': return 'หลายสถานะ'
     default: return status
   }
 }
@@ -252,7 +350,7 @@ const openEditModal = (asset) => {
 const saveEdit = async () => {
   const match = selectedAsset.value.seq ? selectedAsset.value.seq.match(/^(.*)-(\d{1,4})$/) : null
   const baseSeq = match ? match[1] : null
-  
+
   if (baseSeq) {
     // Find other assets with the same base sequence (excluding the current one)
     relatedAssetsToApply.value = assets.value.filter(a => {
@@ -260,13 +358,13 @@ const saveEdit = async () => {
       const aMatch = a.seq ? a.seq.match(/^(.*)-(\d{1,4})$/) : null
       return aMatch && aMatch[1] === baseSeq
     })
-    
+
     if (relatedAssetsToApply.value.length > 0) {
       showApplyToAllModal.value = true
       return
     }
   }
-  
+
   // No related assets found, proceed normally
   await executeSaveEdit(false)
 }
@@ -278,10 +376,10 @@ const executeSaveEdit = async (applyToOthers) => {
     if (updateData.acquiredDate) {
       updateData.acquiredDate = new Date(updateData.acquiredDate).toISOString()
     }
-    
+
     // Update current asset
     await axios.put(`${API_BASE}/assets/${selectedAsset.value.id}`, updateData, { headers: authHeaders() })
-    
+
     if (applyToOthers && relatedAssetsToApply.value.length > 0) {
       // Update related assets
       const updatePromises = relatedAssetsToApply.value.map(asset => {
@@ -380,10 +478,6 @@ const handlePrint = () => {
           </div>
         </div>
         <div class="flex flex-col sm:flex-row gap-3 flex-wrap justify-end">
-          <button @click="router.push('/print-asset-disposal')"
-            class="px-4 py-2.5 bg-rose-500/20 backdrop-blur-sm ring-1 ring-rose-300/50 rounded-xl text-white hover:bg-rose-500/30 font-semibold flex items-center transition-all shadow-sm">
-            <Printer class="w-4 h-4 mr-2 text-rose-200" /> ฟอร์มแทงจำหน่าย
-          </button>
           <button @click="handlePrint"
             class="px-4 py-2.5 bg-white/10 backdrop-blur-sm ring-1 ring-white/20 rounded-xl text-white hover:bg-white/20 font-semibold flex items-center transition-all shadow-sm">
             <Printer class="w-4 h-4 mr-2 text-emerald-200" /> พิมพ์รายงาน PDF
@@ -438,13 +532,26 @@ const handlePrint = () => {
             </div>
 
             <!-- Sort Order Button -->
-            <button
-              @click="toggleSortOrder"
+            <button @click="toggleSortOrder"
               class="px-3 py-2 border border-slate-300 rounded-lg text-slate-600 bg-white hover:bg-slate-50 transition-colors flex items-center justify-center shrink-0 w-11"
-              :title="sortOrder === 'asc' ? 'น้อยไปมาก' : 'มากไปน้อย'"
-            >
-              <svg v-if="sortOrder === 'asc'" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 16 4 4 4-4"/><path d="M7 20V4"/><path d="M11 4h4"/><path d="M11 8h7"/><path d="M11 12h10"/></svg>
-              <svg v-else xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 8 4-4 4 4"/><path d="M7 4v16"/><path d="M11 12h4"/><path d="M11 16h7"/><path d="M11 20h10"/></svg>
+              :title="sortOrder === 'asc' ? 'น้อยไปมาก' : 'มากไปน้อย'">
+              <svg v-if="sortOrder === 'asc'" xmlns="http://www.w3.org/2000/svg" width="18" height="18"
+                viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                stroke-linejoin="round">
+                <path d="m3 16 4 4 4-4" />
+                <path d="M7 20V4" />
+                <path d="M11 4h4" />
+                <path d="M11 8h7" />
+                <path d="M11 12h10" />
+              </svg>
+              <svg v-else xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"
+                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="m3 8 4-4 4 4" />
+                <path d="M7 4v16" />
+                <path d="M11 12h4" />
+                <path d="M11 16h7" />
+                <path d="M11 20h10" />
+              </svg>
             </button>
           </div>
         </div>
@@ -470,67 +577,152 @@ const handlePrint = () => {
                 จัดการ</th>
             </tr>
           </thead>
-          <tbody class="divide-y divide-slate-200">
-            <tr v-for="asset in filteredAssets" :key="asset.id" class="group hover:bg-emerald-50/60 transition-colors">
-              <td
-                class="px-6 py-4 text-center border-l-4 border-transparent group-hover:border-[#065f46] transition-colors">
-                <button @click="openImageModal(asset)"
-                  class="w-12 h-12 rounded-lg border border-slate-200 flex items-center justify-center overflow-hidden bg-slate-100 hover:ring-2 hover:ring-[#065f46]/50 hover:shadow-md transition-all mx-auto group/img"
-                  :title="asset.image ? 'ดูรูปภาพ' : 'เพิ่มรูปภาพ'">
-                  <img v-if="asset.image" :src="asset.image" class="w-full h-full object-cover" />
-                  <ImageIcon v-else class="w-5 h-5 text-slate-400 group-hover/img:text-[#065f46]" />
-                </button>
-              </td>
-              <td class="px-6 py-4">
-                <span class="font-medium text-slate-700">{{ asset.seq }}</span>
-              </td>
-              <td class="px-6 py-4">
-                <div class="font-medium text-slate-900">{{ asset.name }}</div>
-                <div class="text-xs text-slate-500 mt-0.5" v-if="asset.brand">ยี่ห้อ: {{ asset.brand }}</div>
-                <div class="text-xs text-slate-500 mt-0.5">{{ asset.referenceCode }}</div>
-              </td>
-              <td class="px-6 py-4">
-                <div class="font-medium text-slate-800">฿{{ asset.unitPrice?.toLocaleString() || '-' }}</div>
-                <div class="text-[11px] text-slate-500 mt-0.5">{{ formatThaiDate(asset.acquiredDate) }} ({{
-                  asset.budgetType }})</div>
-              </td>
-              <td class="px-6 py-4 text-slate-600">{{ asset.department }}</td>
-              <td class="px-6 py-4">
-                <button v-if="canManage" @click="openStatusModal(asset)"
-                  :class="['px-2.5 py-1 text-xs font-medium rounded-full border hover:shadow-md transition-shadow cursor-pointer flex items-center', getStatusBadge(asset.status)]"
-                  title="คลิกเพื่อเปลี่ยนสถานะ">
-                  {{ getStatusText(asset.status) }}
-                  <Edit class="w-3 h-3 ml-1 opacity-50" />
-                </button>
-                <span v-else
-                  :class="['px-2.5 py-1 text-xs font-medium rounded-full border inline-flex items-center', getStatusBadge(asset.status)]">
-                  {{ getStatusText(asset.status) }}
-                </span>
-              </td>
-              <td v-if="canManage" class="px-6 py-4 text-center">
-                <div class="flex items-center justify-center space-x-1.5">
-                  <button @click="openEditModal(asset)"
-                    class="p-2 rounded-lg text-slate-400 hover:text-amber-600 hover:bg-amber-50 hover:shadow-sm hover:scale-110 active:scale-95 transition-all"
-                    title="แก้ไขข้อมูล">
-                    <Edit class="w-4 h-4" />
+          <transition-group tag="tbody" name="dropdown" class="divide-y divide-slate-200">
+            <template v-for="row in flattenedRows" :key="row.key">
+
+              <!-- Group Header OR Single Row -->
+              <tr v-if="row.type === 'header'"
+                :class="['group transition-colors', row.group.isGroup ? 'bg-slate-50 hover:bg-slate-100 relative z-10' : 'hover:bg-emerald-50/60']">
+                <td
+                  class="px-6 py-4 text-center border-l-4 border-transparent group-hover:border-[#065f46] transition-colors relative">
+                  <div class="flex items-center justify-center gap-2">
+                    <button v-if="row.group.isGroup" @click="toggleGroup(row.group.prefix)"
+                      class="flex items-center justify-center w-6 h-6 rounded-md bg-white hover:bg-emerald-100 text-slate-500 shadow-sm border border-slate-200 shrink-0 transition-colors">
+                      <ChevronDown class="w-4 h-4 transition-transform duration-300"
+                        :class="{ 'rotate-180': expandedGroups.has(row.group.prefix) }" />
+                    </button>
+
+                    <button @click="openImageModal(row.group.asset)"
+                      class="w-12 h-12 rounded-lg border border-slate-200 flex items-center justify-center overflow-hidden bg-white hover:ring-2 hover:ring-[#065f46]/50 hover:shadow-md transition-all group/img"
+                      :title="row.group.asset.image ? 'ดูรูปภาพ' : 'ไม่มีรูปภาพ'">
+                      <img v-if="row.group.asset.image" :src="row.group.asset.image"
+                        class="w-full h-full object-cover" />
+                      <ImageIcon v-else class="w-5 h-5 text-slate-400 group-hover/img:text-[#065f46]" />
+                    </button>
+                  </div>
+                </td>
+                <td class="px-6 py-4">
+                  <span class="font-medium text-slate-700">{{ row.group.prefix }}</span>
+                  <span v-if="!row.group.isGroup" class="font-medium text-slate-700">{{
+                    row.group.asset.seq.replace(row.group.prefix, '') }}</span>
+                </td>
+                <td class="px-6 py-4">
+                  <div class="font-medium text-slate-900 flex items-center gap-2">
+                    {{ row.group.asset.name }}
+                    <span v-if="row.group.isGroup"
+                      class="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold">รวม {{
+                        row.group.items.length }} รายการ</span>
+                  </div>
+                  <div class="text-xs text-slate-500 mt-0.5" v-if="row.group.asset.brand">ยี่ห้อ: {{
+                    row.group.asset.brand }}</div>
+                  <div class="text-xs text-slate-500 mt-0.5">{{ row.group.asset.referenceCode }}</div>
+                </td>
+                <td class="px-6 py-4">
+                  <div class="font-medium text-slate-800">฿{{ row.group.asset.unitPrice?.toLocaleString() || '-' }}
+                  </div>
+                  <div class="text-[11px] text-slate-500 mt-0.5">{{ formatThaiDate(row.group.asset.acquiredDate) }} ({{
+                    row.group.asset.budgetType }})</div>
+                </td>
+                <td class="px-6 py-4 text-slate-600">{{ row.group.asset.department }}</td>
+                <td class="px-6 py-4">
+                  <div class="flex flex-col items-start gap-1.5">
+                    <template v-if="!row.group.isGroup">
+                      <span
+                        :class="['px-2.5 py-1 text-xs font-medium rounded-full border inline-flex items-center', getStatusBadge(row.group.status)]">
+                        {{ getStatusText(row.group.status) }}
+                      </span>
+                    </template>
+                    <template v-else>
+                      <div v-if="row.group.status === 'Mixed'" class="flex flex-wrap gap-1.5 max-w-[180px]">
+                        <span v-for="b in row.group.statusBreakdown" :key="b.status"
+                          :class="['px-2.5 py-1 text-xs font-medium rounded-full border inline-flex items-center', getStatusBadge(b.status)]">
+                          {{ b.text }} {{ b.count }}
+                        </span>
+                      </div>
+                      <span v-else
+                        :class="['px-2.5 py-1 text-xs font-medium rounded-full border inline-flex items-center', getStatusBadge(row.group.status)]">
+                        {{ getStatusText(row.group.status) }} {{ row.group.items.length }}
+                      </span>
+                    </template>
+                  </div>
+                </td>
+                <td class="px-6 py-4 text-center">
+                  <div v-if="!row.group.isGroup" class="flex items-center justify-center space-x-1.5">
+                    <template v-if="canManage">
+                      <button @click="openStatusModal(row.group.asset)"
+                        class="p-2 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 hover:shadow-sm hover:scale-110 active:scale-95 transition-all"
+                        title="เปลี่ยนสถานะ">
+                        <Edit class="w-4 h-4" />
+                      </button>
+                      <button @click="openEditModal(row.group.asset)"
+                        class="p-2 rounded-lg text-slate-400 hover:text-amber-600 hover:bg-amber-50 hover:shadow-sm hover:scale-110 active:scale-95 transition-all"
+                        title="แก้ไขข้อมูล">
+                        <Edit class="w-4 h-4" />
+                      </button>
+                      <button @click="openDeleteModal(row.group.asset)"
+                        class="p-2 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 hover:shadow-sm hover:scale-110 active:scale-95 transition-all"
+                        title="ลบ">
+                        <Trash2 class="w-4 h-4" />
+                      </button>
+                    </template>
+                  </div>
+                  <div v-else class="text-xs text-slate-400 font-medium">
+                    คลิกขยายเพื่อดู
+                  </div>
+                </td>
+              </tr>
+
+              <!-- Sub Items -->
+              <tr v-else-if="row.type === 'item'"
+                class="bg-emerald-50/20 hover:bg-emerald-50/60 transition-colors border-l-4 border-emerald-300 relative z-0">
+                <td class="px-6 py-2.5 text-center">
+                  <div class="flex justify-end pr-2">
+                    <div class="w-4 h-4 rounded-bl-lg border-b-2 border-l-2 border-emerald-200"></div>
+                  </div>
+                </td>
+                <td class="px-6 py-2.5">
+                  <span class="font-medium text-emerald-800">{{ row.asset.seq }}</span>
+                </td>
+                <td class="px-6 py-2.5">
+                  <div class="text-sm text-slate-700">{{ row.asset.name }}</div>
+                </td>
+                <td class="px-6 py-2.5 text-xs text-slate-500">
+                  ฿{{ row.asset.unitPrice?.toLocaleString() || '-' }}
+                </td>
+                <td class="px-6 py-2.5 text-xs text-slate-500">{{ row.asset.department }}</td>
+                <td class="px-6 py-2.5">
+                  <button v-if="canManage" @click="openStatusModal(row.asset)"
+                    :class="['px-2 py-0.5 text-[10px] font-medium rounded-full border hover:shadow-md transition-shadow cursor-pointer flex items-center', getStatusBadge(row.asset.status)]"
+                    title="คลิกเพื่อเปลี่ยนสถานะ">
+                    {{ getStatusText(row.asset.status) }}
+                    <Edit class="w-3 h-3 ml-1 opacity-50" />
                   </button>
-                  <button @click="openDeleteModal(asset)"
-                    class="p-2 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 hover:shadow-sm hover:scale-110 active:scale-95 transition-all"
-                    title="ลบ">
-                    <Trash2 class="w-4 h-4" />
-                  </button>
-                  <button
-                    class="p-2 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 hover:shadow-sm hover:scale-110 active:scale-95 transition-all"
-                    title="เมนูเพิ่มเติม">
-                    <MoreVertical class="w-4 h-4" />
-                  </button>
-                </div>
-              </td>
-              <td v-else class="px-6 py-4 text-center text-slate-300 text-xs">
-                ดูอย่างเดียว
-              </td>
-            </tr>
-            <tr v-if="filteredAssets.length === 0">
+                  <span v-else
+                    :class="['px-2 py-0.5 text-[10px] font-medium rounded-full border inline-flex items-center', getStatusBadge(row.asset.status)]">
+                    {{ getStatusText(row.asset.status) }}
+                  </span>
+                </td>
+                <td v-if="canManage" class="px-6 py-2.5 text-center">
+                  <div class="flex items-center justify-center space-x-1">
+                    <button @click="openEditModal(row.asset)"
+                      class="p-1.5 rounded-lg text-slate-400 hover:text-amber-600 hover:bg-amber-50 hover:shadow-sm transition-all"
+                      title="แก้ไขข้อมูล">
+                      <Edit class="w-3.5 h-3.5" />
+                    </button>
+                    <button @click="openDeleteModal(row.asset)"
+                      class="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 hover:shadow-sm transition-all"
+                      title="ลบ">
+                      <Trash2 class="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </td>
+                <td v-else class="px-6 py-2.5 text-center text-slate-300 text-xs">
+                  ดูอย่างเดียว
+                </td>
+              </tr>
+            </template>
+
+            <tr v-if="filteredAssets.length === 0" key="empty-state">
               <td colspan="7" class="px-6 py-12 text-center text-slate-500">
                 <div v-if="isLoading" class="flex flex-col items-center justify-center space-y-3">
                   <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-[#065f46]"></div>
@@ -539,7 +731,7 @@ const handlePrint = () => {
                 <span v-else>ไม่พบข้อมูลที่ค้นหา หรือยังไม่มีข้อมูลในระบบ</span>
               </td>
             </tr>
-          </tbody>
+          </transition-group>
         </table>
       </div>
 
@@ -547,17 +739,26 @@ const handlePrint = () => {
       <div
         class="p-4 border-t border-emerald-50 bg-white flex flex-col sm:flex-row justify-between items-center text-sm text-slate-500">
         <div class="mb-4 sm:mb-0">
-          แสดง {{ filteredAssets.length > 0 ? 1 : 0 }} ถึง {{ filteredAssets.length }} จาก {{ assets.length }} รายการ
+          แสดง {{ groupedAssets.length > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0 }} ถึง {{ Math.min(currentPage * itemsPerPage, groupedAssets.length) }} จาก {{ groupedAssets.length }} กลุ่มรายการ
         </div>
         <div class="flex items-center space-x-1">
-          <button class="px-3 py-1.5 border border-slate-200 rounded-lg text-slate-400 bg-slate-50 cursor-not-allowed"
-            disabled>ก่อนหน้า</button>
+          <button 
+            @click="currentPage--"
+            :disabled="currentPage === 1"
+            :class="['px-3 py-1.5 border rounded-lg transition-colors', currentPage === 1 ? 'border-slate-200 text-slate-400 bg-slate-50 cursor-not-allowed' : 'border-slate-200 hover:border-emerald-200 hover:bg-emerald-50 text-slate-700']"
+          >ก่อนหน้า</button>
+          
           <button
-            class="px-3 py-1.5 rounded-lg font-bold text-white bg-gradient-to-r from-[#065f46] to-[#047857] shadow-sm">1</button>
-          <button
-            class="px-3 py-1.5 border border-slate-200 hover:border-emerald-200 hover:bg-emerald-50 rounded-lg text-slate-700 transition-colors">2</button>
-          <button
-            class="px-3 py-1.5 border border-slate-200 hover:border-emerald-200 hover:bg-emerald-50 rounded-lg text-slate-700 transition-colors">ถัดไป</button>
+            v-for="page in totalPages" :key="page"
+            @click="currentPage = page"
+            :class="['px-3 py-1.5 rounded-lg transition-colors', currentPage === page ? 'font-bold text-white bg-gradient-to-r from-[#065f46] to-[#047857] shadow-sm' : 'border border-slate-200 hover:border-emerald-200 hover:bg-emerald-50 text-slate-700']"
+          >{{ page }}</button>
+          
+          <button 
+            @click="currentPage++"
+            :disabled="currentPage === totalPages"
+            :class="['px-3 py-1.5 border rounded-lg transition-colors', currentPage === totalPages ? 'border-slate-200 text-slate-400 bg-slate-50 cursor-not-allowed' : 'border-slate-200 hover:border-emerald-200 hover:bg-emerald-50 text-slate-700']"
+          >ถัดไป</button>
         </div>
       </div>
     </div>
@@ -815,17 +1016,35 @@ const handlePrint = () => {
   </div>
 </template>
 
-<style>
-/* ใช้กับกล่องตารางที่เลื่อนภายในตัวเอง (เช่นตอนข้อมูลเยอะ) ให้เลื่อนได้ปกติแต่ไม่โชว์แถบเลื่อน */
-.no-scrollbar {
-  scrollbar-width: none;
-  /* Firefox */
-  -ms-overflow-style: none;
-  /* IE / Edge เก่า */
-}
-
+<style scoped>
+/* Disable default scrollbar but allow scrolling */
 .no-scrollbar::-webkit-scrollbar {
   display: none;
-  /* Chrome, Safari, Edge (Chromium) */
+}
+
+.no-scrollbar {
+  -ms-overflow-style: none;
+  /* IE and Edge */
+  scrollbar-width: none;
+  /* Firefox */
+}
+
+/* Dropdown Animation */
+.dropdown-move,
+.dropdown-enter-active,
+.dropdown-leave-active {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.dropdown-enter-from,
+.dropdown-leave-to {
+  opacity: 0;
+  transform: translateY(-10px);
+}
+
+/* Ensure leave items are taken out of flow so entering items can slide smoothly */
+.dropdown-leave-active {
+  position: absolute;
+  visibility: hidden;
 }
 </style>

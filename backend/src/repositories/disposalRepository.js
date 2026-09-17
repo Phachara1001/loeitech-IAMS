@@ -17,6 +17,7 @@ export const findEligibleAssets = async () => {
       name: true,
       status: true,
       department: true,
+      unitPrice: true,
       location: { select: { building: true, name: true } }
     },
     orderBy: { updatedAt: 'desc' }
@@ -53,15 +54,34 @@ export const findById = async (id) => {
  * นับจำนวนคำขอที่สร้างไปแล้วในปีงบประมาณนี้ (สำหรับ generate เลขที่คำขอ)
  */
 export const countByYearPrefix = async (prefix) => {
-  return await prisma.disposalRequest.count({
-    where: { disposalCode: { startsWith: prefix } }
+  const lastRequest = await prisma.disposalRequest.findFirst({
+    where: { disposalCode: { startsWith: prefix } },
+    orderBy: { disposalCode: 'desc' },
+    select: { disposalCode: true }
   });
+
+  if (!lastRequest) return 0;
+
+  // prefix is something like "DSP-2569-"
+  // lastRequest.disposalCode will be "DSP-2569-001"
+  const parts = lastRequest.disposalCode.split('-');
+  if (parts.length >= 3) {
+    const lastNum = parseInt(parts[2], 10);
+    return isNaN(lastNum) ? 0 : lastNum;
+  }
+  return 0;
 };
 
 export const create = async (data) => {
   return await prisma.disposalRequest.create({
     data,
-    include: { asset: { select: { seq: true, name: true } } }
+    include: { asset: { select: { seq: true, name: true, unitPrice: true } } }
+  });
+};
+
+export const createMany = async (dataArray) => {
+  return await prisma.disposalRequest.createMany({
+    data: dataArray
   });
 };
 
@@ -69,13 +89,24 @@ export const updateStatus = async (id, data) => {
   return await prisma.disposalRequest.update({
     where: { id: Number(id) },
     data,
-    include: { asset: { select: { seq: true, name: true } } }
+    include: { asset: { select: { seq: true, name: true, unitPrice: true } } }
   });
 };
 
-/**
- * บันทึกจำหน่ายแล้ว + ตัดยอด Asset.status เป็น Scrapped พร้อมกันในธุรกรรมเดียว (atomic)
- */
+export const updateStatusByDisposalCode = async (disposalCode, data) => {
+  return await prisma.disposalRequest.updateMany({
+    where: { disposalCode },
+    data
+  });
+};
+
+export const findByDisposalCode = async (disposalCode) => {
+  return await prisma.disposalRequest.findMany({
+    where: { disposalCode },
+    include: { asset: { select: { id: true, seq: true, name: true, unitPrice: true } } }
+  });
+};
+
 export const markDisposedWithAssetUpdate = async (id, assetId) => {
   return await prisma.$transaction([
     prisma.disposalRequest.update({
@@ -88,4 +119,27 @@ export const markDisposedWithAssetUpdate = async (id, assetId) => {
       data: { status: 'Scrapped' }
     })
   ]);
+};
+
+/**
+ * บันทึกจำหน่ายแล้วแบบกลุ่ม
+ */
+export const markDisposedBatchWithAssetUpdate = async (disposalCode, assetIds) => {
+  const transactions = [
+    prisma.disposalRequest.updateMany({
+      where: { disposalCode },
+      data: { status: 'DISPOSED', disposedAt: new Date() }
+    })
+  ];
+  
+  for (const assetId of assetIds) {
+    transactions.push(
+      prisma.asset.update({
+        where: { id: Number(assetId) },
+        data: { status: 'Scrapped' }
+      })
+    );
+  }
+  
+  return await prisma.$transaction(transactions);
 };

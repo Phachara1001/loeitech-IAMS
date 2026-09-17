@@ -287,6 +287,10 @@ onMounted(() => {
             <Boxes class="w-5 h-5" />
             พิมพ์รายงานประวัติการเคลื่อนไหวของพัสดุ
           </router-link>
+          <router-link to="/print-asset-disposal" class="flex items-center gap-2 px-4 py-3 bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-200 rounded-xl font-semibold transition-colors">
+            <FileWarning class="w-5 h-5" />
+            พิมพ์ฟอร์มแทงจำหน่ายครุภัณฑ์
+          </router-link>
         </div>
       </div>
 

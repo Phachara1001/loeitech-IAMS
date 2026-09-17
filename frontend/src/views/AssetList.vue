@@ -146,6 +146,8 @@ const showImageModal = ref(false)
 const showStatusModal = ref(false)
 const showEditModal = ref(false)
 const showDeleteModal = ref(false)
+const showApplyToAllModal = ref(false)
+const relatedAssetsToApply = ref([])
 const selectedAsset = ref(null)
 const tempStatus = ref('')
 const tempAsset = ref({
@@ -248,17 +250,54 @@ const openEditModal = (asset) => {
 }
 
 const saveEdit = async () => {
+  const match = selectedAsset.value.seq ? selectedAsset.value.seq.match(/^(.*)-(\d{1,4})$/) : null
+  const baseSeq = match ? match[1] : null
+  
+  if (baseSeq) {
+    // Find other assets with the same base sequence (excluding the current one)
+    relatedAssetsToApply.value = assets.value.filter(a => {
+      if (a.id === selectedAsset.value.id) return false;
+      const aMatch = a.seq ? a.seq.match(/^(.*)-(\d{1,4})$/) : null
+      return aMatch && aMatch[1] === baseSeq
+    })
+    
+    if (relatedAssetsToApply.value.length > 0) {
+      showApplyToAllModal.value = true
+      return
+    }
+  }
+  
+  // No related assets found, proceed normally
+  await executeSaveEdit(false)
+}
+
+const executeSaveEdit = async (applyToOthers) => {
   try {
+    showApplyToAllModal.value = false
     const { id, createdAt, updatedAt, ...updateData } = tempAsset.value
     if (updateData.acquiredDate) {
       updateData.acquiredDate = new Date(updateData.acquiredDate).toISOString()
     }
+    
+    // Update current asset
     await axios.put(`${API_BASE}/assets/${selectedAsset.value.id}`, updateData, { headers: authHeaders() })
+    
+    if (applyToOthers && relatedAssetsToApply.value.length > 0) {
+      // Update related assets
+      const updatePromises = relatedAssetsToApply.value.map(asset => {
+        // Keep original seq and status for related assets
+        const assetUpdateData = { ...updateData, seq: asset.seq, status: asset.status, image: updateData.image }
+        return axios.put(`${API_BASE}/assets/${asset.id}`, assetUpdateData, { headers: authHeaders() })
+      })
+      await Promise.all(updatePromises)
+      toast.success(`แก้ไขข้อมูลครุภัณฑ์สำเร็จ (พร้อมอัปเดตรายการที่เกี่ยวข้อง ${relatedAssetsToApply.value.length} รายการ)`)
+    } else {
+      toast.success('แก้ไขข้อมูลครุภัณฑ์สำเร็จ')
+    }
 
     // Refresh list
     await fetchAssets()
     showEditModal.value = false
-    toast.success('แก้ไขข้อมูลครุภัณฑ์สำเร็จ')
   } catch (error) {
     console.error('Error updating asset:', error)
     if (!handleUnauthorized(error)) toast.error(extractErrorMessage(error))
@@ -340,7 +379,11 @@ const handlePrint = () => {
             <p class="text-sm text-emerald-100/80 mt-0.5">จัดการทะเบียนครุภัณฑ์รายชิ้น รูปภาพ และปรับปรุงสถานะ</p>
           </div>
         </div>
-        <div class="flex flex-col sm:flex-row gap-3">
+        <div class="flex flex-col sm:flex-row gap-3 flex-wrap justify-end">
+          <button @click="router.push('/print-asset-disposal')"
+            class="px-4 py-2.5 bg-rose-500/20 backdrop-blur-sm ring-1 ring-rose-300/50 rounded-xl text-white hover:bg-rose-500/30 font-semibold flex items-center transition-all shadow-sm">
+            <Printer class="w-4 h-4 mr-2 text-rose-200" /> ฟอร์มแทงจำหน่าย
+          </button>
           <button @click="handlePrint"
             class="px-4 py-2.5 bg-white/10 backdrop-blur-sm ring-1 ring-white/20 rounded-xl text-white hover:bg-white/20 font-semibold flex items-center transition-all shadow-sm">
             <Printer class="w-4 h-4 mr-2 text-emerald-200" /> พิมพ์รายงาน PDF
@@ -673,6 +716,7 @@ const handlePrint = () => {
               <option value="ประกวดราคา e-bidding">ประกวดราคา e-bidding</option>
               <option value="วิธีเฉพาะเจาะจง">วิธีเฉพาะเจาะจง</option>
               <option value="รับบริจาค / รับมอบ">รับบริจาค / รับมอบ</option>
+              <option value="ผลผลิต">ผลผลิต</option>
             </select>
           </div>
           <div>
@@ -730,18 +774,39 @@ const handlePrint = () => {
           <span class="text-rose-500 text-xs mt-1 block">การกระทำนี้ไม่สามารถกู้คืนได้</span>
         </p>
       </div>
-
       <template #footer>
         <button @click="showDeleteModal = false"
           class="px-4 py-2 border border-slate-300 rounded-lg text-slate-700 hover:bg-slate-100 font-medium text-sm">
           ยกเลิก
         </button>
         <button @click="confirmDelete"
-          class="px-4 py-2 bg-rose-600 text-white rounded-lg hover:bg-rose-700 font-medium text-sm flex justify-center items-center">
-          <Trash2 class="w-4 h-4 mr-2" /> ลบข้อมูล
+          class="px-4 py-2 bg-rose-600 text-white rounded-lg font-semibold text-sm shadow-md hover:bg-rose-700 hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 transition-all">
+          ยืนยันลบข้อมูล
         </button>
       </template>
     </BaseModal>
+
+    <!-- Apply to All Modal -->
+    <BaseModal v-model="showApplyToAllModal" title="ใช้การแก้ไขกับรายการที่เกี่ยวข้อง" maxWidth="max-w-sm">
+      <div class="py-4">
+        <p class="text-slate-700 mb-4 text-center">
+          พบครุภัณฑ์ที่มีเลขนำหน้าเดียวกันอีก <strong>{{ relatedAssetsToApply.length }}</strong> รายการ <br>
+          ต้องการนำข้อมูลที่แก้ไขไปใช้กับรายการเหล่านั้นด้วยหรือไม่?
+        </p>
+      </div>
+      <template #footer>
+        <button @click="executeSaveEdit(false)"
+          class="px-4 py-2 border border-slate-300 rounded-lg text-slate-700 hover:bg-slate-100 font-medium text-sm">
+          ไม่, แก้ไขแค่รายการนี้
+        </button>
+        <button @click="executeSaveEdit(true)"
+          class="px-4 py-2 bg-gradient-to-r from-[#065f46] to-[#047857] text-white rounded-lg font-semibold text-sm shadow-md hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 transition-all">
+          ใช่, นำไปใช้กับทั้งหมด
+        </button>
+      </template>
+    </BaseModal>
+
+
   </div>
 
   <!-- Print Template Container -->

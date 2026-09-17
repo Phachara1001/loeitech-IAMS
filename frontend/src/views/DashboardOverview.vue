@@ -393,7 +393,7 @@ const getStatusColor = (status) => {
             <h4 class="font-bold text-slate-700 mb-4 flex items-center gap-2">
               <Activity class="w-4 h-4 text-emerald-600" />
               สถิติคำขอเบิกพัสดุรายเดือน <span class="text-xs font-medium text-slate-400">(ปีงบประมาณ {{ fiscalYearBE
-                }})</span>
+              }})</span>
             </h4>
             <div class="h-64">
               <Bar :data="consChartData" :options="barOptions" />

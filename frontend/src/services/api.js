@@ -2,7 +2,7 @@ import axios from 'axios'
 
 // Axios instance ที่ใช้ร่วมกันทุกหน้า
 const api = axios.create({
-  baseURL: 'http://localhost:3000',
+  baseURL: '/api',
   headers: { 'Content-Type': 'application/json' },
   timeout: 10000
 })

@@ -132,6 +132,11 @@ const routes = [
     name: "PrintItemMovement",
     component: () => import("../views/PrintItemMovement.vue"),
   },
+  {
+    path: "/print-asset-disposal",
+    name: "PrintAssetDisposal",
+    component: () => import("../views/PrintAssetDisposal.vue"),
+  },
 ];
 
 const router = createRouter({

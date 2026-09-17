@@ -31,41 +31,64 @@ const close = () => {
 
 <template>
   <Teleport to="body">
-    <!-- Backdrop & Overlay -->
-    <div v-if="modelValue"
-      class="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4 transition-opacity">
-      <!-- Modal Panel -->
-      <div class="bg-white rounded-xl shadow-xl w-full overflow-hidden flex flex-col max-h-[90vh]" :class="maxWidth"
-        @click.stop>
+    <Transition name="modal">
+      <!-- Backdrop & Overlay -->
+      <div v-if="modelValue"
+        class="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
+        <!-- Modal Panel -->
+        <div class="modal-panel bg-white rounded-xl shadow-2xl w-full overflow-hidden flex flex-col max-h-[90vh]" :class="maxWidth"
+          @click.stop>
 
-        <!-- Header -->
-        <div class="px-6 py-4 border-b border-slate-200 flex justify-between items-center shrink-0">
-          <slot name="header">
-            <h3 class="font-bold text-slate-800 text-lg">{{ title }}</h3>
-          </slot>
-          <button @click="close"
-            class="text-slate-400 hover:text-slate-700 hover:bg-slate-100 p-1.5 rounded-lg transition-colors">
-            <X class="w-5 h-5" />
-          </button>
-        </div>
-
-        <!-- Content -->
-        <div class="p-6 overflow-y-auto">
-          <slot></slot>
-        </div>
-
-        <!-- Footer -->
-        <div v-if="showFooter"
-          class="px-6 py-4 bg-slate-50 border-t border-slate-200 flex justify-end space-x-3 shrink-0">
-          <slot name="footer">
+          <!-- Header -->
+          <div class="px-6 py-4 border-b border-slate-200 flex justify-between items-center shrink-0">
+            <slot name="header">
+              <h3 class="font-bold text-slate-800 text-lg">{{ title }}</h3>
+            </slot>
             <button @click="close"
-              class="px-4 py-2 border border-slate-300 rounded-lg text-slate-700 hover:bg-slate-100 font-medium text-sm transition-colors">
-              ปิด (Close)
+              class="text-slate-400 hover:text-slate-700 hover:bg-slate-100 p-1.5 rounded-lg transition-colors">
+              <X class="w-5 h-5" />
             </button>
-          </slot>
-        </div>
+          </div>
 
+          <!-- Content -->
+          <div class="p-6 overflow-y-auto">
+            <slot></slot>
+          </div>
+
+          <!-- Footer -->
+          <div v-if="showFooter"
+            class="px-6 py-4 bg-slate-50 border-t border-slate-200 flex justify-end space-x-3 shrink-0">
+            <slot name="footer">
+              <button @click="close"
+                class="px-4 py-2 border border-slate-300 rounded-lg text-slate-700 hover:bg-slate-100 font-medium text-sm transition-colors">
+                ปิด (Close)
+              </button>
+            </slot>
+          </div>
+
+        </div>
       </div>
-    </div>
+    </Transition>
   </Teleport>
 </template>
+
+<style scoped>
+.modal-enter-active,
+.modal-leave-active {
+  transition: opacity 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.modal-enter-active .modal-panel,
+.modal-leave-active .modal-panel {
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.modal-enter-from,
+.modal-leave-to {
+  opacity: 0;
+}
+.modal-enter-from .modal-panel,
+.modal-leave-to .modal-panel {
+  transform: scale(0.95) translateY(10px);
+  opacity: 0;
+}
+</style>

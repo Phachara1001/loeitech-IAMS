@@ -351,6 +351,7 @@ function selectItemFromModal(item) {
                   <option value="ประกวดราคา e-bidding">ประกวดราคา e-bidding</option>
                   <option value="วิธีเฉพาะเจาะจง">วิธีเฉพาะเจาะจง</option>
                   <option value="รับบริจาค / รับมอบ">รับบริจาค / รับมอบ</option>
+                  <option value="ผลผลิต">ผลผลิต</option>
                 </select>
               </div>
 

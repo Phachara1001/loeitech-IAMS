@@ -246,7 +246,7 @@ async function saveForm() {
   formError.value = ''
 
   try {
-    await api.post('/api/disposal-requests/batch', {
+    await api.post('/disposal-requests/batch', {
       assetIds: form.value.assetIds,
       method: form.value.method,
       meetingDate: new Date(form.value.meetingDate).toISOString(),
@@ -266,7 +266,7 @@ async function saveForm() {
 /* ---------------- อนุมัติ / จำหน่ายแล้ว ---------------- */
 async function approveRequest(req) {
   try {
-    await api.patch(`/api/disposal-requests/batch/${req.id}/approve`)
+    await api.patch(`/disposal-requests/batch/${req.id}/approve`)
     toast.success('อนุมัติคำขอสำเร็จ')
     await loadRequests()
   } catch (err) {
@@ -275,7 +275,7 @@ async function approveRequest(req) {
 }
 async function rejectRequest(req) {
   try {
-    await api.patch(`/api/disposal-requests/batch/${req.id}/reject`)
+    await api.patch(`/disposal-requests/batch/${req.id}/reject`)
     toast.success('บันทึกการไม่อนุมัติแล้ว')
     await loadRequests()
   } catch (err) {
@@ -286,7 +286,7 @@ async function markDisposed(req) {
   try {
     // Note: The batch approve endpoint automatically marks as disposed, 
     // this is just a fallback in case there are legacy individual requests
-    await api.patch(`/api/disposal-requests/${req.dbId}/dispose`)
+    await api.patch(`/disposal-requests/${req.dbId}/dispose`)
     toast.success('บันทึกจำหน่ายแล้ว — ตัดยอดออกจากบัญชีคุมคลังเรียบร้อย')
     await loadRequests()
   } catch (err) {

@@ -128,7 +128,7 @@ async function handleExport() {
 
   try {
     const response = await api.post(
-      '/api/reports/export',
+      '/reports/export',
       {
         reportKeys: selectedReports.value,
         format: exportFormat.value,

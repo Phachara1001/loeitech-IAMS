@@ -32,7 +32,7 @@ const fetchData = async () => {
     
     if (disposalCode.value) {
       // ดึงข้อมูลคำขอจำหน่ายตามรหัสที่ระบุ
-      const { data } = await api.get(`/api/disposal-requests?search=${disposalCode.value}`)
+      const { data } = await api.get(`/disposal-requests?search=${disposalCode.value}`)
       const targetAssetIds = data.data.filter(r => r.disposalCode === disposalCode.value).map(r => r.assetId)
       
       // กรองเฉพาะครุภัณฑ์ที่อยู่ในคำขอนี้

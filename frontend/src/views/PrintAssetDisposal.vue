@@ -25,6 +25,8 @@ const years = computed(() => {
   return arr.reverse()
 })
 
+const targetAssetIds = ref([])
+
 const fetchData = async () => {
   isLoading.value = true
   try {
@@ -33,10 +35,7 @@ const fetchData = async () => {
     if (disposalCode.value) {
       // ดึงข้อมูลคำขอจำหน่ายตามรหัสที่ระบุ
       const { data } = await api.get(`/disposal-requests?search=${disposalCode.value}`)
-      const targetAssetIds = data.data.filter(r => r.disposalCode === disposalCode.value).map(r => r.assetId)
-      
-      // กรองเฉพาะครุภัณฑ์ที่อยู่ในคำขอนี้
-      assets.value = assetsData.filter(a => targetAssetIds.includes(a.id))
+      targetAssetIds.value = data.data.filter(r => r.disposalCode === disposalCode.value).map(r => r.assetId)
       
       // ตั้งค่าปีงบประมาณตามคำขอแรก (ถ้ามี)
       if (data.data.length > 0) {
@@ -47,10 +46,11 @@ const fetchData = async () => {
         const fiscalYear = reqDate.getMonth() >= 9 ? reqDate.getFullYear() + 1 : reqDate.getFullYear()
         selectedYear.value = fiscalYear
       }
-    } else {
-      // เก็บรายการทั้งหมดเพื่อนำไปใช้นับ 'เต็มตามบัญชี'
-      assets.value = assetsData
     }
+    
+    // เก็บรายการทั้งหมดเพื่อนำไปใช้นับ 'เต็มตามบัญชี' ไม่ว่าจะปริ้นจากรหัสคำขอหรือปริ้นภาพรวม
+    assets.value = assetsData
+    
   } catch (err) {
     error.value = 'ไม่สามารถดึงข้อมูลครุภัณฑ์ได้'
   } finally {
@@ -73,7 +73,7 @@ const filteredAssets = computed(() => {
     
     let isTargetStatus = false
     if (disposalCode.value) {
-      isTargetStatus = true // ถ้ามารหัสคำขอ เอาทุกรายการในคำขอนั้นเลย
+      isTargetStatus = targetAssetIds.value.includes(asset.id)
     } else if (selectedStatusType.value === 'pending') {
       isTargetStatus = asset.status === 'Broken' || asset.status === 'Repaired' || asset.status === 'Repairing'
     } else if (selectedStatusType.value === 'approved') {
@@ -100,7 +100,7 @@ const filteredAssets = computed(() => {
     }
   })
 
-  // กรองเอาเฉพาะกลุ่มที่มีของชำรุด
+  // กรองเอาเฉพาะกลุ่มที่มีของชำรุด หรือของที่อยู่ในคำขอ
   const brokenGroups = Object.values(groups).filter(g => g.brokenQuantity > 0)
 
   // จัดรูปแบบเลขครุภัณฑ์ (displaySeq) เฉพาะของที่ชำรุด โดยจัดกลุ่มเลขที่ต่อเนื่องกัน

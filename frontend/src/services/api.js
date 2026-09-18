@@ -2,7 +2,8 @@ import axios from 'axios'
 
 // Axios instance ที่ใช้ร่วมกันทุกหน้า
 const api = axios.create({
-  baseURL: '/api',
+  // ใช้ localhost ในโหมด dev และใช้ path เริ่มต้นจาก root ('/') ในโหมด production
+  baseURL: import.meta.env.PROD ? '/' : 'http://localhost:3000',
   headers: { 'Content-Type': 'application/json' },
   timeout: 10000
 })

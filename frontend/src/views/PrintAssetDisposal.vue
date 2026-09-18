@@ -415,7 +415,7 @@ const printDocument = () => {
       </table>
 
       <!-- Footer section -->
-      <div v-if="pageIndex === paginatedAssets.length - 1" class="flex mt-2 text-[11px]">
+      <div class="flex mt-2 text-[11px]">
         <div class="flex-1">
           <div class="flex gap-2">
             <span class="font-bold">หมายเหตุ</span>

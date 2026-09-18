@@ -256,7 +256,7 @@ model RepairRequest {
 // คำขอจำหน่ายพัสดุ/ครุภัณฑ์
 model DisposalRequest {
   id           Int       @id @default(autoincrement())
-  disposalCode String    @unique // รหัสคำขอจำหน่าย เช่น 'DSP-2569-0001'
+  disposalCode String    // รหัสคำขอจำหน่าย เช่น 'DSP-2569-0001'
   assetId      Int
   asset        Asset     @relation(fields: [assetId], references: [id])
   method       String    // ขายทอดตลาด, บริจาค, โอน, แปรสภาพ, ทำลาย
@@ -272,5 +272,6 @@ model DisposalRequest {
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
+  @@index([disposalCode])
   @@map("disposal_requests")
 }

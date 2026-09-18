@@ -1,4 +1,4 @@
 // Base URL ของ backend API
-// ถ้า backend รันคนละ port ให้ตั้งค่า VITE_API_URL ในไฟล์ .env ของ frontend แทน เช่น:
-//   VITE_API_URL=http://localhost:3000/api
-export const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3000/api'
+// - ตอน dev: http://localhost:3000/api
+// - ตอน production (Docker): ใช้ /api (relative path) ให้ Nginx proxy ต่อให้
+export const API_BASE = import.meta.env.VITE_API_URL || '/api'

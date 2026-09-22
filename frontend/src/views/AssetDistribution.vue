@@ -15,7 +15,9 @@ import {
   PackageSearch,
   PackageOpen,
   Wrench,
-  X
+  X,
+  ChevronDown,
+  User
 } from 'lucide-vue-next'
 import * as inventoryApi from '../services/inventoryApi.js'
 import { useToast } from '../composables/useToast.js'
@@ -131,14 +133,130 @@ const filteredDistributions = computed(() => {
   })
 })
 
+const expandedGroups = ref(new Set())
+
+const toggleGroup = (prefix) => {
+  const newSet = new Set(expandedGroups.value)
+  if (newSet.has(prefix)) {
+    newSet.delete(prefix)
+  } else {
+    newSet.add(prefix)
+  }
+  expandedGroups.value = newSet
+}
+
+const groupedDistributions = computed(() => {
+  const groupsMap = {} // Key: prefix
+
+  filteredDistributions.value.forEach(item => {
+    const seq = item.assetCode || ''
+    const match = seq.match(/^(.*?)-\d+$/)
+    const prefix = match ? match[1] : seq
+
+    if (!groupsMap[prefix]) {
+      groupsMap[prefix] = {
+        prefix,
+        itemsByCode: {},
+        baseItem: { ...item }
+      }
+    }
+
+    if (!groupsMap[prefix].itemsByCode[seq]) {
+      groupsMap[prefix].itemsByCode[seq] = []
+    }
+    groupsMap[prefix].itemsByCode[seq].push(item)
+  })
+
+  return Object.values(groupsMap).map(group => {
+    const subGroups = Object.values(group.itemsByCode).map(historyList => {
+      // Sort history: newest first
+      historyList.sort((a, b) => new Date(b.assignDate) - new Date(a.assignDate))
+      const latest = historyList.find(i => i.is_current) || historyList[0]
+      const history = historyList.filter(i => i.id !== latest.id)
+      return {
+        assetCode: latest.assetCode,
+        latest,
+        history
+      }
+    })
+
+    // Sort subGroups sequentially (001, 002, 003)
+    subGroups.sort((a, b) => a.assetCode.localeCompare(b.assetCode, undefined, { numeric: true }))
+
+    group.subGroups = subGroups
+
+    // Count total unique items
+    group.totalUniqueItems = subGroups.length
+    group.isGroup = true // We always want to be able to expand to see the sub-items
+
+    if (subGroups.length > 0) {
+      const unique = (arr) => [...new Set(arr.filter(Boolean))]
+      
+      group.aggregateData = {
+        department: unique(subGroups.map(s => s.latest.department || 'ส่วนกลาง')).join(', '),
+        building: unique(subGroups.map(s => s.latest.building)).join(', '),
+        room: unique(subGroups.map(s => s.latest.room)).join(', '),
+        responsiblePersonName: unique(subGroups.map(s => s.latest.responsiblePersonName)).join(', '),
+        assignDate: unique(subGroups.map(s => s.latest.assignDate ? formatThaiDate(s.latest.assignDate) : null)).join(', '),
+        returnDate: unique(subGroups.map(s => s.latest.returnDate ? formatThaiDate(s.latest.returnDate) : null)).join(', '),
+        is_current_types: unique(subGroups.map(s => s.latest.is_current ? 'current' : 'old'))
+      }
+      group.isUniform = true // Always display the aggregated data
+      group.uniformData = group.aggregateData
+    }
+
+    return group
+  })
+})
+
+const flattenedDistributions = computed(() => {
+  const rows = []
+  groupedDistributions.value.forEach(group => {
+    rows.push({
+      type: 'header',
+      key: 'header-' + group.prefix,
+      group: group
+    })
+
+    if (group.isGroup && expandedGroups.value.has(group.prefix)) {
+      group.subGroups.forEach(sub => {
+        rows.push({
+          type: 'item-latest',
+          key: 'latest-' + sub.latest.id,
+          item: sub.latest,
+          group: group,
+          subGroup: sub,
+          hasHistory: sub.history.length > 0
+        })
+      })
+    }
+  })
+  return rows
+})
+
+const isHistoryModalOpen = ref(false)
+const currentHistoryData = ref({ assetCode: '', assetName: '', timeline: [] })
+
+const openHistoryModal = (subGroup) => {
+  // Combine latest and history for a full timeline, sorted newest first
+  const fullTimeline = [subGroup.latest, ...subGroup.history].sort((a, b) => new Date(b.assignDate) - new Date(a.assignDate))
+
+  currentHistoryData.value = {
+    assetCode: subGroup.assetCode,
+    assetName: subGroup.latest.assetName,
+    timeline: fullTimeline
+  }
+  isHistoryModalOpen.value = true
+}
+
 // ==========================================
 // 5. FORM & AUTO RELINQUISH LOGIC
 // ==========================================
 const isModalOpen = ref(false)
 const form = ref({
   assetIds: [],
-  department: '',
-  building: '',
+  department: 'แผนกเทคโนโลยีสารสนเทศ',
+  building: 'อาคาร 6',
   room: '',
   responsiblePersonId: '',
   note: ''
@@ -172,8 +290,61 @@ const filteredAssetsForSelector = computed(() => {
   return result
 })
 
-const selectedFormAssets = computed(() => {
-  return masterAssets.value.filter(a => form.value.assetIds.includes(a.id.toString()))
+const groupedSelectedAssets = computed(() => {
+  const selected = masterAssets.value.filter(a => form.value.assetIds.includes(a.id.toString()))
+  
+  const groups = {}
+  selected.forEach(asset => {
+    const seq = asset.seq || asset.id
+    const match = seq.toString().match(/^(.*)-(\d{1,4})$/)
+    const baseSeq = match ? match[1] : seq
+    const suffix = match ? match[2] : null
+
+    if (!groups[baseSeq]) {
+      groups[baseSeq] = {
+        name: asset.name,
+        baseSeq: baseSeq,
+        suffixes: suffix ? [suffix] : [],
+        count: 1,
+        assets: [asset]
+      }
+    } else {
+      if (suffix) groups[baseSeq].suffixes.push(suffix)
+      groups[baseSeq].count += 1
+      groups[baseSeq].assets.push(asset)
+    }
+  })
+
+  return Object.values(groups).map(group => {
+    if (group.suffixes.length > 0) {
+      const sorted = [...group.suffixes].sort((a, b) => parseInt(a) - parseInt(b))
+      const ranges = []
+      let start = sorted[0]
+      let prev = sorted[0]
+
+      for (let i = 1; i < sorted.length; i++) {
+        const curr = sorted[i]
+        if (parseInt(curr) === parseInt(prev) + 1) {
+          prev = curr
+        } else {
+          ranges.push({ start, end: prev })
+          start = curr
+          prev = curr
+        }
+      }
+      ranges.push({ start, end: prev })
+
+      const formattedSuffixes = ranges.map(r => {
+        if (r.start === r.end) return r.start
+        return `${r.start} ถึง ${r.end}`
+      }).join(', ')
+
+      group.displaySeq = `${group.baseSeq}-${formattedSuffixes}`
+    } else {
+      group.displaySeq = group.baseSeq
+    }
+    return group
+  })
 })
 
 function toggleSelectAsset(asset) {
@@ -184,6 +355,11 @@ function toggleSelectAsset(asset) {
   } else {
     form.value.assetIds.push(strId)
   }
+}
+
+function removeGroupFromSelection(group) {
+  const idsToRemove = group.assets.map(a => a.id.toString())
+  form.value.assetIds = form.value.assetIds.filter(id => !idsToRemove.includes(id))
 }
 
 function confirmAssetSelection() {
@@ -228,7 +404,7 @@ const handleAssignAsset = async () => {
         building: form.value.building,
         room: form.value.room,
         responsiblePersonId: Number(selectedPerson.id),
-        note: form.value.note || 'จัดสรรลงหน่วยงาน'
+        note: form.value.note || '-'
       }
       return inventoryApi.createAssetDistribution(payload)
     })
@@ -238,7 +414,7 @@ const handleAssignAsset = async () => {
 
     // Reset Form & Close Modal
     isModalOpen.value = false
-    form.value = { assetIds: [], department: '', building: '', room: '', responsiblePersonId: '', note: '' }
+    form.value = { assetIds: [], department: 'แผนกเทคโนโลยีสารสนเทศ', building: 'อาคาร 6', room: '', responsiblePersonId: '', note: '' }
     await fetchData()
   } catch (err) {
     toast.error('ไม่สามารถจัดสรรครุภัณฑ์ได้: ' + err.message)
@@ -334,76 +510,169 @@ const handleAssignAsset = async () => {
               <th class="px-6 py-4 text-center">สถานะการครอบครอง</th>
             </tr>
           </thead>
-          <tbody class="divide-y divide-slate-200 font-medium">
-            <tr v-for="item in filteredDistributions" :key="item.id"
-              :class="['transition-colors', item.is_current ? 'hover:bg-slate-50/80' : 'bg-slate-50/40 text-slate-400']">
+          <transition-group tag="tbody" name="dropdown" class="divide-y divide-slate-200 font-medium">
+            <template v-for="row in flattenedDistributions" :key="row.key">
 
-              <!-- หมายเลขครุภัณฑ์ -->
-              <td class="px-6 py-4">
-                <div class="font-mono font-extrabold text-slate-900 text-base"
-                  :class="{ 'opacity-60': !item.is_current }">
-                  {{ item.assetCode }}
-                </div>
-                <div class="text-xs text-slate-500 font-bold mt-0.5">{{ item.assetName }}</div>
-              </td>
+              <!-- Header Row (Prefix Group) -->
+              <tr v-if="row.type === 'header'" class="transition-colors bg-slate-50 hover:bg-slate-100 relative z-10">
+                <!-- หมายเลขครุภัณฑ์ -->
+                <td class="px-6 py-4">
+                  <div class="flex items-center gap-3">
+                    <button v-if="row.group.isGroup" @click="toggleGroup(row.group.prefix)"
+                      class="flex items-center justify-center w-6 h-6 rounded-md bg-white hover:bg-emerald-100 text-slate-500 shadow-sm border border-slate-200 shrink-0 transition-colors">
+                      <ChevronDown class="w-4 h-4 transition-transform duration-300"
+                        :class="{ 'rotate-180': expandedGroups.has(row.group.prefix) }" />
+                    </button>
+                    <div v-else class="w-6 h-6 shrink-0"></div>
 
-              <!-- ฝ่าย/หน่วยงาน -->
-              <td class="px-6 py-4 font-bold text-slate-800">
-                {{ item.department || 'ส่วนกลาง' }}
-              </td>
-
-              <!-- อาคาร / ห้อง -->
-              <td class="px-6 py-4">
-                <div class="flex items-center gap-1.5 text-slate-800 font-semibold">
-                  <MapPin class="w-4 h-4 text-emerald-700 shrink-0" />
-                  <span>{{ item.room }}</span>
-                </div>
-                <div class="text-xs text-slate-400 pl-5.5">{{ item.building }}</div>
-              </td>
-
-              <!-- บุคลากรผู้รับผิดชอบ -->
-              <td class="px-6 py-4">
-                <div class="flex items-center gap-2">
-                  <div
-                    class="w-7 h-7 bg-slate-100 text-slate-700 rounded-full flex items-center justify-center font-bold text-xs border">
-                    <User class="w-3.5 h-3.5" />
+                    <div>
+                      <div class="font-mono font-extrabold text-slate-900 text-base">
+                        {{ row.group.prefix }}
+                      </div>
+                      <div class="text-xs text-slate-500 font-bold mt-0.5">
+                        {{ row.group.baseItem.assetName }}
+                        <span
+                          class="ml-2 px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold">รวม
+                          {{ row.group.totalUniqueItems }} รายการ</span>
+                      </div>
+                    </div>
                   </div>
-                  <div>
-                    <div class="font-bold text-slate-900">{{ item.responsiblePersonName }}</div>
-                    <div class="text-xs text-slate-400">ID: {{ item.responsiblePersonId }}</div>
+                </td>
+
+                <!-- ฝ่าย/หน่วยงาน -->
+                <template v-if="true">
+                  <!-- ฝ่าย/หน่วยงาน -->
+                  <td class="px-6 py-4 text-sm font-bold text-slate-800">
+                    {{ row.group.aggregateData?.department }}
+                  </td>
+
+                  <!-- อาคาร / ห้อง -->
+                  <td class="px-6 py-4">
+                    <div class="flex items-center gap-1 text-slate-800 font-semibold text-xs">
+                      <MapPin class="w-3.5 h-3.5 text-emerald-700 shrink-0" />
+                      <span>{{ row.group.aggregateData?.room || '-' }}</span>
+                    </div>
+                    <div class="text-[10px] text-slate-400 pl-4.5">{{ row.group.aggregateData?.building }}</div>
+                  </td>
+
+                  <!-- บุคลากรผู้รับผิดชอบ -->
+                  <td class="px-6 py-4">
+                    <div class="flex items-center gap-2">
+                      <div
+                        class="w-6 h-6 bg-slate-100 text-slate-700 rounded-full flex items-center justify-center font-bold text-[10px] border">
+                        <User class="w-3 h-3" />
+                      </div>
+                      <div>
+                        <div class="font-bold text-slate-900 text-xs">{{ row.group.aggregateData?.responsiblePersonName || 'ไม่ระบุ' }}</div>
+                      </div>
+                    </div>
+                  </td>
+
+                  <!-- ว.ด.ป. รับมอบ/ส่งคืน -->
+                  <td class="px-6 py-4 text-center text-[10px]">
+                    <div class="font-bold text-slate-700">รับมอบ: {{ row.group.aggregateData?.assignDate || '-' }}</div>
+                    <div v-if="row.group.aggregateData?.returnDate" class="text-rose-600 font-bold mt-0.5">
+                      ส่งคืน: {{ row.group.aggregateData?.returnDate }}
+                    </div>
+                    <div v-else class="text-emerald-700 font-bold mt-0.5">- ถือครองอยู่ -</div>
+                  </td>
+
+                  <!-- สถานะ is_current -->
+                  <td class="px-6 py-4 text-center">
+                    <div class="flex flex-col items-center gap-1.5">
+                      <span v-if="row.group.aggregateData?.is_current_types?.includes('current')"
+                        class="px-2 py-0.5 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-full text-[10px] font-extrabold inline-flex items-center gap-1">
+                        <CheckCircle2 class="w-3 h-3" /> ครอบครองปัจจุบัน
+                      </span>
+                      <span v-if="row.group.aggregateData?.is_current_types?.includes('old')"
+                        class="px-2 py-0.5 bg-slate-100 text-slate-500 border border-slate-200 rounded-full text-[10px] font-bold inline-flex items-center gap-1">
+                        <ArrowRightLeft class="w-3 h-3" /> ประวัติเก่า
+                      </span>
+                    </div>
+                  </td>
+                </template>
+              </tr>
+
+              <!-- Latest Item Row (Current location for a specific physical asset) -->
+              <tr v-else-if="row.type === 'item-latest'"
+                class="bg-emerald-50/20 hover:bg-emerald-50/60 transition-colors border-l-4 border-emerald-300 relative z-0">
+
+                <!-- หมายเลข -->
+                <td class="px-6 py-2.5">
+                  <div class="flex items-center gap-3">
+                    <div class="w-6 h-6 flex justify-end items-start pt-1 pr-1 shrink-0">
+                      <div class="w-3 h-3 rounded-bl-lg border-b-2 border-l-2 border-emerald-200"></div>
+                    </div>
+                    <div class="font-mono font-extrabold text-slate-900 text-sm"
+                      :class="{ 'opacity-60': !row.item.is_current }">
+                      {{ row.item.assetCode }}
+                    </div>
                   </div>
-                </div>
-              </td>
+                </td>
 
-              <!-- ว.ด.ป. รับมอบ/ส่งคืน -->
-              <td class="px-6 py-4 text-center text-xs">
-                <div class="font-bold text-slate-700">รับมอบ: {{ formatThaiDate(item.assignDate) }}</div>
-                <div v-if="item.returnDate" class="text-rose-600 font-bold mt-0.5">
-                  ส่งคืน: {{ formatThaiDate(item.returnDate) }}
-                </div>
-                <div v-else class="text-emerald-700 font-bold mt-0.5">- ถือครองอยู่ -</div>
-              </td>
+                <!-- ฝ่าย/หน่วยงาน -->
+                <td class="px-6 py-2.5 text-sm font-bold text-slate-800">
+                  {{ row.item.department || 'ส่วนกลาง' }}
+                </td>
 
-              <!-- สถานะ is_current -->
-              <td class="px-6 py-4 text-center">
-                <span v-if="item.is_current"
-                  class="px-3 py-1 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-full text-xs font-extrabold inline-flex items-center gap-1">
-                  <CheckCircle2 class="w-3.5 h-3.5" /> ครอบครองปัจจุบัน
-                </span>
-                <span v-else
-                  class="px-3 py-1 bg-slate-100 text-slate-500 border border-slate-200 rounded-full text-xs font-bold inline-flex items-center gap-1">
-                  <ArrowRightLeft class="w-3.5 h-3.5" /> โยกย้ายแล้ว (ประวัติ)
-                </span>
-              </td>
+                <!-- อาคาร / ห้อง -->
+                <td class="px-6 py-2.5">
+                  <div class="flex items-center gap-1 text-slate-800 font-semibold text-xs">
+                    <MapPin class="w-3.5 h-3.5 text-emerald-700 shrink-0" />
+                    <span>{{ row.item.room }}</span>
+                  </div>
+                  <div class="text-[10px] text-slate-400 pl-4.5">{{ row.item.building }}</div>
+                </td>
 
-            </tr>
+                <!-- บุคลากรผู้รับผิดชอบ -->
+                <td class="px-6 py-2.5">
+                  <div class="flex items-center gap-2">
+                    <div
+                      class="w-6 h-6 bg-slate-100 text-slate-700 rounded-full flex items-center justify-center font-bold text-[10px] border">
+                      <User class="w-3 h-3" />
+                    </div>
+                    <div>
+                      <div class="font-bold text-slate-900 text-xs">{{ row.item.responsiblePersonName }}</div>
+                    </div>
+                  </div>
+                </td>
 
-            <tr v-if="filteredDistributions.length === 0">
+                <!-- ว.ด.ป. รับมอบ/ส่งคืน -->
+                <td class="px-6 py-2.5 text-center text-[10px]">
+                  <div class="font-bold text-slate-700">รับมอบ: {{ formatThaiDate(row.item.assignDate) }}</div>
+                  <div v-if="row.item.returnDate" class="text-rose-600 font-bold mt-0.5">
+                    ส่งคืน: {{ formatThaiDate(row.item.returnDate) }}
+                  </div>
+                  <div v-else class="text-emerald-700 font-bold mt-0.5">- ถือครองอยู่ -</div>
+                </td>
+
+                <!-- สถานะ is_current -->
+                <td class="px-6 py-2.5 text-center">
+                  <div class="flex flex-col items-center gap-1.5">
+                    <span v-if="row.item.is_current"
+                      class="px-2 py-0.5 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-full text-[10px] font-extrabold inline-flex items-center gap-1">
+                      <CheckCircle2 class="w-3 h-3" /> ครอบครองปัจจุบัน
+                    </span>
+                    <span v-else
+                      class="px-2 py-0.5 bg-slate-100 text-slate-500 border border-slate-200 rounded-full text-[10px] font-bold inline-flex items-center gap-1">
+                      <ArrowRightLeft class="w-3 h-3" /> ประวัติเก่า
+                    </span>
+
+                    <button v-if="row.hasHistory" @click="openHistoryModal(row.subGroup)"
+                      class="text-[9px] font-bold text-emerald-600 hover:text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-2 py-0.5 rounded-full border border-emerald-200 transition-colors flex items-center gap-1 cursor-pointer">
+                      <History class="w-2.5 h-2.5" /> ดูประวัติ ({{ row.subGroup.history.length }})
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            </template>
+
+            <tr v-if="filteredDistributions.length === 0" key="empty-state">
               <td colspan="6" class="px-6 py-12 text-center text-slate-400 font-medium">
                 ไม่พบประวัติการคุมครุภัณฑ์จ่ายให้หน่วยงาน
               </td>
             </tr>
-          </tbody>
+          </transition-group>
         </table>
       </div>
 
@@ -436,28 +705,31 @@ const handleAssignAsset = async () => {
             <button type="button" @click="isAssetSelectorOpen = true"
               class="w-full flex items-center justify-between text-left bg-slate-50 border-2 border-slate-300 rounded-xl p-3 hover:border-emerald-600 focus:outline-none transition-all cursor-pointer">
               <div class="text-slate-900 font-bold truncate">
-                <span v-if="selectedFormAssets.length > 0">เลือกแล้ว {{ selectedFormAssets.length }} รายการ</span>
+                <span v-if="form.assetIds.length > 0">เลือกแล้ว {{ form.assetIds.length }} รายการ</span>
                 <span v-else class="text-slate-400 font-medium">-- คลิกเพื่อค้นหาและเลือกครุภัณฑ์ --</span>
               </div>
               <span class="ml-3 shrink-0 px-3 py-1 rounded-lg bg-slate-200 text-slate-700 text-xs font-bold">
-                {{ selectedFormAssets.length > 0 ? 'จัดการรายการ' : 'ค้นหา' }}
+                {{ form.assetIds.length > 0 ? 'จัดการรายการ' : 'ค้นหา' }}
               </span>
             </button>
 
             <!-- Selected Assets List -->
-            <div v-if="selectedFormAssets.length > 0"
+            <div v-if="groupedSelectedAssets.length > 0"
               class="mt-3 flex flex-col gap-2 max-h-48 overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
-              <div v-for="(asset, index) in selectedFormAssets" :key="asset.id"
+              <div v-for="(group, index) in groupedSelectedAssets" :key="group.baseSeq"
                 class="flex items-center gap-3 bg-white p-2.5 rounded-xl border border-slate-200 shadow-sm group">
                 <div
                   class="w-6 h-6 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center text-xs font-bold shrink-0">
                   {{ index + 1 }}
                 </div>
                 <div class="flex-1 min-w-0">
-                  <div class="text-xs font-bold text-emerald-700 font-mono truncate mb-0.5">{{ asset.seq || '-' }}</div>
-                  <div class="text-sm font-semibold text-slate-800 truncate">{{ asset.name }}</div>
+                  <div class="text-xs font-bold text-emerald-700 font-mono truncate mb-0.5">{{ group.displaySeq || '-' }}</div>
+                  <div class="text-sm font-semibold text-slate-800 truncate">
+                    {{ group.name }} 
+                    <span class="text-slate-500 text-xs ml-1 font-normal">(จำนวน {{ group.count }} ชิ้น)</span>
+                  </div>
                 </div>
-                <button type="button" @click="toggleSelectAsset(asset)"
+                <button type="button" @click="removeGroupFromSelection(group)"
                   class="p-1.5 text-rose-500 bg-rose-50 hover:text-white hover:bg-rose-500 rounded-lg transition-colors cursor-pointer shrink-0"
                   title="นำออก">
                   <X class="w-4 h-4" />
@@ -469,19 +741,16 @@ const handleAssignAsset = async () => {
           <!-- เลือกหน่วยงาน / ฝ่าย -->
           <div>
             <label class="block font-extrabold text-slate-800 mb-1">นามหน่วยงาน / ฝ่าย ที่รับมอบ:</label>
-            <select v-model="form.department" required
-              class="w-full p-3 border border-slate-300 rounded-xl font-bold bg-white focus:outline-none">
-              <option value="" disabled>-- เลือกฝ่าย/แผนก --</option>
-              <option v-for="dept in departments" :key="dept" :value="dept">{{ dept }}</option>
-            </select>
+            <input type="text" v-model="form.department" disabled
+              class="w-full p-3 border border-slate-300 rounded-xl font-bold bg-slate-100 text-slate-600 focus:outline-none cursor-not-allowed" />
           </div>
 
           <!-- อาคาร & ห้องเรียน -->
           <div class="grid grid-cols-2 gap-3">
             <div>
               <label class="block font-extrabold text-slate-800 mb-1">ชื่ออาคาร:</label>
-              <input v-model="form.building" type="text" required placeholder="เช่น อาคาร 3"
-                class="w-full p-3 border border-slate-300 rounded-xl font-medium" />
+              <input v-model="form.building" type="text" disabled
+                class="w-full p-3 border border-slate-300 rounded-xl font-medium bg-slate-100 text-slate-600 cursor-not-allowed" />
             </div>
             <div>
               <label class="block font-extrabold text-slate-800 mb-1">ห้องเรียน / ห้องทำงาน:</label>
@@ -497,14 +766,14 @@ const handleAssignAsset = async () => {
               class="w-full p-3 border border-slate-300 rounded-xl font-bold bg-white focus:outline-none">
               <option value="" disabled>-- เลือกผู้รับผิดชอบ --</option>
               <option v-for="p in personnelList" :key="p.id" :value="p.id">
-                {{ p.name }} ({{ p.dept }})
+                {{ p.name }}
               </option>
             </select>
           </div>
 
           <!-- หมายเหตุ -->
           <div>
-            <label class="block font-extrabold text-slate-800 mb-1">หมายเหตุการจัดสรร / โยกย้าย:</label>
+            <label class="block font-extrabold text-slate-800 mb-1">หมายเหตุการจัดสรร / โยกย้าย (ไม่บังคับ):</label>
             <textarea v-model="form.note" rows="2" placeholder="เช่น โยกย้ายตามคำขอประจำภาคเรียน..."
               class="w-full p-3 border border-slate-300 rounded-xl font-medium"></textarea>
           </div>
@@ -636,6 +905,97 @@ const handleAssignAsset = async () => {
               </button>
             </div>
           </div>
+        </div>
+      </div>
+    </Transition>
+
+    <!-- Modal: ประวัติการโยกย้าย (History) -->
+    <Transition enter-active-class="transition ease-out duration-200" enter-from-class="opacity-0 scale-95"
+      enter-to-class="opacity-100 scale-100" leave-active-class="transition ease-in duration-150"
+      leave-from-class="opacity-100 scale-100" leave-to-class="opacity-0 scale-95">
+      <div v-if="isHistoryModalOpen"
+        class="fixed inset-0 z-[70] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4"
+        @click.self="isHistoryModalOpen = false">
+        <div class="bg-white rounded-2xl w-full max-w-3xl max-h-[85vh] flex flex-col overflow-hidden shadow-2xl">
+
+          <!-- Header -->
+          <div class="px-6 py-5 border-b border-slate-100 bg-slate-50 flex items-start justify-between shrink-0">
+            <div>
+              <h3 class="text-xl font-extrabold text-slate-900 flex items-center gap-2">
+                <History class="w-6 h-6 text-emerald-700" />
+                ประวัติการโยกย้ายครุภัณฑ์
+              </h3>
+              <div class="mt-2 flex items-center gap-2">
+                <span class="px-2.5 py-1 bg-emerald-100 text-emerald-800 text-xs font-bold rounded-lg font-mono">{{
+                  currentHistoryData.assetCode }}</span>
+                <span class="text-sm font-semibold text-slate-600">{{ currentHistoryData.assetName }}</span>
+              </div>
+            </div>
+            <button type="button" @click="isHistoryModalOpen = false"
+              class="w-8 h-8 rounded-full bg-slate-200 hover:bg-slate-300 flex items-center justify-center text-slate-600 transition-colors cursor-pointer shrink-0">
+              <X class="w-4 h-4" />
+            </button>
+          </div>
+
+          <!-- Content Timeline -->
+          <div class="flex-1 overflow-y-auto p-6 bg-white">
+            <div class="relative border-l-2 border-slate-200 ml-4 space-y-8">
+
+              <div v-for="(item, index) in currentHistoryData.timeline" :key="item.id" class="relative pl-6">
+                <!-- Timeline Dot -->
+                <div class="absolute -left-[9px] top-1 w-4 h-4 rounded-full border-2 border-white"
+                  :class="item.is_current ? 'bg-emerald-500 shadow-[0_0_0_3px_rgba(16,185,129,0.2)]' : 'bg-slate-300'">
+                </div>
+
+                <div class="bg-slate-50 border border-slate-100 rounded-xl p-4 shadow-sm"
+                  :class="{ 'ring-1 ring-emerald-500/30 bg-emerald-50/30': item.is_current }">
+                  <div class="flex justify-between items-start mb-3">
+                    <div>
+                      <h4 class="font-bold text-slate-900 flex items-center gap-2">
+                        {{ item.department || 'ส่วนกลาง' }}
+                        <span v-if="item.is_current"
+                          class="px-2 py-0.5 bg-emerald-100 text-emerald-700 text-[10px] rounded-full font-bold">ปัจจุบัน</span>
+                      </h4>
+                      <div class="flex items-center gap-1.5 text-xs font-semibold text-slate-500 mt-1">
+                        <MapPin class="w-3.5 h-3.5" /> {{ item.building }} / {{ item.room }}
+                      </div>
+                    </div>
+                    <div class="text-right">
+                      <div class="text-xs font-bold text-slate-700">รับมอบ: {{ formatThaiDate(item.assignDate) }}</div>
+                      <div v-if="item.returnDate" class="text-xs font-bold text-rose-600 mt-0.5">ส่งคืน: {{
+                        formatThaiDate(item.returnDate) }}</div>
+                      <div v-else class="text-xs font-bold text-emerald-600 mt-0.5">- ถือครองอยู่ -</div>
+                    </div>
+                  </div>
+
+                  <div class="pt-3 border-t border-slate-200/60 flex items-center gap-3">
+                    <div class="w-8 h-8 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center">
+                      <User class="w-4 h-4" />
+                    </div>
+                    <div>
+                      <div class="text-sm font-bold text-slate-800">{{ item.responsiblePersonName }}</div>
+                      <div class="text-[10px] text-slate-500 font-semibold">ผู้ลงนามรับผิดชอบ</div>
+                    </div>
+                  </div>
+
+                  <div v-if="item.note"
+                    class="mt-3 text-xs bg-white border border-slate-200 p-2 rounded-lg text-slate-600">
+                    <span class="font-bold">หมายเหตุ:</span> {{ item.note }}
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          </div>
+
+          <!-- Footer -->
+          <div class="px-6 py-4 border-t border-slate-100 bg-slate-50 shrink-0 flex justify-end">
+            <button type="button" @click="isHistoryModalOpen = false"
+              class="px-6 py-2.5 rounded-xl border border-slate-300 bg-white text-sm font-bold text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer">
+              ปิดหน้าต่าง
+            </button>
+          </div>
+
         </div>
       </div>
     </Transition>

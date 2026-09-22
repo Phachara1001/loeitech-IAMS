@@ -1,5 +1,5 @@
 <script setup>
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 
 const props = defineProps({
   assets: {
@@ -38,18 +38,103 @@ const toThaiNumerals = (num) => {
   const thaiNums = ['๐', '๑', '๒', '๓', '๔', '๕', '๖', '๗', '๘', '๙']
   return String(num).replace(/\d/g, (d) => thaiNums[d])
 }
+
+const formatSuffixesToRange = (suffixesArray) => {
+  if (!suffixesArray || suffixesArray.length === 0) return ''
+  const sorted = [...suffixesArray].sort((a, b) => parseInt(a) - parseInt(b))
+  const ranges = []
+  let start = sorted[0]
+  let prev = sorted[0]
+
+  for (let i = 1; i < sorted.length; i++) {
+    const curr = sorted[i]
+    if (parseInt(curr) === parseInt(prev) + 1) {
+      prev = curr
+    } else {
+      ranges.push({ start, end: prev })
+      start = curr
+      prev = curr
+    }
+  }
+  ranges.push({ start, end: prev })
+
+  return ranges.map(r => {
+    if (r.start === r.end) return r.start
+    return `${r.start} ถึง ${r.end}`
+  }).join(', ')
+}
+
+const groupedAssets = computed(() => {
+  const groups = {}
+
+  props.assets.forEach(asset => {
+    const seq = asset.seq || asset.id
+    const match = seq.toString().match(/^(.*)-(\d{1,4})$/)
+    const baseSeq = match ? match[1] : seq
+    const suffix = match ? match[2] : null
+
+    // Group by base sequence and department only (combining all statuses)
+    const key = `${baseSeq}|${asset.department}`
+
+    if (!groups[key]) {
+      groups[key] = {
+        ...asset,
+        baseSeq: baseSeq,
+        allSuffixes: suffix ? [suffix] : [],
+        brokenSuffixes: [],
+        count: 1,
+        totalPrice: Number(asset.unitPrice) || 0
+      }
+      if (suffix && (asset.status === 'Broken' || asset.status === 'Repaired' || asset.status === 'Repairing')) {
+        groups[key].brokenSuffixes.push(suffix)
+      }
+    } else {
+      if (suffix) groups[key].allSuffixes.push(suffix)
+      if (suffix && (asset.status === 'Broken' || asset.status === 'Repaired' || asset.status === 'Repairing')) {
+        groups[key].brokenSuffixes.push(suffix)
+      }
+      groups[key].count += 1
+      groups[key].totalPrice += (Number(asset.unitPrice) || 0)
+    }
+  })
+
+  const result = Object.values(groups).sort((a, b) => a.baseSeq.localeCompare(b.baseSeq, undefined, { numeric: true }))
+
+  return result.map(group => {
+    const formattedAll = formatSuffixesToRange(group.allSuffixes)
+    group.displaySeq = formattedAll ? `${group.baseSeq}-${formattedAll}` : group.baseSeq
+
+    if (group.brokenSuffixes.length > 0) {
+      const formattedBroken = formatSuffixesToRange(group.brokenSuffixes)
+      group.remark = `ชำรุด ${group.brokenSuffixes.length} เครื่อง (หมายเลข ${formattedBroken})`
+    } else {
+      group.remark = '-'
+    }
+
+    // Determine overall status
+    if (group.brokenSuffixes.length === 0) {
+      group.displayStatus = 'ใช้งานปกติ'
+    } else if (group.brokenSuffixes.length === group.count) {
+      group.displayStatus = 'ชำรุดทั้งหมด'
+    } else {
+      group.displayStatus = 'มีชำรุดบางส่วน'
+    }
+
+    return group
+  })
+})
 </script>
 
 <template>
   <div class="print-container font-sarabun text-black">
-    <!-- หน้าเอกสารสำหรับพิมพ์ -->
-    <div class="max-w-[210mm] mx-auto bg-white">
+    <!-- หน้าเอกสารสำหรับพิมพ์ (Landscape) -->
+    <div class="max-w-[280mm] mx-auto bg-white">
 
       <!-- หัวกระดาษ (แบบราชการ) -->
       <div class="text-center mb-8 relative">
         <h1 class="text-xl font-bold mb-1">ทะเบียนคุมทรัพย์สิน (ครุภัณฑ์)</h1>
-        <h2 class="text-lg">วิทยาลัยเทคนิคเลย</h2>
-        <p class="text-sm mt-2">พิมพ์ข้อมูล ณ วันที่ {{ toThaiNumerals(printDate) }} เวลา {{ toThaiNumerals(printTime) }} น.</p>
+        <h2 class="text-lg">แผนกเทคโนโลยีสารสนเทศ วิทยาลัยเทคนิคเลย</h2>
+        <p class="text-sm mt-2">พิมพ์ข้อมูล ณ วันที่ {{ toThaiNumerals(printDate) }} </p>
       </div>
 
       <!-- ตารางข้อมูล -->
@@ -63,34 +148,44 @@ const toThaiNumerals = (num) => {
             <th class="border border-black px-2 py-2 text-center font-bold">ราคา (บาท)</th>
             <th class="border border-black px-2 py-2 text-center font-bold">หน่วยงานที่ครอบครอง</th>
             <th class="border border-black px-2 py-2 text-center font-bold">สถานะ</th>
+            <th class="border border-black px-2 py-2 text-center font-bold w-48">หมายเหตุ</th>
           </tr>
         </thead>
         <tbody>
-          <tr v-for="(asset, index) in assets" :key="asset.id">
+          <tr v-for="(asset, index) in groupedAssets" :key="asset.id + '-' + index">
             <td class="border border-black px-2 py-1.5 text-center">{{ toThaiNumerals(index + 1) }}</td>
-            <td class="border border-black px-2 py-1.5">{{ toThaiNumerals(asset.seq) }}</td>
+            <td class="border border-black px-2 py-1.5">{{ toThaiNumerals(asset.displaySeq) }}</td>
             <td class="border border-black px-2 py-1.5">
-              <div>{{ toThaiNumerals(asset.name) }}</div>
+              <div>
+                {{ toThaiNumerals(asset.name) }}
+                <span v-if="asset.count > 1" class="ml-2 font-bold">(จำนวน {{ toThaiNumerals(asset.count) }}
+                  ชิ้น)</span>
+              </div>
             </td>
-            <td class="border border-black px-2 py-1.5 text-center">{{ toThaiNumerals(formatThaiDate(asset.acquiredDate)) }}</td>
-            <td class="border border-black px-2 py-1.5 text-right">{{ toThaiNumerals(asset.unitPrice?.toLocaleString(undefined,
-              { minimumFractionDigits: 2 }) || '-') }}</td>
+            <td class="border border-black px-2 py-1.5 text-center">{{
+              toThaiNumerals(formatThaiDate(asset.acquiredDate)) }}</td>
+            <td class="border border-black px-2 py-1.5 text-right">{{
+              toThaiNumerals(asset.totalPrice?.toLocaleString(undefined,
+                { minimumFractionDigits: 2 }) || '-') }}</td>
             <td class="border border-black px-2 py-1.5">{{ toThaiNumerals(asset.department) }}</td>
-            <td class="border border-black px-2 py-1.5 text-center">{{ toThaiNumerals(getStatusText(asset.status)) }}</td>
+            <td class="border border-black px-2 py-1.5 text-center">{{ toThaiNumerals(asset.displayStatus) }}</td>
+            <td class="border border-black px-2 py-1.5 text-left text-[11px] leading-tight">{{
+              toThaiNumerals(asset.remark) }}</td>
           </tr>
-          <tr v-if="assets.length === 0">
-            <td colspan="7" class="border border-black px-4 py-8 text-center text-gray-500">ไม่พบข้อมูลครุภัณฑ์</td>
+          <tr v-if="groupedAssets.length === 0">
+            <td colspan="8" class="border border-black px-4 py-8 text-center text-gray-500">ไม่พบข้อมูลครุภัณฑ์</td>
           </tr>
         </tbody>
         <!-- สรุปยอด -->
-        <tfoot v-if="assets.length > 0">
+        <tfoot v-if="groupedAssets.length > 0">
           <tr>
             <th colspan="4" class="border border-black px-2 py-2 text-right font-bold">รวมมูลค่าทั้งสิ้น</th>
             <th class="border border-black px-2 py-2 text-right font-bold">
-              {{toThaiNumerals(assets.reduce((sum, a) => sum + (Number(a.unitPrice) || 0), 0).toLocaleString(undefined,
-                { minimumFractionDigits: 2 }))}}
+              {{toThaiNumerals(groupedAssets.reduce((sum, a) => sum + (Number(a.totalPrice) || 0),
+                0).toLocaleString(undefined,
+                  { minimumFractionDigits: 2 }))}}
             </th>
-            <th colspan="2" class="border border-black px-2 py-2"></th>
+            <th colspan="3" class="border border-black px-2 py-2"></th>
           </tr>
         </tfoot>
       </table>
@@ -111,7 +206,7 @@ const toThaiNumerals = (num) => {
   </div>
 </template>
 
-<style scoped>
+<style>
 @import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap');
 
 .font-sarabun {
@@ -120,7 +215,7 @@ const toThaiNumerals = (num) => {
 
 @media print {
   @page {
-    size: A4 portrait;
+    size: A4 landscape;
     margin: 0;
   }
 

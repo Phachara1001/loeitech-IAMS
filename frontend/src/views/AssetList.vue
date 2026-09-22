@@ -570,7 +570,7 @@ const handlePrint = () => {
                 เลขพัสดุหลัก</th>
               <th class="px-6 py-3.5 font-semibold text-[11px] uppercase tracking-wide text-emerald-50">ข้อมูลจัดซื้อ
               </th>
-              <th class="px-6 py-3.5 font-semibold text-[11px] uppercase tracking-wide text-emerald-50">แผนก/หน่วยงาน
+              <th class="px-6 py-3.5 font-semibold text-[11px] uppercase tracking-wide text-emerald-50">ผู้ดูแล
               </th>
               <th class="px-6 py-3.5 font-semibold text-[11px] uppercase tracking-wide text-emerald-50">สถานะ</th>
               <th class="px-6 py-3.5 text-center font-semibold text-[11px] uppercase tracking-wide text-emerald-50">
@@ -623,7 +623,16 @@ const handlePrint = () => {
                   <div class="text-[11px] text-slate-500 mt-0.5">{{ formatThaiDate(row.group.asset.acquiredDate) }} ({{
                     row.group.asset.budgetType }})</div>
                 </td>
-                <td class="px-6 py-4 text-slate-600">{{ row.group.asset.department }}</td>
+                <td class="px-6 py-4">
+                  <div v-if="!row.group.isGroup && row.group.asset.distributions && row.group.asset.distributions.length > 0">
+                    <div class="font-medium text-slate-800">{{ row.group.asset.distributions[0].responsiblePerson?.name || 'ไม่ระบุ' }}</div>
+                    <div class="text-xs text-slate-500 mt-0.5">
+                      {{ row.group.asset.distributions[0].building || 'ไม่ระบุอาคาร' }} / {{ row.group.asset.distributions[0].room || 'ไม่ระบุห้อง' }}
+                    </div>
+                  </div>
+                  <div v-else-if="!row.group.isGroup" class="text-slate-400 italic text-sm">ยังไม่จัดสรร</div>
+                  <div v-else class="text-slate-400 text-sm font-medium">ดูรายชิ้น</div>
+                </td>
                 <td class="px-6 py-4">
                   <div class="flex flex-col items-start gap-1.5">
                     <template v-if="!row.group.isGroup">
@@ -689,7 +698,15 @@ const handlePrint = () => {
                 <td class="px-6 py-2.5 text-xs text-slate-500">
                   ฿{{ row.asset.unitPrice?.toLocaleString() || '-' }}
                 </td>
-                <td class="px-6 py-2.5 text-xs text-slate-500">{{ row.asset.department }}</td>
+                <td class="px-6 py-2.5 text-xs text-slate-500">
+                  <div v-if="row.asset.distributions && row.asset.distributions.length > 0">
+                    <div class="font-medium text-slate-800">{{ row.asset.distributions[0].responsiblePerson?.name || 'ไม่ระบุ' }}</div>
+                    <div class="text-[10px] text-slate-400 mt-0.5">
+                      {{ row.asset.distributions[0].building || 'ไม่ระบุอาคาร' }} / {{ row.asset.distributions[0].room || 'ไม่ระบุห้อง' }}
+                    </div>
+                  </div>
+                  <div v-else class="text-slate-400 italic">ยังไม่จัดสรร</div>
+                </td>
                 <td class="px-6 py-2.5">
                   <button v-if="canManage" @click="openStatusModal(row.asset)"
                     :class="['px-2 py-0.5 text-[10px] font-medium rounded-full border hover:shadow-md transition-shadow cursor-pointer flex items-center', getStatusBadge(row.asset.status)]"

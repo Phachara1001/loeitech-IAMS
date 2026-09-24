@@ -10,6 +10,12 @@ export const findAll = async () => {
           name: true
         }
       },
+      assetComponent: {
+        select: {
+          id: true,
+          name: true
+        }
+      },
       responsiblePerson: {
         select: {
           id: true,
@@ -23,10 +29,11 @@ export const findAll = async () => {
 
 export const create = async (data) => {
   return await prisma.$transaction(async (tx) => {
-    // 1. Set all current distributions for this asset to isCurrent = false and returnDate = now
+    // 1. Set all current distributions for this asset (or specific component) to isCurrent = false and returnDate = now
     await tx.assetDistribution.updateMany({
       where: {
         assetId: Number(data.assetId),
+        assetComponentId: data.assetComponentId ? Number(data.assetComponentId) : null,
         isCurrent: true
       },
       data: {
@@ -39,16 +46,19 @@ export const create = async (data) => {
     return await tx.assetDistribution.create({
       data: {
         assetId: Number(data.assetId),
+        assetComponentId: data.assetComponentId ? Number(data.assetComponentId) : null,
         department: data.department,
         building: data.building,
         room: data.room,
-        responsiblePersonId: Number(data.responsiblePersonId),
+        responsiblePersonId: data.responsiblePersonId ? Number(data.responsiblePersonId) : null,
+        guestName: data.guestName || null,
         note: data.note,
         assignDate: data.assignDate ? new Date(data.assignDate) : new Date(),
         isCurrent: true
       },
       include: {
         asset: true,
+        assetComponent: true,
         responsiblePerson: true
       }
     });

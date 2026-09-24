@@ -24,6 +24,7 @@ import BaseModal from '../components/BaseModal.vue'
 import { useToast } from '../composables/useToast'
 import { API_BASE } from '../config/api'
 import PrintAssetListTemplate from '../components/PrintAssetListTemplate.vue'
+import AssetComponentsManager from '../components/AssetComponentsManager.vue'
 
 const router = useRouter()
 const toast = useToast()
@@ -114,6 +115,7 @@ const filteredAssets = computed(() => {
 })
 
 const expandedGroups = ref(new Set())
+const expandedComponents = ref(new Set())
 
 const toggleGroup = (prefix) => {
   const newSet = new Set(expandedGroups.value)
@@ -123,6 +125,16 @@ const toggleGroup = (prefix) => {
     newSet.add(prefix)
   }
   expandedGroups.value = newSet
+}
+
+const toggleComponents = (assetId) => {
+  const newSet = new Set(expandedComponents.value)
+  if (newSet.has(assetId)) {
+    newSet.delete(assetId)
+  } else {
+    newSet.add(assetId)
+  }
+  expandedComponents.value = newSet
 }
 
 const groupedAssets = computed(() => {
@@ -201,7 +213,32 @@ const flattenedRows = computed(() => {
           asset: asset,
           group: group
         })
+
+        // Add sub-components for each item in the group
+        if (asset.components && asset.components.length > 0 && expandedComponents.value.has(asset.id)) {
+          asset.components.forEach(comp => {
+            rows.push({
+              type: 'component',
+              key: `comp-${asset.id}-${comp.id}`,
+              component: comp,
+              parentAsset: asset
+            })
+          })
+        }
       })
+    } else if (!group.isGroup) {
+      // Add sub-components for standalone asset
+      const asset = group.asset
+      if (asset.components && asset.components.length > 0 && expandedComponents.value.has(asset.id)) {
+        asset.components.forEach(comp => {
+          rows.push({
+            type: 'component',
+            key: `comp-${asset.id}-${comp.id}`,
+            component: comp,
+            parentAsset: asset
+          })
+        })
+      }
     }
   })
   return rows
@@ -268,7 +305,7 @@ const saveStatus = async () => {
   if (selectedAsset.value) {
     try {
       // Prepare full update data to pass backend validation
-      const { id, createdAt, updatedAt, ...updateData } = selectedAsset.value
+      const { id, createdAt, updatedAt, components, distributions, ...updateData } = selectedAsset.value
       updateData.status = tempStatus.value
 
       await axios.put(`${API_BASE}/assets/${selectedAsset.value.id}`, updateData, { headers: authHeaders() })
@@ -309,7 +346,7 @@ const handleImageUpload = async (event) => {
     const imageUrl = uploadResponse.data.data.imageUrl
 
     // Prepare full update data to pass backend validation
-    const { id, createdAt, updatedAt, ...updateData } = selectedAsset.value
+    const { id, createdAt, updatedAt, components, distributions, ...updateData } = selectedAsset.value
     updateData.image = imageUrl
 
     // Update the asset in database
@@ -372,7 +409,7 @@ const saveEdit = async () => {
 const executeSaveEdit = async (applyToOthers) => {
   try {
     showApplyToAllModal.value = false
-    const { id, createdAt, updatedAt, ...updateData } = tempAsset.value
+    const { id, createdAt, updatedAt, components, distributions, ...updateData } = tempAsset.value
     if (updateData.acquiredDate) {
       updateData.acquiredDate = new Date(updateData.acquiredDate).toISOString()
     }
@@ -452,9 +489,16 @@ const handleExport = async () => {
   }
 }
 
-const handlePrint = () => {
-  window.print()
+const numeralType = ref('thai')
+
+const handlePrint = (type) => {
+  numeralType.value = type || 'thai'
+  setTimeout(() => {
+    window.print()
+  }, 100)
 }
+
+
 </script>
 
 <template>
@@ -478,10 +522,16 @@ const handlePrint = () => {
           </div>
         </div>
         <div class="flex flex-col sm:flex-row gap-3 flex-wrap justify-end">
-          <button @click="handlePrint"
-            class="px-4 py-2.5 bg-white/10 backdrop-blur-sm ring-1 ring-white/20 rounded-xl text-white hover:bg-white/20 font-semibold flex items-center transition-all shadow-sm">
-            <Printer class="w-4 h-4 mr-2 text-emerald-200" /> พิมพ์รายงาน PDF
-          </button>
+          <div class="flex bg-white/10 backdrop-blur-sm ring-1 ring-white/20 rounded-xl overflow-hidden shadow-sm">
+            <button @click="handlePrint('thai')"
+              class="px-3 py-2.5 text-white hover:bg-white/20 font-semibold flex items-center border-r border-white/10 text-sm transition-colors">
+              <Printer class="w-4 h-4 mr-1.5 text-emerald-200" /> พิมพ์รายงานครุภัณฑ์ (เลขไทย)
+            </button>
+            <button @click="handlePrint('arabic')"
+              class="px-3 py-2.5 text-white hover:bg-white/20 font-semibold flex items-center text-sm transition-colors">
+              <Printer class="w-4 h-4 mr-1.5 text-emerald-200" /> พิมพ์รายงานครุภัณฑ์ (เลขอารบิก)
+            </button>
+          </div>
           <button @click="handleExport" :disabled="isExporting"
             class="px-4 py-2.5 bg-white/10 backdrop-blur-sm ring-1 ring-white/20 rounded-xl text-white hover:bg-white/20 font-semibold flex items-center transition-all shadow-sm disabled:opacity-50">
             <Loader2 v-if="isExporting" class="w-4 h-4 mr-2 animate-spin text-emerald-200" />
@@ -602,9 +652,21 @@ const handlePrint = () => {
                   </div>
                 </td>
                 <td class="px-6 py-4">
-                  <span class="font-medium text-slate-700">{{ row.group.prefix }}</span>
-                  <span v-if="!row.group.isGroup" class="font-medium text-slate-700">{{
-                    row.group.asset.seq.replace(row.group.prefix, '') }}</span>
+                  <div class="flex items-center gap-2">
+                    <button
+                      v-if="!row.group.isGroup && row.group.asset.components && row.group.asset.components.length > 0"
+                      @click="toggleComponents(row.group.asset.id)"
+                      class="flex items-center justify-center w-5 h-5 rounded hover:bg-slate-200 text-slate-500 transition-colors"
+                      title="ดูอุปกรณ์ย่อย">
+                      <ChevronDown class="w-3 h-3 transition-transform duration-300"
+                        :class="{ 'rotate-180': expandedComponents.has(row.group.asset.id) }" />
+                    </button>
+                    <div>
+                      <span class="font-medium text-slate-700">{{ row.group.prefix }}</span>
+                      <span v-if="!row.group.isGroup" class="font-medium text-slate-700">{{
+                        row.group.asset.seq.replace(row.group.prefix, '') }}</span>
+                    </div>
+                  </div>
                 </td>
                 <td class="px-6 py-4">
                   <div class="font-medium text-slate-900 flex items-center gap-2">
@@ -624,10 +686,15 @@ const handlePrint = () => {
                     row.group.asset.budgetType }})</div>
                 </td>
                 <td class="px-6 py-4">
-                  <div v-if="!row.group.isGroup && row.group.asset.distributions && row.group.asset.distributions.length > 0">
-                    <div class="font-medium text-slate-800">{{ row.group.asset.distributions[0].responsiblePerson?.name || 'ไม่ระบุ' }}</div>
+                  <div
+                    v-if="!row.group.isGroup && row.group.asset.distributions && row.group.asset.distributions.length > 0">
+                    <div class="font-medium text-slate-800">
+                      {{ row.group.asset.distributions[0].responsiblePerson?.name ||
+                        row.group.asset.distributions[0].guestName || 'ไม่ระบุ' }}
+                    </div>
                     <div class="text-xs text-slate-500 mt-0.5">
-                      {{ row.group.asset.distributions[0].building || 'ไม่ระบุอาคาร' }} / {{ row.group.asset.distributions[0].room || 'ไม่ระบุห้อง' }}
+                      {{ row.group.asset.distributions[0].building || 'ไม่ระบุอาคาร' }} / {{
+                        row.group.asset.distributions[0].room || 'ไม่ระบุห้อง' }}
                     </div>
                   </div>
                   <div v-else-if="!row.group.isGroup" class="text-slate-400 italic text-sm">ยังไม่จัดสรร</div>
@@ -690,7 +757,16 @@ const handlePrint = () => {
                   </div>
                 </td>
                 <td class="px-6 py-2.5">
-                  <span class="font-medium text-emerald-800">{{ row.asset.seq }}</span>
+                  <div class="flex items-center gap-2">
+                    <button v-if="row.asset.components && row.asset.components.length > 0"
+                      @click="toggleComponents(row.asset.id)"
+                      class="flex items-center justify-center w-5 h-5 rounded hover:bg-emerald-100 text-emerald-600 transition-colors"
+                      title="ดูอุปกรณ์ย่อย">
+                      <ChevronDown class="w-3 h-3 transition-transform duration-300"
+                        :class="{ 'rotate-180': expandedComponents.has(row.asset.id) }" />
+                    </button>
+                    <span class="font-medium text-emerald-800">{{ row.asset.seq }}</span>
+                  </div>
                 </td>
                 <td class="px-6 py-2.5">
                   <div class="text-sm text-slate-700">{{ row.asset.name }}</div>
@@ -700,9 +776,14 @@ const handlePrint = () => {
                 </td>
                 <td class="px-6 py-2.5 text-xs text-slate-500">
                   <div v-if="row.asset.distributions && row.asset.distributions.length > 0">
-                    <div class="font-medium text-slate-800">{{ row.asset.distributions[0].responsiblePerson?.name || 'ไม่ระบุ' }}</div>
+                    <div class="font-medium text-slate-800">
+                      {{ row.asset.distributions[0].responsiblePerson?.name || row.asset.distributions[0].guestName ||
+                      'ไม่ระบุ' }}
+                    </div>
                     <div class="text-[10px] text-slate-400 mt-0.5">
-                      {{ row.asset.distributions[0].building || 'ไม่ระบุอาคาร' }} / {{ row.asset.distributions[0].room || 'ไม่ระบุห้อง' }}
+                      {{ row.asset.distributions[0].building || 'ไม่ระบุอาคาร' }} / {{ row.asset.distributions[0].room
+                      ||
+                      'ไม่ระบุห้อง' }}
                     </div>
                   </div>
                   <div v-else class="text-slate-400 italic">ยังไม่จัดสรร</div>
@@ -737,6 +818,50 @@ const handlePrint = () => {
                   ดูอย่างเดียว
                 </td>
               </tr>
+
+              <!-- Sub Components -->
+              <tr v-else-if="row.type === 'component'"
+                class="bg-amber-50/20 hover:bg-amber-50/60 transition-colors border-l-4 border-amber-300 relative z-0">
+                <td class="px-6 py-2.5 text-center">
+                  <div class="flex justify-end pr-8">
+                    <div class="w-4 h-4 rounded-bl-lg border-b-2 border-l-2 border-amber-200"></div>
+                  </div>
+                </td>
+                <td class="px-6 py-2.5">
+                  <span class="text-xs font-medium px-2 py-0.5 rounded bg-slate-100 text-slate-500">อุปกรณ์ย่อย</span>
+                </td>
+                <td class="px-6 py-2.5">
+                  <div class="flex flex-col">
+                    <span class="text-sm font-medium text-slate-700">{{ row.component.name }}</span>
+                    <span v-if="row.component.serialNumber" class="text-[10px] text-slate-500 font-mono">SN: {{
+                      row.component.serialNumber }}</span>
+                  </div>
+                </td>
+                <td class="px-6 py-2.5 text-xs text-slate-500">
+                  -
+                </td>
+                <td class="px-6 py-2.5 text-xs text-slate-500">
+                  <div class="text-slate-400 italic">ติดกับตัวหลัก</div>
+                </td>
+                <td class="px-6 py-2.5">
+                  <span
+                    :class="['px-2 py-0.5 text-[10px] font-medium rounded-full border inline-flex items-center', getStatusBadge(row.component.status)]">
+                    {{ getStatusText(row.component.status) }}
+                  </span>
+                </td>
+                <td v-if="canManage" class="px-6 py-2.5 text-center">
+                  <div class="flex items-center justify-center space-x-1">
+                    <button @click="openEditModal(row.parentAsset)"
+                      class="p-1.5 rounded-lg text-amber-500 hover:text-amber-700 hover:bg-amber-100 hover:shadow-sm transition-all"
+                      title="จัดการอุปกรณ์ย่อย (แก้ไขผ่านครุภัณฑ์หลัก)">
+                      <Edit class="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </td>
+                <td v-else class="px-6 py-2.5 text-center text-slate-300 text-xs">
+                  -
+                </td>
+              </tr>
             </template>
 
             <tr v-if="filteredAssets.length === 0" key="empty-state">
@@ -756,26 +881,19 @@ const handlePrint = () => {
       <div
         class="p-4 border-t border-emerald-50 bg-white flex flex-col sm:flex-row justify-between items-center text-sm text-slate-500">
         <div class="mb-4 sm:mb-0">
-          แสดง {{ groupedAssets.length > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0 }} ถึง {{ Math.min(currentPage * itemsPerPage, groupedAssets.length) }} จาก {{ groupedAssets.length }} กลุ่มรายการ
+          แสดง {{ groupedAssets.length > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0 }} ถึง {{ Math.min(currentPage *
+            itemsPerPage, groupedAssets.length) }} จาก {{ groupedAssets.length }} กลุ่มรายการ
         </div>
         <div class="flex items-center space-x-1">
-          <button 
-            @click="currentPage--"
-            :disabled="currentPage === 1"
-            :class="['px-3 py-1.5 border rounded-lg transition-colors', currentPage === 1 ? 'border-slate-200 text-slate-400 bg-slate-50 cursor-not-allowed' : 'border-slate-200 hover:border-emerald-200 hover:bg-emerald-50 text-slate-700']"
-          >ก่อนหน้า</button>
-          
-          <button
-            v-for="page in totalPages" :key="page"
-            @click="currentPage = page"
-            :class="['px-3 py-1.5 rounded-lg transition-colors', currentPage === page ? 'font-bold text-white bg-gradient-to-r from-[#065f46] to-[#047857] shadow-sm' : 'border border-slate-200 hover:border-emerald-200 hover:bg-emerald-50 text-slate-700']"
-          >{{ page }}</button>
-          
-          <button 
-            @click="currentPage++"
-            :disabled="currentPage === totalPages"
-            :class="['px-3 py-1.5 border rounded-lg transition-colors', currentPage === totalPages ? 'border-slate-200 text-slate-400 bg-slate-50 cursor-not-allowed' : 'border-slate-200 hover:border-emerald-200 hover:bg-emerald-50 text-slate-700']"
-          >ถัดไป</button>
+          <button @click="currentPage--" :disabled="currentPage === 1"
+            :class="['px-3 py-1.5 border rounded-lg transition-colors', currentPage === 1 ? 'border-slate-200 text-slate-400 bg-slate-50 cursor-not-allowed' : 'border-slate-200 hover:border-emerald-200 hover:bg-emerald-50 text-slate-700']">ก่อนหน้า</button>
+
+          <button v-for="page in totalPages" :key="page" @click="currentPage = page"
+            :class="['px-3 py-1.5 rounded-lg transition-colors', currentPage === page ? 'font-bold text-white bg-gradient-to-r from-[#065f46] to-[#047857] shadow-sm' : 'border border-slate-200 hover:border-emerald-200 hover:bg-emerald-50 text-slate-700']">{{
+            page }}</button>
+
+          <button @click="currentPage++" :disabled="currentPage === totalPages"
+            :class="['px-3 py-1.5 border rounded-lg transition-colors', currentPage === totalPages ? 'border-slate-200 text-slate-400 bg-slate-50 cursor-not-allowed' : 'border-slate-200 hover:border-emerald-200 hover:bg-emerald-50 text-slate-700']">ถัดไป</button>
         </div>
       </div>
     </div>
@@ -966,6 +1084,12 @@ const handlePrint = () => {
           <textarea v-model="tempAsset.remark" rows="2"
             class="w-full border border-slate-300 rounded-lg py-2 px-3 text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#065f46]/20 focus:border-[#065f46]"></textarea>
         </div>
+
+        <!-- อุปกรณ์ย่อย (Components) -->
+        <div v-if="tempAsset.id" class="mt-4">
+          <h3 class="font-bold text-slate-800 text-sm border-b pb-1 mb-3">5. อุปกรณ์ย่อยในชุด</h3>
+          <AssetComponentsManager :assetId="tempAsset.id" />
+        </div>
       </div>
 
       <template #footer>
@@ -1029,7 +1153,7 @@ const handlePrint = () => {
 
   <!-- Print Template Container -->
   <div class="hidden print:block">
-    <PrintAssetListTemplate :assets="filteredAssets" />
+    <PrintAssetListTemplate :assets="filteredAssets" :numeralType="numeralType" />
   </div>
 </template>
 

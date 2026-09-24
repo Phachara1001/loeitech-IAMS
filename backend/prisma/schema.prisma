@@ -92,6 +92,7 @@ model Asset {
   locationId        Int?
   location          Location? @relation(fields: [locationId], references: [id])
   
+  components        AssetComponent[]
   distributions     AssetDistribution[]
   borrows           BorrowTransaction[]
   repairs           RepairRequest[]
@@ -103,15 +104,37 @@ model Asset {
   @@map("assets")
 }
 
+model AssetComponent {
+  id              Int       @id @default(autoincrement())
+  assetId         Int
+  asset           Asset     @relation(fields: [assetId], references: [id])
+  name            String    // ชื่ออุปกรณ์ย่อย e.g. MacOS เครื่องที่ 1
+  serialNumber    String?   // หมายเลขประจำเครื่อง (ถ้ามี)
+  specifications  String?   // สเปคหรือรายละเอียดเพิ่มเติม
+  status          String    @default("Active") // Active, Disposed, etc.
+  
+  disposalRequests DisposalRequest[]
+  distributions    AssetDistribution[]
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@map("asset_components")
+}
+
 model AssetDistribution {
   id                  Int       @id @default(autoincrement())
   assetId             Int
   asset               Asset     @relation(fields: [assetId], references: [id])
+  assetComponentId    Int?
+  assetComponent      AssetComponent? @relation(fields: [assetComponentId], references: [id])
+
   department          String
   building            String
   room                String
-  responsiblePersonId Int
-  responsiblePerson   User      @relation(fields: [responsiblePersonId], references: [id])
+  responsiblePersonId Int?
+  responsiblePerson   User?     @relation(fields: [responsiblePersonId], references: [id])
+  guestName           String?   // สำหรับคนที่ไม่ได้ลงทะเบียนในระบบ
   assignDate          DateTime  @default(now())
   returnDate          DateTime?
   isCurrent           Boolean   @default(true)
@@ -259,6 +282,10 @@ model DisposalRequest {
   disposalCode String    // รหัสคำขอจำหน่าย เช่น 'DSP-2569-0001'
   assetId      Int
   asset        Asset     @relation(fields: [assetId], references: [id])
+  
+  assetComponentId Int?
+  assetComponent   AssetComponent? @relation(fields: [assetComponentId], references: [id])
+  
   method       String    // ขายทอดตลาด, บริจาค, โอน, แปรสภาพ, ทำลาย
   meetingDate  DateTime  // วันที่ประชุมคณะกรรมการ
   committee    String    // รายชื่อคณะกรรมการ (คั่นด้วยจุลภาค)

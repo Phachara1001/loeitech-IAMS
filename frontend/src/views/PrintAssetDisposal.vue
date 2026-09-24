@@ -26,6 +26,7 @@ const years = computed(() => {
 })
 
 const targetAssetIds = ref([])
+const targetComponentIds = ref([])
 
 const fetchData = async () => {
   isLoading.value = true
@@ -35,7 +36,8 @@ const fetchData = async () => {
     if (disposalCode.value) {
       // ดึงข้อมูลคำขอจำหน่ายตามรหัสที่ระบุ
       const { data } = await api.get(`/disposal-requests?search=${disposalCode.value}`)
-      targetAssetIds.value = data.data.filter(r => r.disposalCode === disposalCode.value).map(r => r.assetId)
+      targetAssetIds.value = data.data.filter(r => r.disposalCode === disposalCode.value && !r.assetComponentId).map(r => r.assetId)
+      targetComponentIds.value = data.data.filter(r => r.disposalCode === disposalCode.value && r.assetComponentId).map(r => r.assetComponentId)
       
       // ตั้งค่าปีงบประมาณตามคำขอแรก (ถ้ามี)
       if (data.data.length > 0) {
@@ -48,8 +50,29 @@ const fetchData = async () => {
       }
     }
     
+    // แปลงข้อมูล components ให้เป็นรายการเดียวกับ assets เพื่อให้ปริ้นออกมาได้
+    const allItems = []
+    assetsData.forEach(a => {
+      allItems.push(a)
+      if (a.components && a.components.length > 0) {
+        a.components.forEach((comp, idx) => {
+          allItems.push({
+            ...comp,
+            id: `comp-${comp.id}`,
+            realId: comp.id,
+            isComponent: true,
+            parentAsset: a,
+            seq: a.seq ? `${a.seq}/${idx + 1}` : `อุปกรณ์ย่อย/${idx + 1}`,
+            name: comp.name,
+            unitPrice: 0,
+            price: 0
+          })
+        })
+      }
+    })
+    
     // เก็บรายการทั้งหมดเพื่อนำไปใช้นับ 'เต็มตามบัญชี' ไม่ว่าจะปริ้นจากรหัสคำขอหรือปริ้นภาพรวม
-    assets.value = assetsData
+    assets.value = allItems
     
   } catch (err) {
     error.value = 'ไม่สามารถดึงข้อมูลครุภัณฑ์ได้'
@@ -67,13 +90,21 @@ const filteredAssets = computed(() => {
   assets.value.forEach(asset => {
     // แยก base sequence หากมีรูปแบบ -001, -002 ต่อท้าย
     const match = asset.seq ? asset.seq.match(/^(.*)-(\d{1,4})$/) : null
-    const baseSeq = match ? match[1] : (asset.seq || asset.id)
+    let baseSeq = match ? match[1] : (asset.seq || asset.id)
+    if (asset.isComponent) {
+      baseSeq = `comp-${asset.parentAsset.seq}-${asset.name}`
+    }
+    
     const suffix = match ? match[2] : null
     const itemPrice = parseFloat(asset.unitPrice) || parseFloat(asset.price) || 0
     
     let isTargetStatus = false
     if (disposalCode.value) {
-      isTargetStatus = targetAssetIds.value.includes(asset.id)
+      if (asset.isComponent) {
+        isTargetStatus = targetComponentIds.value.includes(asset.realId)
+      } else {
+        isTargetStatus = targetAssetIds.value.includes(asset.id)
+      }
     } else if (selectedStatusType.value === 'pending') {
       isTargetStatus = asset.status === 'Broken' || asset.status === 'Repaired' || asset.status === 'Repairing'
     } else if (selectedStatusType.value === 'approved') {
@@ -84,14 +115,14 @@ const filteredAssets = computed(() => {
       groups[baseSeq] = {
         ...asset,
         baseSeq: baseSeq,
-        brokenSuffixes: (suffix && isTargetStatus) ? [suffix] : [],
+        brokenSuffixes: (suffix && isTargetStatus && !asset.isComponent) ? [suffix] : [],
         totalQuantity: 1, // เต็มตามบัญชี
         brokenQuantity: isTargetStatus ? 1 : 0, // ตามสถานะที่เลือก
         unitPrice: itemPrice,
         totalPrice: isTargetStatus ? itemPrice : 0 // คิดเฉพาะที่ตรงตามสถานะ
       }
     } else {
-      if (suffix && isTargetStatus) groups[baseSeq].brokenSuffixes.push(suffix)
+      if (suffix && isTargetStatus && !asset.isComponent) groups[baseSeq].brokenSuffixes.push(suffix)
       groups[baseSeq].totalQuantity += 1
       if (isTargetStatus) {
         groups[baseSeq].brokenQuantity += 1
@@ -131,7 +162,7 @@ const filteredAssets = computed(() => {
 
       group.displaySeq = `${group.baseSeq}-${formattedSuffixes}`
     } else {
-      group.displaySeq = group.baseSeq
+      group.displaySeq = group.isComponent ? group.seq : group.baseSeq
     }
     return group
   })
@@ -140,8 +171,8 @@ const filteredAssets = computed(() => {
 const paginatedAssets = computed(() => {
   const items = filteredAssets.value
   const chunks = []
-  for (let i = 0; i < items.length; i += 10) {
-    chunks.push(items.slice(i, i + 10))
+  for (let i = 0; i < items.length; i += 8) {
+    chunks.push(items.slice(i, i + 8))
   }
   if (chunks.length === 0) chunks.push([])
   return chunks
@@ -364,7 +395,7 @@ const printDocument = () => {
         </thead>
         <tbody>
           <tr v-for="(asset, index) in page" :key="asset.id || index" class="h-7">
-            <td class="border border-black px-1 py-0.5 text-center font-sarabun">{{ (pageIndex * 10) + index + 1 }}</td>
+            <td class="border border-black px-1 py-0.5 text-center font-sarabun">{{ (pageIndex * 8) + index + 1 }}</td>
             <td class="border border-black px-1 py-0.5 text-center font-sarabun">{{ formatThaiDateShort(asset.createdAt)
               }}</td>
             <td class="border border-black px-1 py-0.5 text-center font-sarabun">{{ asset.displaySeq || '-' }}
@@ -385,8 +416,8 @@ const printDocument = () => {
             }}</td>
           </tr>
 
-          <!-- Fill empty rows up to 10 rows minimum to look like a full page -->
-          <tr v-for="n in Math.max(0, 10 - page.length)" :key="'empty-' + n" class="h-7">
+          <!-- Fill empty rows up to 8 rows minimum to look like a full page -->
+          <tr v-for="n in Math.max(0, 8 - page.length)" :key="'empty-' + n" class="h-7">
             <td class="border border-black px-1 py-0.5"></td>
             <td class="border border-black px-1 py-0.5"></td>
             <td class="border border-black px-1 py-0.5"></td>

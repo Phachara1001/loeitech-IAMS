@@ -17,4 +17,10 @@ router.post('/', validateAssetInput, assetController.createAsset);
 router.put('/:id', validateAssetInput, assetController.updateAsset);
 router.delete('/:id', assetController.deleteAsset);
 
+// Asset Components
+router.get('/components/:id/timeline', assetController.getComponentTimeline);
+router.post('/:id/components', assetController.createAssetComponent);
+router.put('/:id/components/:componentId', assetController.updateAssetComponent);
+router.delete('/:id/components/:componentId', assetController.deleteAssetComponent);
+
 export default router;

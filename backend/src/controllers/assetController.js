@@ -287,3 +287,83 @@ export const getAssetTimeline = async (req, res, next) => {
     next(error);
   }
 };
+
+// ==========================================
+// Asset Components Endpoints
+// ==========================================
+
+export const getComponentTimeline = async (req, res, next) => {
+  try {
+    const data = await assetService.getComponentTimeline(req.params.id);
+    res.status(200).json({ status: "success", data });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const createAssetComponent = async (req, res, next) => {
+  try {
+    const componentData = { ...req.body, assetId: Number(req.params.id) };
+    const newComponent = await assetService.createAssetComponent(componentData);
+    
+    await logActivity({
+      req,
+      action: "INSERT",
+      entityType: "ASSET_COMPONENT",
+      entityId: newComponent.id,
+      newValue: newComponent,
+      details: `เพิ่มอุปกรณ์ย่อย "${newComponent.name}" ให้กับครุภัณฑ์ ID: ${req.params.id}`,
+    });
+
+    res.status(201).json({
+      status: "success",
+      data: newComponent,
+      message: "เพิ่มอุปกรณ์ย่อยสำเร็จ",
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const updateAssetComponent = async (req, res, next) => {
+  try {
+    const oldComponent = await assetService.getAssetComponentById(req.params.componentId);
+    const updatedComponent = await assetService.updateAssetComponent(req.params.componentId, req.body);
+    
+    await logActivity({
+      req,
+      action: "UPDATE",
+      entityType: "ASSET_COMPONENT",
+      entityId: updatedComponent.id,
+      oldValue: oldComponent,
+      newValue: updatedComponent,
+      details: `แก้ไขอุปกรณ์ย่อย "${updatedComponent.name}"`,
+    });
+
+    res.status(200).json({
+      status: "success",
+      data: updatedComponent,
+      message: "อัปเดตข้อมูลอุปกรณ์ย่อยสำเร็จ",
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const deleteAssetComponent = async (req, res, next) => {
+  try {
+    await assetService.deleteAssetComponent(req.params.componentId);
+    
+    await logActivity({
+      req,
+      action: "DELETE",
+      entityType: "ASSET_COMPONENT",
+      entityId: req.params.componentId,
+      details: `ลบอุปกรณ์ย่อย ID: ${req.params.componentId} ของครุภัณฑ์ ID: ${req.params.id}`,
+    });
+
+    res.status(200).json({ status: "success", message: "ลบอุปกรณ์ย่อยสำเร็จ" });
+  } catch (error) {
+    next(error);
+  }
+};

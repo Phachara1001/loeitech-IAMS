@@ -10,7 +10,12 @@ const ELIGIBLE_STATUSES = ['Broken', 'Repaired'];
  */
 export const findEligibleAssets = async () => {
   return await prisma.asset.findMany({
-    where: { status: { in: ELIGIBLE_STATUSES } },
+    where: {
+      OR: [
+        { status: { in: ELIGIBLE_STATUSES } },
+        { components: { some: { status: { in: ELIGIBLE_STATUSES } } } }
+      ]
+    },
     select: {
       id: true,
       seq: true,
@@ -18,7 +23,11 @@ export const findEligibleAssets = async () => {
       status: true,
       department: true,
       unitPrice: true,
-      location: { select: { building: true, name: true } }
+      location: { select: { building: true, name: true } },
+      components: {
+        where: { status: { in: ELIGIBLE_STATUSES } },
+        select: { id: true, name: true, status: true }
+      }
     },
     orderBy: { updatedAt: 'desc' }
   });
@@ -34,11 +43,15 @@ export const findAll = async ({ search = '' } = {}) => {
           OR: [
             { disposalCode: { contains: search, mode: 'insensitive' } },
             { asset: { name: { contains: search, mode: 'insensitive' } } },
-            { asset: { seq: { contains: search, mode: 'insensitive' } } }
+            { asset: { seq: { contains: search, mode: 'insensitive' } } },
+            { assetComponent: { name: { contains: search, mode: 'insensitive' } } }
           ]
         }
       : {},
-    include: { asset: { select: { seq: true, name: true } } },
+    include: { 
+      asset: { select: { seq: true, name: true } },
+      assetComponent: { select: { name: true } }
+    },
     orderBy: { createdAt: 'desc' }
   });
 };
@@ -46,7 +59,7 @@ export const findAll = async ({ search = '' } = {}) => {
 export const findById = async (id) => {
   return await prisma.disposalRequest.findUnique({
     where: { id: Number(id) },
-    include: { asset: true }
+    include: { asset: true, assetComponent: true }
   });
 };
 
@@ -75,7 +88,10 @@ export const countByYearPrefix = async (prefix) => {
 export const create = async (data) => {
   return await prisma.disposalRequest.create({
     data,
-    include: { asset: { select: { seq: true, name: true, unitPrice: true } } }
+    include: { 
+      asset: { select: { seq: true, name: true, unitPrice: true } },
+      assetComponent: { select: { name: true } }
+    }
   });
 };
 
@@ -89,7 +105,10 @@ export const updateStatus = async (id, data) => {
   return await prisma.disposalRequest.update({
     where: { id: Number(id) },
     data,
-    include: { asset: { select: { seq: true, name: true, unitPrice: true } } }
+    include: { 
+      asset: { select: { seq: true, name: true, unitPrice: true } },
+      assetComponent: { select: { name: true } }
+    }
   });
 };
 
@@ -103,22 +122,46 @@ export const updateStatusByDisposalCode = async (disposalCode, data) => {
 export const findByDisposalCode = async (disposalCode) => {
   return await prisma.disposalRequest.findMany({
     where: { disposalCode },
-    include: { asset: { select: { id: true, seq: true, name: true, unitPrice: true } } }
+    include: { 
+      asset: { select: { id: true, seq: true, name: true, unitPrice: true } },
+      assetComponent: { select: { id: true, name: true } }
+    }
   });
 };
 
-export const markDisposedWithAssetUpdate = async (id, assetId) => {
-  return await prisma.$transaction([
+export const markDisposedWithAssetUpdate = async (id, assetId, assetComponentId = null) => {
+  const transactions = [
     prisma.disposalRequest.update({
       where: { id: Number(id) },
       data: { status: 'DISPOSED', disposedAt: new Date() },
       include: { asset: { select: { seq: true, name: true } } }
-    }),
-    prisma.asset.update({
-      where: { id: Number(assetId) },
-      data: { status: 'Scrapped' }
     })
-  ]);
+  ];
+
+  if (assetComponentId) {
+    transactions.push(
+      prisma.assetComponent.update({
+        where: { id: Number(assetComponentId) },
+        data: { status: 'Scrapped' }
+      })
+    );
+    // You could also check if all components are scrapped here, but keeping it simple for now
+    transactions.push(
+      prisma.asset.update({
+        where: { id: Number(assetId) },
+        data: { status: 'Partially Disposed' }
+      })
+    );
+  } else {
+    transactions.push(
+      prisma.asset.update({
+        where: { id: Number(assetId) },
+        data: { status: 'Scrapped' }
+      })
+    );
+  }
+
+  return await prisma.$transaction(transactions);
 };
 
 /**

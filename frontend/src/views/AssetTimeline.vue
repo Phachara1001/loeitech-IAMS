@@ -101,14 +101,16 @@ async function fetchAssets() {
   isLoading.value = true
   try {
     const data = await inventoryApi.getAssets()
+    const formatted = []
+    
     // Map backend schema to format expected by view
-    assets.value = data.map(a => {
+    data.forEach(a => {
       const currentDist = a.distributions && a.distributions.length > 0 ? a.distributions[0] : null;
       let ownerName = 'ส่วนกลาง';
       let currentLocation = 'ไม่ระบุสถานที่';
 
       if (currentDist) {
-        ownerName = currentDist.responsiblePerson?.name || 'ไม่ระบุ';
+        ownerName = currentDist.guestName ? `${currentDist.guestName} (ภายนอก)` : (currentDist.responsiblePerson?.name || 'ไม่ระบุ');
         const roomStr = currentDist.room || '';
         const bldgStr = currentDist.building || '';
         if (roomStr && bldgStr) {
@@ -118,8 +120,9 @@ async function fetchAssets() {
         }
       }
 
-      return {
+      const mainAsset = {
         id: a.id,
+        isComponent: false,
         seq: a.seq,
         name: a.name,
         code: a.referenceCode || '-',
@@ -132,7 +135,30 @@ async function fetchAssets() {
         status: a.status,
         image: a.image
       }
+      formatted.push(mainAsset)
+      
+      if (a.components && a.components.length > 0) {
+        a.components.forEach((comp, idx) => {
+          formatted.push({
+            id: comp.id,
+            isComponent: true,
+            parentId: a.id,
+            seq: `${a.seq || '-'}/${idx + 1}`,
+            name: comp.name,
+            code: '-',
+            serial: comp.serialNumber || '-',
+            category: a.category,
+            ownerId: a.department,
+            ownerName: ownerName,
+            department: a.department || 'ไม่ระบุ',
+            currentLocation: currentLocation,
+            status: comp.status === 'Broken' ? 'ชำรุด' : (comp.status === 'Repaired' ? 'กำลังซ่อม' : (comp.status === 'Disposed' ? 'จำหน่ายแล้ว' : 'ใช้งานปกติ')),
+            image: null
+          })
+        })
+      }
     })
+    assets.value = formatted
   } catch (err) {
     toast.error('ไม่สามารถโหลดข้อมูลครุภัณฑ์ได้: ' + err.message)
   } finally {
@@ -185,7 +211,7 @@ const groupedAssets = computed(() => {
 
   filteredAssets.value.forEach(asset => {
     const seq = asset.seq || ''
-    const match = seq.match(/^(.*?)-\d+$/)
+    const match = seq.match(/^(.*?)-\d+(?:\/\d+)?$/)
     const prefix = match ? match[1] : seq
 
     if (!groupsMap[prefix]) {
@@ -250,7 +276,7 @@ const flattenedRows = computed(() => {
       group.items.forEach(asset => {
         rows.push({
           type: 'item',
-          key: 'item-' + asset.id,
+          key: (asset.isComponent ? 'comp-' : 'asset-') + asset.id,
           asset: asset,
           group: group
         })
@@ -261,24 +287,29 @@ const flattenedRows = computed(() => {
 })
 
 const selectedAssetId = ref(null)
+const selectedAssetIsComponent = ref(false)
 const timelineLogs = ref([])
 
 const currentAsset = computed(() => {
-  return assets.value.find(a => a.id === selectedAssetId.value) || null
+  return assets.value.find(a => a.id === selectedAssetId.value && a.isComponent === selectedAssetIsComponent.value) || null
 })
 
 const viewAssetTimeline = async (asset) => {
   selectedAssetId.value = asset.id
+  selectedAssetIsComponent.value = asset.isComponent
   currentView.value = 'TIMELINE'
 
   isTimelineLoading.value = true
   try {
-    const data = await inventoryApi.getAssetTimeline(asset.id)
+    const data = asset.isComponent 
+      ? await inventoryApi.getComponentTimeline(asset.id)
+      : await inventoryApi.getAssetTimeline(asset.id)
+      
     // data = { assetStatus, timeline }
     timelineLogs.value = data.timeline
 
     // อัปเดตสถานะ asset ในรายการทันที แบบ real-time จากฐานข้อมูล
-    const idx = assets.value.findIndex(a => a.id === asset.id)
+    const idx = assets.value.findIndex(a => a.id === asset.id && a.isComponent === asset.isComponent)
     if (idx !== -1 && data.assetStatus) {
       assets.value[idx].status = data.assetStatus
     }

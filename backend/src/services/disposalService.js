@@ -46,6 +46,7 @@ export const createDisposalRequest = async (data, currentUserId) => {
   return await disposalRepository.create({
     disposalCode,
     assetId: Number(data.assetId),
+    assetComponentId: data.assetComponentId ? Number(data.assetComponentId) : null,
     method: data.method,
     meetingDate: new Date(data.meetingDate),
     committee: data.committee,
@@ -68,16 +69,23 @@ export const createDisposalRequestBatch = async (data, currentUserId) => {
     throw new Error('กรุณาระบุรายการครุภัณฑ์ที่ต้องการแทงจำหน่าย');
   }
 
-  const requestsData = data.assetIds.map(assetId => ({
-    disposalCode,
-    assetId: Number(assetId),
-    method: data.method,
-    meetingDate: new Date(data.meetingDate),
-    committee: data.committee,
-    resolution: data.resolution,
-    status: 'PENDING',
-    requestedBy
-  }));
+  const requestsData = data.assetIds.map(item => {
+    const isObj = typeof item === 'object' && item !== null;
+    const aId = isObj ? Number(item.assetId) : Number(item);
+    const cId = isObj && item.assetComponentId ? Number(item.assetComponentId) : null;
+    
+    return {
+      disposalCode,
+      assetId: aId,
+      assetComponentId: cId,
+      method: data.method,
+      meetingDate: new Date(data.meetingDate),
+      committee: data.committee,
+      resolution: data.resolution,
+      status: 'PENDING',
+      requestedBy
+    };
+  });
 
   await disposalRepository.createMany(requestsData);
   return disposalCode;
@@ -107,12 +115,16 @@ export const approveRequestBatch = async (disposalCode, approverName) => {
     disposedAt: new Date()
   });
 
-  // อัปเดต asset 
-  for (const assetId of assetIds) {
-    // Cannot use markDisposedBatchWithAssetUpdate because it overrides updateStatusByDisposalCode,
-    // Actually, I can just update assets directly here
-    const { update } = await import('../repositories/assetRepository.js');
-    await update(assetId, { status: 'Scrapped' });
+  // อัปเดต asset / component
+  const { update, updateComponent } = await import('../repositories/assetRepository.js');
+  
+  for (const req of requests) {
+    if (req.assetComponentId) {
+      await updateComponent(req.assetComponentId, { status: 'Scrapped' });
+      await update(req.assetId, { status: 'Partially Disposed' });
+    } else {
+      await update(req.assetId, { status: 'Scrapped' });
+    }
   }
 
   return requests;
@@ -140,6 +152,6 @@ export const markDisposed = async (id) => {
     err.status = 400;
     throw err;
   }
-  const [updated] = await disposalRepository.markDisposedWithAssetUpdate(id, req.assetId);
+  const [updated] = await disposalRepository.markDisposedWithAssetUpdate(id, req.assetId, req.assetComponentId);
   return updated;
 };

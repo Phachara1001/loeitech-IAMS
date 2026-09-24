@@ -146,6 +146,9 @@ export const createAssetDistribution = (data) =>
 export const getAssetTimeline = (id) =>
   api.get(`/assets/${id}/timeline`).then((r) => r.data.data)
 
+export const getComponentTimeline = (id) =>
+  api.get(`/assets/components/${id}/timeline`).then((r) => r.data.data)
+
 // ==========================================
 // Users List (for Selection)
 // ==========================================

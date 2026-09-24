@@ -91,12 +91,22 @@ async function fetchData() {
       const compName = d.assetComponent?.name || '';
       const displayName = isComp ? `${baseName} (${compName})` : baseName;
 
+      let seq = d.asset?.seq || '-';
+      if (isComp && d.asset?.components) {
+        const compIndex = d.asset.components.findIndex(c => c.id === d.assetComponentId);
+        if (compIndex !== -1) {
+          seq = `${seq}/${compIndex + 1}`;
+        }
+      }
+
       return {
         id: d.id.toString(),
         assetId: d.assetId,
         assetComponentId: d.assetComponentId,
-        assetCode: d.asset?.seq || '-',
+        assetCode: seq,
         assetName: displayName,
+        parentAssetName: baseName,
+        componentName: compName,
         department: d.department,
         building: d.building,
         room: d.room,
@@ -166,9 +176,17 @@ const groupedDistributions = computed(() => {
   const groupsMap = {} // Key: prefix
 
   filteredDistributions.value.forEach(item => {
-    const seq = item.assetCode || ''
-    const match = seq.match(/^(.*?)-\d+$/)
-    const prefix = match ? match[1] : seq
+    let seq = item.assetCode || ''
+    
+    // For components, the seq might look like "7440-001-001/601-001/1".
+    // We want the prefix to be the base of the parent asset, e.g. "7440-001-001/601".
+    let baseSeqForGrouping = seq;
+    if (item.assetComponentId) {
+      baseSeqForGrouping = seq.replace(/\/\d+$/, '');
+    }
+
+    const match = baseSeqForGrouping.match(/^(.*?)-\d+$/)
+    const prefix = match ? match[1] : baseSeqForGrouping
 
     // Unique key per asset or component
     const itemKey = item.assetComponentId ? `${seq}-comp-${item.assetComponentId}` : seq
@@ -335,9 +353,11 @@ const groupedSelectedAssets = computed(() => {
 
   const groups = {}
   selected.forEach(asset => {
-    const seq = asset.isComp ? `${asset.parentSeq} (ย่อย)` : (asset.seq || asset.id)
+    // Both components and parents should use the parent's seq for grouping
+    const seq = asset.isComp ? asset.parentSeq : (asset.seq || asset.id)
     const match = seq.toString().match(/^(.*)-(\d{1,4})$/)
-    const baseSeq = match && !asset.isComp ? match[1] : seq
+    
+    const baseSeq = match ? match[1] : seq
     const suffix = match && !asset.isComp ? match[2] : null
 
     if (!groups[baseSeq]) {
@@ -349,7 +369,9 @@ const groupedSelectedAssets = computed(() => {
         assets: [asset]
       }
     } else {
-      if (suffix) groups[baseSeq].suffixes.push(suffix)
+      if (suffix && !groups[baseSeq].suffixes.includes(suffix)) {
+        groups[baseSeq].suffixes.push(suffix)
+      }
       groups[baseSeq].count += 1
       groups[baseSeq].assets.push(asset)
     }
@@ -626,8 +648,8 @@ const handleAssignAsset = async () => {
                       <div class="font-mono font-extrabold text-slate-900 text-base">
                         {{ row.group.prefix }}
                       </div>
-                      <div class="text-xs text-slate-500 font-bold mt-0.5" :title="row.group.baseItem.assetName">
-                        {{ formatAssetName(row.group.baseItem.assetName) }}
+                      <div class="text-xs text-slate-500 font-bold mt-0.5" :title="row.group.baseItem.parentAssetName || row.group.baseItem.assetName">
+                        {{ formatAssetName(row.group.baseItem.parentAssetName || row.group.baseItem.assetName) }}
                         <span
                           class="ml-2 px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold">รวม
                           {{ row.group.totalUniqueItems }} รายการ</span>
@@ -701,9 +723,17 @@ const handleAssignAsset = async () => {
                     <div class="w-6 h-6 flex justify-end items-start pt-1 pr-1 shrink-0">
                       <div class="w-3 h-3 rounded-bl-lg border-b-2 border-l-2 border-emerald-200"></div>
                     </div>
-                    <div class="font-mono font-extrabold text-slate-900 text-sm"
-                      :class="{ 'opacity-60': !row.item.is_current }">
-                      {{ row.item.assetCode }}
+                    <div class="flex flex-col">
+                      <div class="font-mono font-extrabold text-slate-900 text-sm"
+                        :class="{ 'opacity-60': !row.item.is_current }">
+                        {{ row.item.assetCode }}
+                      </div>
+                      <div v-if="row.item.assetComponentId" class="text-xs text-slate-600 mt-0.5">
+                        {{ row.item.componentName }}
+                      </div>
+                      <div v-else class="text-xs text-slate-500 mt-0.5 max-w-sm truncate" :title="row.item.assetName">
+                        {{ row.item.assetName }}
+                      </div>
                     </div>
                   </div>
                 </td>

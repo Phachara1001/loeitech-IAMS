@@ -399,7 +399,14 @@ export const createAssetComponent = async (data) => {
 };
 
 export const updateAssetComponent = async (id, data) => {
-  return await assetRepository.updateComponent(id, data);
+  const updatedData = { ...data };
+  const fieldsToRemove = ['id', 'createdAt', 'updatedAt', 'assetId', 'distributions', 'disposalRequests'];
+  fieldsToRemove.forEach(field => {
+    if (field in updatedData) {
+      delete updatedData[field];
+    }
+  });
+  return await assetRepository.updateComponent(id, updatedData);
 };
 
 export const deleteAssetComponent = async (id) => {

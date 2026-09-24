@@ -111,6 +111,7 @@ model AssetComponent {
   name            String    // ชื่ออุปกรณ์ย่อย e.g. MacOS เครื่องที่ 1
   serialNumber    String?   // หมายเลขประจำเครื่อง (ถ้ามี)
   specifications  String?   // สเปคหรือรายละเอียดเพิ่มเติม
+  image           String?   // URL รูปภาพอุปกรณ์ย่อย
   status          String    @default("Active") // Active, Disposed, etc.
   
   disposalRequests DisposalRequest[]

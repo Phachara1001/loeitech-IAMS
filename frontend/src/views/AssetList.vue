@@ -163,6 +163,10 @@ const groupedAssets = computed(() => {
       // Sort items sequentially (e.g. 001, 002, 003)
       group.items.sort((a, b) => (a.seq || '').localeCompare(b.seq || '', undefined, { numeric: true }))
 
+      // Update group.asset to be the one with an image, or the first sorted item
+      const assetWithImage = group.items.find(item => item.image)
+      group.asset = { ...(assetWithImage || group.items[0]) }
+
       const allSameStatus = group.items.every(item => item.status === group.items[0].status)
       group.status = allSameStatus ? group.items[0].status : 'Mixed'
 
@@ -290,11 +294,6 @@ const tempAsset = ref({
   brand: '', acquiredDate: '', acquisitionMethod: '', budgetType: '', unitPrice: 0, specifications: '', remark: ''
 })
 
-const openImageModal = (asset) => {
-  selectedAsset.value = asset
-  showImageModal.value = true
-}
-
 const openStatusModal = (asset) => {
   selectedAsset.value = asset
   tempStatus.value = asset.status
@@ -322,11 +321,27 @@ const saveStatus = async () => {
 // Image Upload State
 const fileInput = ref(null)
 const isUploadingImage = ref(false)
+const isComponentImageUpload = ref(false)
+const selectedParentAssetForUpload = ref(null)
 
 const triggerFileUpload = () => {
   if (fileInput.value) {
     fileInput.value.click()
   }
+}
+
+const openComponentImageModal = (component, parentAsset) => {
+  selectedAsset.value = component
+  isComponentImageUpload.value = true
+  selectedParentAssetForUpload.value = parentAsset
+  showImageModal.value = true
+}
+
+const openImageModal = (asset) => {
+  selectedAsset.value = asset
+  isComponentImageUpload.value = false
+  selectedParentAssetForUpload.value = null
+  showImageModal.value = true
 }
 
 const handleImageUpload = async (event) => {
@@ -349,8 +364,13 @@ const handleImageUpload = async (event) => {
     const { id, createdAt, updatedAt, components, distributions, ...updateData } = selectedAsset.value
     updateData.image = imageUrl
 
-    // Update the asset in database
-    await axios.put(`${API_BASE}/assets/${selectedAsset.value.id}`, updateData, { headers: authHeaders() })
+    if (isComponentImageUpload.value && selectedParentAssetForUpload.value) {
+      // Update the component in database
+      await axios.put(`${API_BASE}/assets/${selectedParentAssetForUpload.value.id}/components/${selectedAsset.value.id}`, updateData, { headers: authHeaders() })
+    } else {
+      // Update the asset in database
+      await axios.put(`${API_BASE}/assets/${selectedAsset.value.id}`, updateData, { headers: authHeaders() })
+    }
 
     // Update local state
     selectedAsset.value.image = imageUrl
@@ -823,8 +843,15 @@ const handlePrint = (type) => {
               <tr v-else-if="row.type === 'component'"
                 class="bg-amber-50/20 hover:bg-amber-50/60 transition-colors border-l-4 border-amber-300 relative z-0">
                 <td class="px-6 py-2.5 text-center">
-                  <div class="flex justify-end pr-8">
+                  <div class="flex items-center justify-center gap-2">
                     <div class="w-4 h-4 rounded-bl-lg border-b-2 border-l-2 border-amber-200"></div>
+                    <button @click="openComponentImageModal(row.component, row.parentAsset)"
+                      class="w-10 h-10 rounded-lg border border-slate-200 flex items-center justify-center overflow-hidden bg-white hover:ring-2 hover:ring-amber-500/50 hover:shadow-md transition-all group/img"
+                      :title="row.component.image ? 'ดูรูปภาพอุปกรณ์ย่อย' : 'ไม่มีรูปภาพ'">
+                      <img v-if="row.component.image" :src="row.component.image"
+                        class="w-full h-full object-cover" />
+                      <ImageIcon v-else class="w-4 h-4 text-slate-300 group-hover/img:text-amber-600" />
+                    </button>
                   </div>
                 </td>
                 <td class="px-6 py-2.5">

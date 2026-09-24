@@ -24,24 +24,24 @@ export const initMinio = async () => {
     if (!exists) {
       await minioClient.makeBucket(bucketName, 'us-east-1');
       console.log(`Bucket '${bucketName}' created in MinIO.`);
-
-      // Set public read policy so frontend can access images directly
-      const policy = {
-        Version: '2012-10-17',
-        Statement: [
-          {
-            Action: ['s3:GetObject'],
-            Effect: 'Allow',
-            Principal: { AWS: ['*'] },
-            Resource: [`arn:aws:s3:::${bucketName}/*`],
-          },
-        ],
-      };
-      await minioClient.setBucketPolicy(bucketName, JSON.stringify(policy));
-      console.log(`Bucket policy set to public read for '${bucketName}'.`);
     } else {
       console.log(`Bucket '${bucketName}' already exists.`);
     }
+
+    // ALWAYS set public read policy so frontend can access images directly
+    const policy = {
+      Version: '2012-10-17',
+      Statement: [
+        {
+          Action: ['s3:GetObject'],
+          Effect: 'Allow',
+          Principal: { AWS: ['*'] },
+          Resource: [`arn:aws:s3:::${bucketName}/*`],
+        },
+      ],
+    };
+    await minioClient.setBucketPolicy(bucketName, JSON.stringify(policy));
+    console.log(`Bucket policy set to public read for '${bucketName}'.`);
   } catch (error) {
     console.error('Error initializing MinIO bucket:', error);
   }

@@ -7,7 +7,14 @@ export const findAll = async () => {
         select: {
           id: true,
           seq: true,
-          name: true
+          name: true,
+          components: {
+            select: {
+              id: true,
+              name: true
+            },
+            orderBy: { id: 'asc' }
+          }
         }
       },
       assetComponent: {

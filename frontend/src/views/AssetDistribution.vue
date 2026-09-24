@@ -17,7 +17,10 @@ import {
   Wrench,
   X,
   ChevronDown,
-  User
+  ChevronUp,
+  User,
+  LayoutGrid,
+  List
 } from 'lucide-vue-next'
 import * as inventoryApi from '../services/inventoryApi.js'
 import { useToast } from '../composables/useToast.js'
@@ -49,6 +52,12 @@ const formatThaiDate = (dateString) => {
   })
 }
 
+// --- Helper: Format Name ---
+const formatAssetName = (name) => {
+  if (!name) return '-'
+  return name.replace(/\(ส่วนประกอบของ.*?\)/g, '').replace(/\(MacOS 20 ชุด.*?\)/g, '').trim()
+}
+
 // ==========================================
 // 2. MASTER ASSETS & LOCATIONS (ฐานข้อมูลครุภัณฑ์)
 // ==========================================
@@ -74,23 +83,31 @@ async function fetchData() {
       inventoryApi.getAssetDistributions(),
       inventoryApi.getUsers()
     ])
-    masterAssets.value = assetsData
+    masterAssets.value = assetsData.map(a => ({ ...a, expanded: false }))
 
-    distributionLogs.value = distsData.map(d => ({
-      id: d.id.toString(),
-      assetId: d.assetId,
-      assetCode: d.asset?.seq || '-',
-      assetName: d.asset?.name || '-',
-      department: d.department,
-      building: d.building,
-      room: d.room,
-      responsiblePersonId: d.responsiblePersonId.toString(),
-      responsiblePersonName: d.responsiblePerson?.name || 'ไม่ระบุ',
-      assignDate: d.assignDate,
-      returnDate: d.returnDate,
-      is_current: d.isCurrent,
-      note: d.note
-    }))
+    distributionLogs.value = distsData.map(d => {
+      const isComp = !!d.assetComponent;
+      const baseName = formatAssetName(d.asset?.name || '-');
+      const compName = d.assetComponent?.name || '';
+      const displayName = isComp ? `${baseName} (${compName})` : baseName;
+
+      return {
+        id: d.id.toString(),
+        assetId: d.assetId,
+        assetComponentId: d.assetComponentId,
+        assetCode: d.asset?.seq || '-',
+        assetName: displayName,
+        department: d.department,
+        building: d.building,
+        room: d.room,
+        responsiblePersonId: d.responsiblePersonId ? d.responsiblePersonId.toString() : null,
+        responsiblePersonName: d.guestName ? `${d.guestName} (ภายนอก)` : (d.responsiblePerson?.name || 'ไม่ระบุ'),
+        assignDate: d.assignDate,
+        returnDate: d.returnDate,
+        is_current: d.isCurrent,
+        note: d.note
+      };
+    })
 
     personnelList.value = usersData.map(u => ({
       id: u.id.toString(),
@@ -153,6 +170,9 @@ const groupedDistributions = computed(() => {
     const match = seq.match(/^(.*?)-\d+$/)
     const prefix = match ? match[1] : seq
 
+    // Unique key per asset or component
+    const itemKey = item.assetComponentId ? `${seq}-comp-${item.assetComponentId}` : seq
+
     if (!groupsMap[prefix]) {
       groupsMap[prefix] = {
         prefix,
@@ -161,10 +181,10 @@ const groupedDistributions = computed(() => {
       }
     }
 
-    if (!groupsMap[prefix].itemsByCode[seq]) {
-      groupsMap[prefix].itemsByCode[seq] = []
+    if (!groupsMap[prefix].itemsByCode[itemKey]) {
+      groupsMap[prefix].itemsByCode[itemKey] = []
     }
-    groupsMap[prefix].itemsByCode[seq].push(item)
+    groupsMap[prefix].itemsByCode[itemKey].push(item)
   })
 
   return Object.values(groupsMap).map(group => {
@@ -180,8 +200,12 @@ const groupedDistributions = computed(() => {
       }
     })
 
-    // Sort subGroups sequentially (001, 002, 003)
-    subGroups.sort((a, b) => a.assetCode.localeCompare(b.assetCode, undefined, { numeric: true }))
+    // Sort subGroups sequentially (001, 002, 003) and components by name
+    subGroups.sort((a, b) => {
+      const seqCompare = a.assetCode.localeCompare(b.assetCode, undefined, { numeric: true })
+      if (seqCompare !== 0) return seqCompare
+      return a.latest.assetName.localeCompare(b.latest.assetName)
+    })
 
     group.subGroups = subGroups
 
@@ -191,7 +215,7 @@ const groupedDistributions = computed(() => {
 
     if (subGroups.length > 0) {
       const unique = (arr) => [...new Set(arr.filter(Boolean))]
-      
+
       group.aggregateData = {
         department: unique(subGroups.map(s => s.latest.department || 'ส่วนกลาง')).join(', '),
         building: unique(subGroups.map(s => s.latest.building)).join(', '),
@@ -258,6 +282,8 @@ const form = ref({
   department: 'แผนกเทคโนโลยีสารสนเทศ',
   building: 'อาคาร 6',
   room: '',
+  isGuest: false,
+  guestName: '',
   responsiblePersonId: '',
   note: ''
 })
@@ -291,18 +317,32 @@ const filteredAssetsForSelector = computed(() => {
 })
 
 const groupedSelectedAssets = computed(() => {
-  const selected = masterAssets.value.filter(a => form.value.assetIds.includes(a.id.toString()))
-  
+  const selected = []
+
+  // Extract all selected items (parents and components)
+  masterAssets.value.forEach(a => {
+    if (form.value.assetIds.includes(a.id.toString())) {
+      selected.push(a)
+    }
+    if (a.components) {
+      a.components.forEach(comp => {
+        if (form.value.assetIds.includes(`comp-${comp.id}`)) {
+          selected.push({ ...comp, isComp: true, parentSeq: a.seq, parentName: a.name })
+        }
+      })
+    }
+  })
+
   const groups = {}
   selected.forEach(asset => {
-    const seq = asset.seq || asset.id
+    const seq = asset.isComp ? `${asset.parentSeq} (ย่อย)` : (asset.seq || asset.id)
     const match = seq.toString().match(/^(.*)-(\d{1,4})$/)
-    const baseSeq = match ? match[1] : seq
-    const suffix = match ? match[2] : null
+    const baseSeq = match && !asset.isComp ? match[1] : seq
+    const suffix = match && !asset.isComp ? match[2] : null
 
     if (!groups[baseSeq]) {
       groups[baseSeq] = {
-        name: asset.name,
+        name: asset.isComp ? asset.parentName : asset.name,
         baseSeq: baseSeq,
         suffixes: suffix ? [suffix] : [],
         count: 1,
@@ -347,18 +387,52 @@ const groupedSelectedAssets = computed(() => {
   })
 })
 
-function toggleSelectAsset(asset) {
-  const strId = asset.id.toString()
+const viewMode = ref('list') // Default to 'list' based on user preference
+
+function toggleSelectAsset(asset, isComponent = false) {
+  const strId = isComponent ? `comp-${asset.id}` : asset.id.toString()
   const idx = form.value.assetIds.indexOf(strId)
+
   if (idx !== -1) {
+    // If deselecting, remove it
     form.value.assetIds.splice(idx, 1)
+
+    // If it's a parent, also deselect all its components
+    if (!isComponent && asset.components) {
+      asset.components.forEach(comp => {
+        const compStr = `comp-${comp.id}`
+        const cIdx = form.value.assetIds.indexOf(compStr)
+        if (cIdx !== -1) form.value.assetIds.splice(cIdx, 1)
+      })
+    }
   } else {
+    // If selecting, add it
     form.value.assetIds.push(strId)
+
+    // If it's a parent, also select all its components
+    if (!isComponent && asset.components) {
+      asset.components.forEach(comp => {
+        const compStr = `comp-${comp.id}`
+        if (!form.value.assetIds.includes(compStr)) {
+          form.value.assetIds.push(compStr)
+        }
+      })
+    }
   }
 }
 
 function removeGroupFromSelection(group) {
-  const idsToRemove = group.assets.map(a => a.id.toString())
+  const idsToRemove = []
+  group.assets.forEach(a => {
+    if (a.isComp) {
+      idsToRemove.push(`comp-${a.id}`)
+    } else {
+      idsToRemove.push(a.id.toString())
+      if (a.components) {
+        a.components.forEach(comp => idsToRemove.push(`comp-${comp.id}`))
+      }
+    }
+  })
   form.value.assetIds = form.value.assetIds.filter(id => !idsToRemove.includes(id))
 }
 
@@ -391,30 +465,53 @@ const handleAssignAsset = async () => {
 
   const selectedPerson = personnelList.value.find(p => p.id === form.value.responsiblePersonId)
 
-  if (form.value.assetIds.length === 0 || !selectedPerson) {
-    toast.warning('กรุณากรอกข้อมูลให้ครบถ้วน')
+  if (form.value.assetIds.length === 0) {
+    toast.warning('กรุณาเลือกครุภัณฑ์ที่ต้องการจัดสรร')
+    return
+  }
+
+  if (!form.value.isGuest && !selectedPerson) {
+    toast.warning('กรุณาเลือกบุคลากรผู้รับผิดชอบดูแล')
+    return
+  }
+
+  if (form.value.isGuest && !form.value.guestName.trim()) {
+    toast.warning('กรุณากรอกชื่อผู้รับผิดชอบภายนอก/ไม่มีชื่อในระบบ')
     return
   }
 
   try {
-    const promises = form.value.assetIds.map(assetId => {
+    const promises = form.value.assetIds.map(assetIdStr => {
+      let assetId = null
+      let assetComponentId = null
+
+      if (assetIdStr.startsWith('comp-')) {
+        assetComponentId = Number(assetIdStr.replace('comp-', ''))
+        const parentAsset = masterAssets.value.find(a => a.components && a.components.some(c => c.id === assetComponentId))
+        if (parentAsset) assetId = parentAsset.id
+      } else {
+        assetId = Number(assetIdStr)
+      }
+
       const payload = {
-        assetId: Number(assetId),
+        assetId,
+        assetComponentId,
         department: form.value.department,
         building: form.value.building,
         room: form.value.room,
-        responsiblePersonId: Number(selectedPerson.id),
+        responsiblePersonId: form.value.isGuest ? null : Number(selectedPerson.id),
+        guestName: form.value.isGuest ? form.value.guestName.trim() : null,
         note: form.value.note || '-'
       }
       return inventoryApi.createAssetDistribution(payload)
     })
 
     await Promise.all(promises)
-    toast.success(`จัดสรรครุภัณฑ์ ${form.value.assetIds.length} รายการ ไปยัง ${form.value.department} เรียบร้อยแล้ว!`)
+    toast.success(`จัดสรรครุภัณฑ์ ${form.value.assetIds.length} รายการ เรียบร้อยแล้ว!`)
 
     // Reset Form & Close Modal
     isModalOpen.value = false
-    form.value = { assetIds: [], department: 'แผนกเทคโนโลยีสารสนเทศ', building: 'อาคาร 6', room: '', responsiblePersonId: '', note: '' }
+    form.value = { assetIds: [], department: 'แผนกเทคโนโลยีสารสนเทศ', building: 'อาคาร 6', room: '', isGuest: false, guestName: '', responsiblePersonId: '', note: '' }
     await fetchData()
   } catch (err) {
     toast.error('ไม่สามารถจัดสรรครุภัณฑ์ได้: ' + err.message)
@@ -529,8 +626,8 @@ const handleAssignAsset = async () => {
                       <div class="font-mono font-extrabold text-slate-900 text-base">
                         {{ row.group.prefix }}
                       </div>
-                      <div class="text-xs text-slate-500 font-bold mt-0.5">
-                        {{ row.group.baseItem.assetName }}
+                      <div class="text-xs text-slate-500 font-bold mt-0.5" :title="row.group.baseItem.assetName">
+                        {{ formatAssetName(row.group.baseItem.assetName) }}
                         <span
                           class="ml-2 px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold">รวม
                           {{ row.group.totalUniqueItems }} รายการ</span>
@@ -563,7 +660,8 @@ const handleAssignAsset = async () => {
                         <User class="w-3 h-3" />
                       </div>
                       <div>
-                        <div class="font-bold text-slate-900 text-xs">{{ row.group.aggregateData?.responsiblePersonName || 'ไม่ระบุ' }}</div>
+                        <div class="font-bold text-slate-900 text-xs">{{ row.group.aggregateData?.responsiblePersonName
+                          || 'ไม่ระบุ' }}</div>
                       </div>
                     </div>
                   </td>
@@ -723,10 +821,21 @@ const handleAssignAsset = async () => {
                   {{ index + 1 }}
                 </div>
                 <div class="flex-1 min-w-0">
-                  <div class="text-xs font-bold text-emerald-700 font-mono truncate mb-0.5">{{ group.displaySeq || '-' }}</div>
-                  <div class="text-sm font-semibold text-slate-800 truncate">
-                    {{ group.name }} 
+                  <div class="flex items-center justify-between">
+                    <div class="text-xs font-bold text-emerald-700 font-mono truncate mb-0.5">{{ group.displaySeq || '-' }}</div>
+                  </div>
+                  <div class="text-sm font-semibold text-slate-800 truncate" :title="group.name">
+                    {{ formatAssetName(group.name) }}
                     <span class="text-slate-500 text-xs ml-1 font-normal">(จำนวน {{ group.count }} ชิ้น)</span>
+                  </div>
+                  <!-- Show individual items -->
+                  <div class="mt-1.5 flex flex-col gap-1 pl-2 border-l-2 border-slate-200">
+                    <div v-for="item in group.assets" :key="item.id" class="text-[10px] text-slate-500 truncate flex items-center justify-between">
+                      <span :title="item.name">• {{ item.isComp ? item.name : (item.seq || item.name) }}</span>
+                      <button type="button" @click.stop="toggleSelectAsset(item, item.isComp)" class="text-rose-400 hover:text-rose-600 p-0.5 rounded transition-colors" title="นำออกเฉพาะชิ้นนี้">
+                        <X class="w-3 h-3" />
+                      </button>
+                    </div>
                   </div>
                 </div>
                 <button type="button" @click="removeGroupFromSelection(group)"
@@ -761,8 +870,21 @@ const handleAssignAsset = async () => {
 
           <!-- บุคลากรผู้รับผิดชอบ -->
           <div>
-            <label class="block font-extrabold text-slate-800 mb-1">บุคลากรผู้ลงนามรับผิดชอบดูแล:</label>
-            <select v-model="form.responsiblePersonId" required
+            <div class="flex items-center justify-between mb-1">
+              <label class="font-extrabold text-slate-800">บุคลากรผู้ลงนามรับผิดชอบดูแล:</label>
+              <label
+                class="inline-flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-600 bg-slate-50 px-2 py-1 rounded-md border border-slate-200 hover:bg-slate-100 transition-colors">
+                <input type="checkbox" v-model="form.isGuest"
+                  class="w-3.5 h-3.5 text-emerald-600 rounded focus:ring-emerald-500" />
+                ไม่มีชื่อในระบบ
+              </label>
+            </div>
+
+            <input v-if="form.isGuest" type="text" v-model="form.guestName" required
+              placeholder="กรอกชื่อ-นามสกุล บุคคลภายนอก"
+              class="w-full p-3 border border-emerald-300 bg-emerald-50 rounded-xl font-bold text-emerald-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500" />
+
+            <select v-else v-model="form.responsiblePersonId" required
               class="w-full p-3 border border-slate-300 rounded-xl font-bold bg-white focus:outline-none">
               <option value="" disabled>-- เลือกผู้รับผิดชอบ --</option>
               <option v-for="p in personnelList" :key="p.id" :value="p.id">
@@ -822,14 +944,28 @@ const handleAssignAsset = async () => {
                 class="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:border-[#047857] focus:ring-2 focus:ring-[#065f46]/10 transition" />
             </div>
 
-            <!-- Category Chips -->
-            <div class="flex items-center gap-2 overflow-x-auto pb-1">
-              <button v-for="cat in assetCategories" :key="cat" type="button" @click="assetCatFilter = cat" :class="[
-                'px-4 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all cursor-pointer shrink-0',
-                assetCatFilter === cat ? 'bg-[#065f46] text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-              ]">
-                {{ cat }}
-              </button>
+            <!-- Category Chips & View Toggle -->
+            <div class="flex items-center justify-between gap-4">
+              <div class="flex items-center gap-2 overflow-x-auto pb-1 flex-1">
+                <button v-for="cat in assetCategories" :key="cat" type="button" @click="assetCatFilter = cat" :class="[
+                  'px-4 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all cursor-pointer shrink-0',
+                  assetCatFilter === cat ? 'bg-[#065f46] text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                ]">
+                  {{ cat }}
+                </button>
+              </div>
+              <div class="flex items-center gap-1 bg-slate-100 p-1 rounded-lg shrink-0">
+                <button type="button" @click="viewMode = 'grid'"
+                  :class="viewMode === 'grid' ? 'bg-white shadow-sm text-slate-800' : 'text-slate-500 hover:text-slate-700'"
+                  class="p-1.5 rounded-md transition-all">
+                  <LayoutGrid class="w-4 h-4" />
+                </button>
+                <button type="button" @click="viewMode = 'list'"
+                  :class="viewMode === 'list' ? 'bg-white shadow-sm text-slate-800' : 'text-slate-500 hover:text-slate-700'"
+                  class="p-1.5 rounded-md transition-all">
+                  <List class="w-4 h-4" />
+                </button>
+              </div>
             </div>
           </div>
 
@@ -840,7 +976,8 @@ const handleAssignAsset = async () => {
               <p class="text-sm">ไม่พบรายการครุภัณฑ์ที่ค้นหา</p>
             </div>
 
-            <div v-else class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+            <!-- Grid View -->
+            <div v-if="viewMode === 'grid'" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
               <div v-for="asset in filteredAssetsForSelector" :key="asset.id" @click="toggleSelectAsset(asset)"
                 type="button"
                 :class="form.assetIds.includes(asset.id.toString()) ? 'border-emerald-500 bg-emerald-50 shadow-md ring-2 ring-emerald-500/20' : 'bg-white border-slate-200 hover:border-[#047857] hover:shadow-md'"
@@ -871,9 +1008,30 @@ const handleAssignAsset = async () => {
                   </div>
                   <hr class="border-slate-300 my-2" />
                   <h4
-                    class="text-sm font-semibold text-slate-900 group-hover:text-[#065f46] transition-colors line-clamp-2">
-                    {{ asset.name }}</h4>
+                    class="text-sm font-semibold text-slate-900 group-hover:text-[#065f46] transition-colors line-clamp-2"
+                    :title="asset.name">
+                    {{ formatAssetName(asset.name) }}</h4>
                   <p class="text-xs text-slate-400 mt-0.5">{{ asset.category || 'ไม่ระบุ' }}</p>
+
+                  <!-- Components Dropdown (Grid View) -->
+                  <div v-if="asset.components && asset.components.length > 0" class="mt-2">
+                    <button type="button" @click.stop="asset.expanded = !asset.expanded"
+                      class="flex items-center gap-1 text-[10px] text-slate-500 hover:text-[#065f46] font-medium transition-colors cursor-pointer">
+                      {{ asset.expanded ? 'ซ่อนอุปกรณ์ย่อย' : 'แสดงอุปกรณ์ย่อย (' + asset.components.length + ')' }}
+                      <svg class="w-3 h-3 transition-transform" :class="asset.expanded ? 'rotate-180' : ''" fill="none"
+                        viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </button>
+                    <div v-if="asset.expanded" class="mt-1.5 flex flex-col gap-1 border-l-2 border-emerald-100 pl-2">
+                      <div v-for="comp in asset.components" :key="comp.id" @click.stop="toggleSelectAsset(comp, true)"
+                        :class="form.assetIds.includes('comp-' + comp.id) ? 'bg-emerald-50 text-emerald-700' : 'text-slate-600 hover:bg-slate-50'"
+                        class="text-[10px] truncate p-1 rounded cursor-pointer flex items-center justify-between transition-colors">
+                        <span :title="comp.name">• {{ comp.name }}</span>
+                        <Check v-if="form.assetIds.includes('comp-' + comp.id)" class="w-3 h-3 text-emerald-600" />
+                      </div>
+                    </div>
+                  </div>
                 </div>
                 <div class="pt-3 border-t border-slate-100 flex items-center justify-between mt-auto">
                   <span class="text-xs text-slate-400 font-medium truncate pr-2" :title="getAssetLocation(asset)">{{
@@ -883,6 +1041,83 @@ const handleAssignAsset = async () => {
                     class="text-xs font-bold px-3 py-1 rounded-lg transition-all shrink-0">
                     {{ form.assetIds.includes(asset.id.toString()) ? '✓ เลือกแล้ว' : 'เลือก' }}
                   </span>
+                </div>
+              </div>
+            </div>
+
+            <!-- List View -->
+            <div v-else-if="viewMode === 'list'" class="flex flex-col gap-2">
+              <div v-for="asset in filteredAssetsForSelector" :key="asset.id" class="flex flex-col gap-1">
+                <!-- Main Asset Card -->
+                <div @click="toggleSelectAsset(asset)" type="button" :class="[
+                  'bg-white rounded-xl border-2 transition-all cursor-pointer p-4 flex items-center justify-between gap-4 group text-left relative',
+                  form.assetIds.includes(asset.id.toString()) ? 'border-emerald-500 bg-emerald-50/50 shadow-sm' : 'border-slate-200 hover:border-[#047857]'
+                ]">
+                  <div class="flex items-center gap-4 flex-1 overflow-hidden">
+                    <!-- Checkbox -->
+                    <div class="w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 transition-colors"
+                      :class="form.assetIds.includes(asset.id.toString()) ? 'bg-emerald-500 border-emerald-500' : 'border-slate-300 group-hover:border-[#065f46] bg-white'">
+                      <Check v-if="form.assetIds.includes(asset.id.toString())" class="w-3.5 h-3.5 text-white" />
+                    </div>
+
+                    <div class="w-10 h-10 rounded-xl flex items-center justify-center transition-colors shrink-0"
+                      :class="form.assetIds.includes(asset.id.toString()) ? 'bg-emerald-100' : 'bg-slate-50 group-hover:bg-[#065f46]'">
+                      <Wrench class="w-5 h-5 transition-colors"
+                        :class="form.assetIds.includes(asset.id.toString()) ? 'text-emerald-700' : 'text-slate-400 group-hover:text-white'" />
+                    </div>
+
+                    <div class="flex-1 min-w-0 pr-12">
+                      <h4 class="text-sm font-semibold transition-colors truncate"
+                        :class="form.assetIds.includes(asset.id.toString()) ? 'text-emerald-800' : 'text-slate-900 group-hover:text-[#065f46]'">
+                        {{ formatAssetName(asset.name) }}
+                      </h4>
+                      <p class="text-xs text-slate-500 mt-0.5 truncate">{{ asset.seq || '-' }} · {{ asset.category ||
+                        'ไม่ระบุ' }}</p>
+                    </div>
+                  </div>
+
+                  <div class="flex items-center gap-4 shrink-0 text-right mr-6">
+                    <div class="flex flex-col items-end gap-1">
+                      <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700">
+                        พร้อมใช้
+                      </span>
+                      <p class="text-[11px] text-slate-500 truncate w-32" :title="getAssetLocation(asset)">{{
+                        getAssetLocation(asset) }}</p>
+                    </div>
+                  </div>
+
+                  <!-- Dropdown Toggle for Components -->
+                  <button v-if="asset.components && asset.components.length > 0" type="button"
+                    @click.stop="asset.expanded = !asset.expanded"
+                    class="absolute right-3 top-1/2 -translate-y-1/2 p-2 rounded-full hover:bg-slate-200 transition-colors text-slate-400 group-hover:text-[#065f46]"
+                    title="แสดงอุปกรณ์ย่อย">
+                    <ChevronUp v-if="asset.expanded" class="w-4 h-4" />
+                    <ChevronDown v-else class="w-4 h-4" />
+                  </button>
+                </div>
+
+                <!-- Nested Components List -->
+                <div v-if="asset.components && asset.components.length > 0 && asset.expanded"
+                  class="ml-10 border-l-2 border-slate-200 pl-3 flex flex-col gap-1.5 pb-2">
+                  <div v-for="comp in asset.components" :key="comp.id" @click="toggleSelectAsset(comp, true)"
+                    type="button" :class="[
+                      'bg-white rounded-lg border transition-all cursor-pointer p-2.5 flex items-center gap-3 group text-left hover:shadow-sm',
+                      form.assetIds.includes('comp-' + comp.id) ? 'border-emerald-400 bg-emerald-50/50' : 'border-slate-200 hover:border-[#047857]'
+                    ]">
+                    <!-- Checkbox -->
+                    <div class="w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 transition-colors"
+                      :class="form.assetIds.includes('comp-' + comp.id) ? 'bg-emerald-500 border-emerald-500' : 'border-slate-300 group-hover:border-[#065f46] bg-white'">
+                      <Check v-if="form.assetIds.includes('comp-' + comp.id)" class="w-3 h-3 text-white" />
+                    </div>
+                    <div class="flex-1 min-w-0">
+                      <h5 class="text-xs font-semibold truncate transition-colors"
+                        :class="form.assetIds.includes('comp-' + comp.id) ? 'text-emerald-800' : 'text-slate-800'">
+                        {{ comp.name }}
+                      </h5>
+                    </div>
+                    <span
+                      class="text-[10px] font-medium px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 shrink-0">ย่อย</span>
+                  </div>
                 </div>
               </div>
             </div>

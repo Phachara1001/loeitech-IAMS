@@ -174,10 +174,10 @@ export const getAssetTimeline = async (id) => {
       type: 'MOVE',
       title: `โอนย้ายสถานที่ / จัดสรร (${d.department})`,
       date: d.createdAt,
-      operator: d.responsiblePerson?.name || 'ผู้ดูแลระบบ',
+      operator: d.guestName ? d.guestName : (d.responsiblePerson?.name || 'ผู้ดูแลระบบ'),
       details: d.note || 'จัดสรรลงหน่วยงานเพื่อเข้าประจำการการใช้งาน',
       location: `${d.building || ''} ${d.room || ''}`.trim() || 'ไม่ระบุสถานที่',
-      responsiblePerson: d.responsiblePerson?.name || 'ไม่ระบุ',
+      responsiblePerson: d.guestName ? d.guestName : (d.responsiblePerson?.name || 'ไม่ระบุ'),
       cost: 0
     });
   });
@@ -239,7 +239,16 @@ export const getAssetTimeline = async (id) => {
 
   // 5. ประวัติการขอจำหน่าย
   if (data.disposals) {
+    const uniqueDisposals = [];
+    const seenCodes = new Set();
     data.disposals.forEach((d) => {
+      if (!seenCodes.has(d.disposalCode)) {
+        seenCodes.add(d.disposalCode);
+        uniqueDisposals.push(d);
+      }
+    });
+
+    uniqueDisposals.forEach((d) => {
       timeline.push({
         id: `disp-${d.id}`,
         type: 'DISPOSE',
@@ -282,5 +291,122 @@ export const getAssetTimeline = async (id) => {
     assetStatus: data.asset.status,
     timeline
   };
+};
+export const getComponentTimeline = async (id) => {
+  const data = await assetRepository.findComponentTimelineData(id);
+  if (!data) throw new Error('Asset Component not found');
+
+  const timeline = [];
+
+  // 1. ประวัติการจัดสรร (ของ Parent Asset)
+  if (data.distributions) {
+    data.distributions.forEach((d) => {
+      timeline.push({
+        id: `dist-${d.id}`,
+        type: 'MOVE',
+        title: `โอนย้ายสถานที่ / จัดสรร (${d.department}) [จากครุภัณฑ์หลัก]`,
+        date: d.createdAt,
+        operator: d.guestName ? `${d.guestName} (ภายนอก)` : (d.responsiblePerson?.name || 'ผู้ดูแลระบบ'),
+        details: d.note || 'จัดสรรลงหน่วยงานเพื่อเข้าประจำการการใช้งาน',
+        location: `${d.building || ''} ${d.room || ''}`.trim() || 'ไม่ระบุสถานที่',
+        responsiblePerson: d.guestName ? `${d.guestName} (ภายนอก)` : (d.responsiblePerson?.name || 'ไม่ระบุ'),
+        cost: 0
+      });
+    });
+  }
+
+  // 2. ประวัติยืมคืน (ของ Parent Asset)
+  if (data.borrows) {
+    data.borrows.forEach((b) => {
+      timeline.push({
+        id: `borrow-${b.id}`,
+        type: 'BORROW',
+        title: `บันทึกการยืม (${b.borrowCode}) [จากครุภัณฑ์หลัก]`,
+        date: b.borrowDate,
+        operator: b.borrowerName || 'ไม่ระบุ',
+        details: b.purpose || 'ยืมใช้งานทั่วไป',
+        location: b.borrowerDept || '',
+        responsiblePerson: b.borrowerName || '',
+        cost: 0
+      });
+      if (b.status === 'RETURNED' && b.returnDate) {
+        timeline.push({
+          id: `return-${b.id}`,
+          type: 'RETURN',
+          title: `บันทึกการส่งคืน (${b.borrowCode}) [จากครุภัณฑ์หลัก]`,
+          date: b.returnDate,
+          operator: b.returnedTo || 'ผู้รับคืน',
+          details: b.remark || 'คืนครุภัณฑ์ตามกำหนด',
+          location: '',
+          responsiblePerson: '',
+          cost: 0
+        });
+      }
+    });
+  }
+
+  // 3. ประวัติการจำหน่ายเฉพาะ Component นี้
+  if (data.disposals) {
+    const uniqueDisposals = Array.from(new Map(data.disposals.map(d => [d.disposalCode, d])).values());
+    uniqueDisposals.forEach((d) => {
+      timeline.push({
+        id: `disp-${d.id}`,
+        type: 'DISPOSE',
+        title: `บันทึกขอจำหน่ายอุปกรณ์ย่อย (${d.disposalCode})`,
+        date: d.createdAt,
+        operator: d.requestedBy || 'ไม่ระบุ',
+        details: `วิธี: ${d.method} (สถานะคำขอ: ${d.status === 'APPROVED' ? 'อนุมัติแล้ว' : d.status === 'REJECTED' ? 'ไม่อนุมัติ' : 'รออนุมัติ'})`,
+        location: '',
+        responsiblePerson: '',
+        cost: 0
+      });
+    });
+  }
+
+  // 4. ประวัติ Status Change ของ Component นี้
+  if (data.activityLogs) {
+    data.activityLogs.forEach((log) => {
+      if (log.oldValue && log.newValue && log.oldValue.status !== log.newValue.status) {
+        timeline.push({
+          id: `log-${log.id}`,
+          type: 'STATUS_CHANGE',
+          title: `ปรับปรุงสถานะอุปกรณ์ย่อย`,
+          date: log.createdAt,
+          operator: log.user?.name || 'แอดมินระบบ',
+          details: `เปลี่ยนสถานะจาก '${getThaiStatus(log.oldValue.status)}' เป็น '${getThaiStatus(log.newValue.status)}'`,
+          location: '',
+          responsiblePerson: '',
+          cost: 0
+        });
+      }
+    });
+  }
+
+  timeline.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+  return {
+    assetStatus: data.component.status,
+    timeline
+  };
+};
+
+// ==========================================
+// Asset Components Logic
+// ==========================================
+
+export const createAssetComponent = async (data) => {
+  return await assetRepository.createComponent(data);
+};
+
+export const updateAssetComponent = async (id, data) => {
+  return await assetRepository.updateComponent(id, data);
+};
+
+export const deleteAssetComponent = async (id) => {
+  return await assetRepository.deleteComponent(id);
+};
+
+export const getAssetComponentById = async (id) => {
+  return await assetRepository.findComponentById(id);
 };
 

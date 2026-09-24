@@ -9,7 +9,8 @@ export const findAll = async () => {
       distributions: {
         where: { isCurrent: true },
         include: { responsiblePerson: true }
-      }
+      },
+      components: true
     },
     orderBy: { createdAt: 'desc' }
   });
@@ -20,7 +21,8 @@ export const findAll = async () => {
  */
 export const findById = async (id) => {
   return await prisma.asset.findUnique({
-    where: { id: Number(id) }
+    where: { id: Number(id) },
+    include: { components: true }
   });
 };
 
@@ -64,8 +66,36 @@ export const remove = async (id) => {
     prisma.borrowTransaction.deleteMany({ where: { assetId } }),
     prisma.repairRequest.deleteMany({ where: { assetId } }),
     prisma.disposalRequest.deleteMany({ where: { assetId } }),
+    prisma.assetComponent.deleteMany({ where: { assetId } }),
     prisma.asset.delete({ where: { id: assetId } })
   ]);
+};
+
+// ==========================================
+// Asset Components Methods
+// ==========================================
+
+export const createComponent = async (data) => {
+  return await prisma.assetComponent.create({ data });
+};
+
+export const updateComponent = async (id, data) => {
+  return await prisma.assetComponent.update({
+    where: { id: Number(id) },
+    data
+  });
+};
+
+export const deleteComponent = async (id) => {
+  return await prisma.assetComponent.delete({
+    where: { id: Number(id) }
+  });
+};
+
+export const findComponentById = async (id) => {
+  return await prisma.assetComponent.findUnique({
+    where: { id: Number(id) }
+  });
 };
 
 /**
@@ -108,3 +138,36 @@ export const findTimelineData = async (id) => {
   return { asset, distributions, borrows, repairs, disposals, activityLogs };
 };
 
+export const findComponentTimelineData = async (id) => {
+  const compId = Number(id);
+  const component = await prisma.assetComponent.findUnique({ where: { id: compId } });
+  if (!component) return null;
+  
+  const assetId = component.assetId;
+  const [asset, distributions, borrows, activityLogs] = await Promise.all([
+    prisma.asset.findUnique({ where: { id: assetId } }),
+    prisma.assetDistribution.findMany({
+      where: { assetId },
+      include: { responsiblePerson: { select: { name: true } } },
+      orderBy: { assignDate: 'asc' }
+    }),
+    prisma.borrowTransaction.findMany({
+      where: { assetId },
+      orderBy: { borrowDate: 'asc' }
+    }),
+    prisma.activityLog.findMany({
+      where: { entityId: String(compId), entityType: 'ASSET_COMPONENT', action: 'UPDATE' },
+      include: { user: { select: { name: true } } },
+      orderBy: { createdAt: 'asc' }
+    })
+  ]);
+  
+  // Note: disposals for components are linked via assetComponentId in DisposalRequest (wait, does DisposalRequest have assetComponentId?)
+  // Actually, we added assetComponentId to DisposalRequest earlier!
+  const disposals = await prisma.disposalRequest.findMany({
+    where: { assetComponentId: compId },
+    orderBy: { createdAt: 'asc' }
+  });
+
+  return { component, asset, distributions, borrows, disposals, activityLogs };
+};

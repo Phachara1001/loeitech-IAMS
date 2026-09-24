@@ -24,18 +24,47 @@ async function loadEligibleAssets() {
   isLoadingAssets.value = true
   try {
     const { data } = await api.get('/disposal-requests/eligible-assets')
-    eligibleAssets.value = (data.data || []).map((a) => ({
-      id: a.id,
-      name: a.name,
-      seq: a.seq,
-      category: a.category,
-      condition: a.status === 'Broken' ? 'ชำรุด' : 'กำลังซ่อม',
-      unit: a.location ? `${a.location.building || ''} ${a.location.name}`.trim() : a.department,
-      distributions: a.distributions,
-      department: a.department,
-      unitPrice: a.unitPrice,
-      price: a.price
-    }))
+    const formatted = []
+    
+    ;(data.data || []).forEach((a) => {
+      // Add the main asset
+      const mainAsset = {
+        id: a.id,
+        isComponent: false,
+        name: a.name,
+        seq: a.seq,
+        category: a.category,
+        condition: a.status === 'Broken' ? 'ชำรุด' : (a.status === 'Repaired' ? 'กำลังซ่อม' : 'ใช้งานปกติ'),
+        unit: a.location ? `${a.location.building || ''} ${a.location.name}`.trim() : a.department,
+        distributions: a.distributions,
+        department: a.department,
+        unitPrice: a.unitPrice,
+        price: a.price,
+        expanded: false,
+        components: []
+      }
+      
+      // Add its components
+      if (a.components && a.components.length > 0) {
+        mainAsset.components = a.components.map(comp => ({
+          id: `${a.id}-${comp.id}`,
+          realAssetId: a.id,
+          realComponentId: comp.id,
+          isComponent: true,
+          name: comp.name,
+          seq: 'อุปกรณ์ย่อย',
+          category: a.category,
+          condition: comp.status === 'Broken' ? 'ชำรุด' : (comp.status === 'Repaired' ? 'กำลังซ่อม' : 'ใช้งานปกติ'),
+          unit: mainAsset.unit,
+          distributions: a.distributions,
+          department: a.department,
+          unitPrice: 0,
+          price: 0
+        }))
+      }
+      formatted.push(mainAsset)
+    })
+    eligibleAssets.value = formatted
   } catch (err) {
     toast.error(err.message || 'โหลดรายการครุภัณฑ์ที่มีสิทธิ์จำหน่ายไม่สำเร็จ')
   } finally {
@@ -185,8 +214,19 @@ const filteredAssetsForSelector = computed(() => {
   return result
 })
 
+const flatEligibleAssets = computed(() => {
+  const arr = []
+  eligibleAssets.value.forEach(a => {
+    arr.push(a)
+    if (a.components && a.components.length > 0) {
+      arr.push(...a.components)
+    }
+  })
+  return arr
+})
+
 const selectedFormAssets = computed(() => {
-  return eligibleAssets.value.filter(a => form.value.assetIds.includes(a.id))
+  return flatEligibleAssets.value.filter(a => form.value.assetIds.includes(a.id))
 })
 
 const selectedAssetsTotalPrice = computed(() => {
@@ -246,8 +286,16 @@ async function saveForm() {
   formError.value = ''
 
   try {
+    const payloadAssetIds = form.value.assetIds.map(idStr => {
+      if (typeof idStr === 'string' && idStr.includes('-')) {
+        const [aId, cId] = idStr.split('-')
+        return { assetId: Number(aId), assetComponentId: Number(cId) }
+      }
+      return { assetId: Number(idStr) }
+    })
+
     await api.post('/disposal-requests/batch', {
-      assetIds: form.value.assetIds,
+      assetIds: payloadAssetIds,
       method: form.value.method,
       meetingDate: new Date(form.value.meetingDate).toISOString(),
       committee: form.value.committee.trim(),
@@ -598,44 +646,79 @@ onMounted(() => {
             </div>
 
             <div v-else class="flex flex-col gap-2">
-              <div v-for="asset in filteredAssetsForSelector" :key="asset.id" @click="selectAsset(asset)" type="button"
-                :class="[
-                  'bg-white rounded-xl border-2 transition-all cursor-pointer p-4 flex items-center justify-between gap-4 group text-left',
-                  form.assetIds.includes(asset.id) ? 'border-rose-500 bg-rose-50/50 shadow-sm' : 'border-slate-200 hover:border-[#047857]'
-                ]">
-                <div class="flex items-center gap-4 flex-1 overflow-hidden">
-                  <!-- Checkbox -->
-                  <div class="w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 transition-colors"
-                    :class="form.assetIds.includes(asset.id) ? 'bg-rose-500 border-rose-500' : 'border-slate-300 group-hover:border-[#065f46] bg-white'">
-                    <Check v-if="form.assetIds.includes(asset.id)" class="w-3.5 h-3.5 text-white" />
+              <div v-for="asset in filteredAssetsForSelector" :key="asset.id" class="flex flex-col gap-1">
+                <!-- Main Asset Card -->
+                <div @click="selectAsset(asset)" type="button"
+                  :class="[
+                    'bg-white rounded-xl border-2 transition-all cursor-pointer p-4 flex items-center justify-between gap-4 group text-left relative',
+                    form.assetIds.includes(asset.id) ? 'border-rose-500 bg-rose-50/50 shadow-sm' : 'border-slate-200 hover:border-[#047857]'
+                  ]">
+                  <div class="flex items-center gap-4 flex-1 overflow-hidden">
+                    <!-- Checkbox -->
+                    <div class="w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 transition-colors"
+                      :class="form.assetIds.includes(asset.id) ? 'bg-rose-500 border-rose-500' : 'border-slate-300 group-hover:border-[#065f46] bg-white'">
+                      <Check v-if="form.assetIds.includes(asset.id)" class="w-3.5 h-3.5 text-white" />
+                    </div>
+
+                    <div class="w-10 h-10 rounded-xl flex items-center justify-center transition-colors shrink-0"
+                      :class="form.assetIds.includes(asset.id) ? 'bg-rose-100' : 'bg-amber-50 group-hover:bg-[#065f46]'">
+                      <Recycle class="w-5 h-5 transition-colors"
+                        :class="form.assetIds.includes(asset.id) ? 'text-rose-600' : 'text-amber-600 group-hover:text-white'" />
+                    </div>
+
+                    <div class="flex-1 min-w-0 pr-12">
+                      <h4 class="text-sm font-semibold transition-colors truncate"
+                        :class="form.assetIds.includes(asset.id) ? 'text-rose-700' : 'text-slate-900 group-hover:text-[#065f46]'">
+                        {{ asset.name }}
+                      </h4>
+                      <p class="text-xs text-slate-500 mt-0.5 truncate">{{ asset.seq || '-' }} · {{ asset.category ||
+                        'ไม่ระบุ' }}</p>
+                    </div>
                   </div>
 
-                  <div class="w-10 h-10 rounded-xl flex items-center justify-center transition-colors shrink-0"
-                    :class="form.assetIds.includes(asset.id) ? 'bg-rose-100' : 'bg-amber-50 group-hover:bg-[#065f46]'">
-                    <Recycle class="w-5 h-5 transition-colors"
-                      :class="form.assetIds.includes(asset.id) ? 'text-rose-600' : 'text-amber-600 group-hover:text-white'" />
+                  <div class="flex items-center gap-4 shrink-0 text-right mr-6">
+                    <div class="flex flex-col items-end gap-1">
+                      <span :class="[
+                        'text-[10px] font-bold px-2 py-0.5 rounded-full',
+                        asset.condition === 'ชำรุด' ? 'bg-red-50 text-red-700' : 'bg-amber-50 text-amber-700'
+                      ]">
+                        {{ asset.condition }}
+                      </span>
+                      <p class="text-[11px] text-slate-500 truncate w-32" :title="getAssetLocation(asset)">{{
+                        getAssetLocation(asset) }}</p>
+                    </div>
                   </div>
 
-                  <div class="flex-1 min-w-0">
-                    <h4 class="text-sm font-semibold transition-colors truncate"
-                      :class="form.assetIds.includes(asset.id) ? 'text-rose-700' : 'text-slate-900 group-hover:text-[#065f46]'">
-                      {{ asset.name }}
-                    </h4>
-                    <p class="text-xs text-slate-500 mt-0.5 truncate">{{ asset.seq || '-' }} · {{ asset.category ||
-                      'ไม่ระบุ' }}</p>
-                  </div>
+                  <!-- Dropdown Toggle for Components -->
+                  <button v-if="asset.components && asset.components.length > 0" type="button"
+                    @click.stop="asset.expanded = !asset.expanded"
+                    class="absolute right-3 top-1/2 -translate-y-1/2 p-2 rounded-full hover:bg-slate-200 transition-colors text-slate-400 group-hover:text-[#065f46]"
+                    title="แสดงอุปกรณ์ย่อย">
+                    <ChevronUp v-if="asset.expanded" class="w-4 h-4" />
+                    <ChevronDown v-else class="w-4 h-4" />
+                  </button>
                 </div>
 
-                <div class="flex items-center gap-4 shrink-0 text-right">
-                  <div class="flex flex-col items-end gap-1">
-                    <span :class="[
-                      'text-[10px] font-bold px-2 py-0.5 rounded-full',
-                      asset.condition === 'ชำรุด' ? 'bg-red-50 text-red-700' : 'bg-amber-50 text-amber-700'
+                <!-- Nested Components List -->
+                <div v-if="asset.components && asset.components.length > 0 && asset.expanded"
+                  class="ml-10 border-l-2 border-slate-200 pl-3 flex flex-col gap-1.5 pb-2">
+                  <div v-for="comp in asset.components" :key="comp.id" @click="selectAsset(comp)" type="button"
+                    :class="[
+                      'bg-white rounded-lg border transition-all cursor-pointer p-2.5 flex items-center gap-3 group text-left hover:shadow-sm',
+                      form.assetIds.includes(comp.id) ? 'border-rose-400 bg-rose-50/50' : 'border-slate-200 hover:border-[#047857]'
                     ]">
-                      {{ asset.condition }}
-                    </span>
-                    <p class="text-[11px] text-slate-500 truncate w-32" :title="getAssetLocation(asset)">{{
-                      getAssetLocation(asset) }}</p>
+                    <!-- Checkbox -->
+                    <div class="w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 transition-colors"
+                      :class="form.assetIds.includes(comp.id) ? 'bg-rose-500 border-rose-500' : 'border-slate-300 group-hover:border-[#065f46] bg-white'">
+                      <Check v-if="form.assetIds.includes(comp.id)" class="w-3 h-3 text-white" />
+                    </div>
+                    <div class="flex-1 min-w-0">
+                      <h5 class="text-xs font-semibold truncate transition-colors"
+                        :class="form.assetIds.includes(comp.id) ? 'text-rose-700' : 'text-slate-800'">
+                        {{ comp.name }}
+                      </h5>
+                    </div>
+                    <span class="text-[10px] font-medium px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 shrink-0">ย่อย</span>
                   </div>
                 </div>
               </div>

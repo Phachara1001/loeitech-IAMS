@@ -5,6 +5,10 @@ const props = defineProps({
   assets: {
     type: Array,
     required: true
+  },
+  numeralType: {
+    type: String,
+    default: 'thai' // 'thai' or 'arabic'
   }
 })
 
@@ -35,6 +39,7 @@ const getStatusText = (status) => {
 
 const toThaiNumerals = (num) => {
   if (num == null) return ''
+  if (props.numeralType === 'arabic') return String(num)
   const thaiNums = ['๐', '๑', '๒', '๓', '๔', '๕', '๖', '๗', '๘', '๙']
   return String(num).replace(/\d/g, (d) => thaiNums[d])
 }
@@ -82,19 +87,29 @@ const groupedAssets = computed(() => {
         baseSeq: baseSeq,
         allSuffixes: suffix ? [suffix] : [],
         brokenSuffixes: [],
+        brokenComponents: [],
         count: 1,
         totalPrice: Number(asset.unitPrice) || 0
       }
-      if (suffix && (asset.status === 'Broken' || asset.status === 'Repaired' || asset.status === 'Repairing')) {
-        groups[key].brokenSuffixes.push(suffix)
-      }
     } else {
       if (suffix) groups[key].allSuffixes.push(suffix)
-      if (suffix && (asset.status === 'Broken' || asset.status === 'Repaired' || asset.status === 'Repairing')) {
-        groups[key].brokenSuffixes.push(suffix)
-      }
       groups[key].count += 1
       groups[key].totalPrice += (Number(asset.unitPrice) || 0)
+    }
+
+    if (suffix && (asset.status === 'Broken' || asset.status === 'Repaired' || asset.status === 'Repairing')) {
+      groups[key].brokenSuffixes.push(suffix)
+    }
+
+    if (asset.components && asset.components.length > 0) {
+      asset.components.forEach(comp => {
+        if (comp.status === 'Broken' || comp.status === 'Repaired' || comp.status === 'Repairing') {
+          groups[key].brokenComponents.push({
+            parentSuffix: suffix,
+            compName: comp.name
+          })
+        }
+      })
     }
   })
 
@@ -104,17 +119,22 @@ const groupedAssets = computed(() => {
     const formattedAll = formatSuffixesToRange(group.allSuffixes)
     group.displaySeq = formattedAll ? `${group.baseSeq}-${formattedAll}` : group.baseSeq
 
+    let remarks = []
     if (group.brokenSuffixes.length > 0) {
       const formattedBroken = formatSuffixesToRange(group.brokenSuffixes)
-      group.remark = `ชำรุด ${group.brokenSuffixes.length} เครื่อง (หมายเลข ${formattedBroken})`
-    } else {
-      group.remark = '-'
+      remarks.push(`ชำรุด ${group.brokenSuffixes.length} เครื่อง (หมายเลข ${formattedBroken})`)
     }
+    if (group.brokenComponents.length > 0) {
+      const compNames = group.brokenComponents.map(c => c.compName).join(', ')
+      remarks.push(`อุปกรณ์ย่อยชำรุด ${group.brokenComponents.length} ชิ้น (${compNames})`)
+    }
+    
+    group.remark = remarks.length > 0 ? remarks.join(' | ') : '-'
 
     // Determine overall status
-    if (group.brokenSuffixes.length === 0) {
+    if (group.brokenSuffixes.length === 0 && group.brokenComponents.length === 0) {
       group.displayStatus = 'ใช้งานปกติ'
-    } else if (group.brokenSuffixes.length === group.count) {
+    } else if (group.brokenSuffixes.length === group.count && group.brokenComponents.length === 0) {
       group.displayStatus = 'ชำรุดทั้งหมด'
     } else {
       group.displayStatus = 'มีชำรุดบางส่วน'
